@@ -2,7 +2,7 @@ import assert from 'assert';
 import { state } from '../../src/core/state.js';
 import { look, MAX_MOUSE_DELTA, sens } from '../../src/input/mouse.js';
 
-console.log('--- Running Mouse Input Delta Clamping Unit Tests ---');
+console.log('--- Running Mouse Input Delta Spike Rejection Unit Tests ---');
 
 // Reset state
 state.player.yaw = 0;
@@ -26,34 +26,33 @@ console.log('✓ Normal mouse movements apply proportionally without clamping');
 // 2. Synthetic pointer lock warp spike (+1500px)
 const yawBefore = state.player.yaw;
 look(1500, 0);
-const expectedDelta = -MAX_MOUSE_DELTA * sens;
 const actualDelta = state.player.yaw - yawBefore;
 assert.strictEqual(
-  actualDelta.toFixed(4),
-  expectedDelta.toFixed(4),
-  'Synthetic spike is clamped to MAX_MOUSE_DELTA'
+  actualDelta,
+  0,
+  'Synthetic spike is discarded with zero change to yaw'
 );
-console.log('✓ Massive positive mouse movement spike is safely clamped to MAX_MOUSE_DELTA');
+console.log('✓ Massive positive mouse movement spike is safely discarded');
 
 // 3. Negative synthetic spike (-1200px)
 const yawBeforeNeg = state.player.yaw;
 look(-1200, 0);
-const expectedDeltaNeg = MAX_MOUSE_DELTA * sens;
 const actualDeltaNeg = state.player.yaw - yawBeforeNeg;
 assert.strictEqual(
-  actualDeltaNeg.toFixed(4),
-  expectedDeltaNeg.toFixed(4),
-  'Negative synthetic spike is clamped to -MAX_MOUSE_DELTA'
+  actualDeltaNeg,
+  0,
+  'Negative synthetic spike is discarded with zero change to yaw'
 );
-console.log('✓ Massive negative mouse movement spike is safely clamped to -MAX_MOUSE_DELTA');
+console.log('✓ Massive negative mouse movement spike is safely discarded');
 
-// 4. Vertical clamping on synthetic spike
-state.player.pitch = 0;
+// 4. Vertical synthetic spike (+1920px)
+const pitchBefore = state.player.pitch;
 look(0, 1920);
-assert(
-  state.player.pitch >= -0.6 && state.player.pitch <= 0.55,
-  'Pitch remains within safe anatomical pitch limits'
+assert.strictEqual(
+  state.player.pitch,
+  pitchBefore,
+  'Vertical synthetic spike is discarded with zero change to pitch'
 );
-console.log('✓ Vertical spike is clamped and pitch stays within safe vertical bounds');
+console.log('✓ Vertical spike is discarded without affecting pitch');
 
-console.log('--- Mouse Input Delta Clamping Unit Tests PASSED ---');
+console.log('--- Mouse Input Delta Spike Rejection Unit Tests PASSED ---');

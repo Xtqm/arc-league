@@ -63,4 +63,8 @@ The system SHALL maintain a glitch-free, 1:1 responsive third-person combat came
 
 #### Scenario: Pointer lock delta spike rejection
 - **WHEN** the browser reports an anomalous synthetic mouse movement delta exceeding safe input thresholds
-- **THEN** the system clamps the delta to prevent unnatural instantaneous camera snapping.
+- **THEN** the system discards the anomalous delta frame completely without adjusting camera orientation, preventing unnatural instantaneous camera snapping.
+
+#### Scenario: Unadjusted raw input negotiation
+- **WHEN** desktop pointer lock is initiated on a supporting browser platform
+- **THEN** the system requests unadjusted raw mouse movement data, falling back to standard pointer lock if unadjusted movement is unsupported.

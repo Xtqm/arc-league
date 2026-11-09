@@ -28,16 +28,38 @@ Object.defineProperty(state, 'sens', {
 
 export const isLocked = () => !!(canvas && typeof document !== 'undefined' && document.pointerLockElement === canvas);
 
-export const MAX_MOUSE_DELTA = 180;
+export const MAX_MOUSE_DELTA = 150;
 
 export function tryLock() {
   if (state.isTouchDevice) return;
   if (!canvas) return;
   try {
-    const p = canvas.requestPointerLock();
-    if (p && p.catch) p.catch(() => { lockFailed = true; });
+    const p = canvas.requestPointerLock({ unadjustedMovement: true });
+    if (p && p.catch) {
+      p.catch(err => {
+        if (err && (err.name === 'NotSupportedError' || err.name === 'TypeError')) {
+          try {
+            const fallback = canvas.requestPointerLock();
+            if (fallback && fallback.catch) fallback.catch(() => { lockFailed = true; });
+          } catch (_) {
+            lockFailed = true;
+          }
+        } else {
+          lockFailed = true;
+        }
+      });
+    }
   } catch (err) {
-    lockFailed = true;
+    if (err && (err.name === 'NotSupportedError' || err.name === 'TypeError')) {
+      try {
+        const fallback = canvas.requestPointerLock();
+        if (fallback && fallback.catch) fallback.catch(() => { lockFailed = true; });
+      } catch (_) {
+        lockFailed = true;
+      }
+    } else {
+      lockFailed = true;
+    }
   }
 }
 
@@ -57,10 +79,11 @@ export function focusGame() {
 }
 
 export function look(dx, dy) {
-  const cdx = THREE.MathUtils.clamp(dx, -MAX_MOUSE_DELTA, MAX_MOUSE_DELTA);
-  const cdy = THREE.MathUtils.clamp(dy, -MAX_MOUSE_DELTA, MAX_MOUSE_DELTA);
-  state.player.yaw -= cdx * sens;
-  state.player.pitch = THREE.MathUtils.clamp(state.player.pitch - cdy * sens * (state.invertY ? -1 : 1), -0.6, 0.55);
+  if (Math.abs(dx) > MAX_MOUSE_DELTA || Math.abs(dy) > MAX_MOUSE_DELTA) {
+    return;
+  }
+  state.player.yaw -= dx * sens;
+  state.player.pitch = THREE.MathUtils.clamp(state.player.pitch - dy * sens * (state.invertY ? -1 : 1), -0.6, 0.55);
   if (state.player.yaw > Math.PI) state.player.yaw -= Math.PI * 2;
   if (state.player.yaw < -Math.PI) state.player.yaw += Math.PI * 2;
 }

@@ -31,7 +31,8 @@ async function run() {
 
     await hostPage.goto(`${baseUrl}/index.html`);
     await guestPage.goto(`${baseUrl}/index.html`);
-    await new Promise(r => setTimeout(r, 1000));
+    await hostPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.createRoom, { polling: 100 });
+    await guestPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.joinRoom, { polling: 100 });
 
     await hostPage.evaluate(async () => {
     await window.__dbg.createRoom();
@@ -46,11 +47,11 @@ async function run() {
   await hostPage.waitForFunction(() => {
     if (window.__dbg && window.__dbg.step) window.__dbg.step(0.016);
     return window.__dbg && window.__dbg.running() && window.__dbg.mode() === 'duel_multi';
-  }, { timeout: 15000 });
+  }, { timeout: 15000, polling: 100 });
   await guestPage.waitForFunction(() => {
     if (window.__dbg && window.__dbg.step) window.__dbg.step(0.016);
     return window.__dbg && window.__dbg.running() && window.__dbg.mode() === 'duel_multi';
-  }, { timeout: 15000 });
+  }, { timeout: 15000, polling: 100 });
   console.log('Both players in match.');
 
   // ------------------------------------------------------------------
@@ -155,13 +156,13 @@ async function run() {
     if (window.__dbg && window.__dbg.step) window.__dbg.step(0.016);
     const overlay = document.getElementById('overlay');
     return overlay && overlay.style.display === 'flex';
-  }, { timeout: 15000 });
+  }, { timeout: 15000, polling: 100 });
   await hostPage.evaluate(() => { if (window.__dbg && window.__dbg.step) { for (let i = 0; i < 5; i++) window.__dbg.step(0.016); } });
   await hostPage.waitForFunction(() => {
     if (window.__dbg && window.__dbg.step) window.__dbg.step(0.016);
     const overlay = document.getElementById('overlay');
     return overlay && overlay.style.display === 'flex';
-  }, { timeout: 15000 });
+  }, { timeout: 15000, polling: 100 });
 
   // Host clicks RETURN TO MENU
   console.log('Host clicks RETURN TO MENU...');
@@ -174,7 +175,7 @@ async function run() {
     const label = document.getElementById('rematchVoteLabel');
     const btn = document.getElementById('voteRematchBtn');
     return (label && label.textContent.includes('OPPONENT RETURNED TO MENU')) || (btn && btn.textContent === 'OPPONENT LEFT');
-  }, { timeout: 10000 });
+  }, { timeout: 10000, polling: 100 });
 
   guestState = await inspectClient(guestPage, 'Guest (P2)');
   console.log('Guest state after Host left to menu:', {
@@ -189,12 +190,223 @@ async function run() {
   console.log('>>> STEP 4 PASSED: Opposing player notified of peer exit, state properly handled!');
 
   console.log('\n======================================================');
-  console.log('ALL REMATCH & POST-MATCH SPECIFICATIONS FULLY VERIFIED!');
+  console.log('ALL ROOM REMATCH & POST-MATCH SPECIFICATIONS VERIFIED!');
   console.log('======================================================\n');
   });
 }
 
-run().catch(err => {
-  console.error(err);
-  process.exit(1);
-});
+async function runQuickMatchWebRTCRematchTest() {
+  console.log('\n--- QUICK MATCH (WEBRTC-ONLY, NO ROOM DOC) REMATCH TEST ---');
+  await withBrowserTest(async ({ browser, page: hostPage, baseUrl }) => {
+    const guestPage = await browser.newPage();
+
+    await hostPage.goto(`${baseUrl}/index.html`);
+    await guestPage.goto(`${baseUrl}/index.html`);
+    await hostPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.state?.player?.obj, { polling: 100 });
+    await guestPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.state?.player?.obj, { polling: 100 });
+
+    // Ensure deterministic lexicographical host assignment (player_a_host < player_z_guest)
+    // and verify zero Firestore/mock room DB is initialized.
+    await hostPage.evaluate(async () => {
+      const { matchmakingQueue } = await import('/src/network/matchmakingQueue.js');
+      const { startMatchmakingWithWarmup } = await import('/src/network/roomManager.js');
+      matchmakingQueue.peerId = 'player_a_host';
+      startMatchmakingWithWarmup();
+    });
+
+    await new Promise(r => setTimeout(r, 400));
+
+    await guestPage.evaluate(async () => {
+      const { matchmakingQueue } = await import('/src/network/matchmakingQueue.js');
+      const { startMatchmakingWithWarmup } = await import('/src/network/roomManager.js');
+      matchmakingQueue.peerId = 'player_z_guest';
+      startMatchmakingWithWarmup();
+    });
+
+    await hostPage.waitForFunction(() => {
+      return window.__dbg.running() &&
+        window.__dbg.mode() === 'duel_multi' &&
+        window.__dbg.state.webrtcPeer?.connectionState === 'connected';
+    }, { timeout: 15000, polling: 100 });
+    await guestPage.waitForFunction(() => {
+      return window.__dbg.running() &&
+        window.__dbg.mode() === 'duel_multi' &&
+        window.__dbg.state.webrtcPeer?.connectionState === 'connected';
+    }, { timeout: 15000, polling: 100 });
+
+    const initialCheck = await Promise.all([
+      hostPage.evaluate(async () => {
+        const { duelEconomyBridge } = await import('/src/modes/DuelEconomyBridge.js');
+        return {
+          db: window.__dbg.state.db,
+          roomId: window.__dbg.currentRoomId(),
+          roundId: window.__dbg.state.multiplayerRoundId,
+          bits: duelEconomyBridge.economy.getBits(),
+          xp: duelEconomyBridge.economy.getXP(),
+          level: duelEconomyBridge.economy.getLevel()
+        };
+      }),
+      guestPage.evaluate(() => ({
+        db: window.__dbg.state.db,
+        roomId: window.__dbg.currentRoomId(),
+        roundId: window.__dbg.state.multiplayerRoundId
+      }))
+    ]);
+
+    if (initialCheck[0].db !== null || initialCheck[1].db !== null) {
+      throw new Error(`Expected state.db === null in Quick Match, got ${JSON.stringify(initialCheck)}`);
+    }
+    if (!String(initialCheck[0].roomId).startsWith('MATCH_') || initialCheck[0].roundId !== 1) {
+      throw new Error(`Unexpected Quick Match init state: ${JSON.stringify(initialCheck[0])}`);
+    }
+    const startBits = initialCheck[0].bits;
+    console.log('>>> QUICK MATCH HANDSHAKE PASSED: Both peers connected over WebRTC with db === null!');
+
+    // Finish countdown & verify warm-up AI callback was cleared
+    await hostPage.evaluate(() => window.__dbg.finishCountdown());
+    await guestPage.evaluate(() => window.__dbg.finishCountdown());
+    const foesAfterCountdown = await hostPage.evaluate(() => window.__dbg.foes());
+    if (foesAfterCountdown !== 1) {
+      throw new Error(`Expected exactly 1 peer foe after countdown, got ${foesAfterCountdown}`);
+    }
+
+    // Round 1 End: Eliminate Guest over WebRTC only
+    await guestPage.evaluate(() => {
+      window.__dbg.setPlayerPos(0, -18, -20);
+      window.__dbg.step(0.016);
+    });
+
+    await hostPage.waitForFunction(() => {
+      const ov = document.getElementById('overlay');
+      return ov && ov.style.display === 'flex' && ov.querySelector('h1')?.textContent === 'VICTORY';
+    }, { timeout: 10000, polling: 100 });
+    await guestPage.waitForFunction(() => {
+      const ov = document.getElementById('overlay');
+      return ov && ov.style.display === 'flex' && ov.querySelector('h1')?.textContent === 'DEREZZED';
+    }, { timeout: 10000, polling: 100 });
+
+    const r1Econ = await hostPage.evaluate(async () => {
+      const { duelEconomyBridge } = await import('/src/modes/DuelEconomyBridge.js');
+      const vicLogs = duelEconomyBridge.economy.getAuditLog().filter(e => e.source === 'duel_multiplayer_victory');
+      return {
+        bits: duelEconomyBridge.economy.getBits(),
+        xp: duelEconomyBridge.economy.getXP(),
+        level: duelEconomyBridge.economy.getLevel(),
+        vicLogs
+      };
+    });
+    const r1XpEntries = r1Econ.vicLogs.filter(e => e.type === 'XP_GAINED');
+    const r1BitEntries = r1Econ.vicLogs.filter(e => e.type === 'BITS_EARNED');
+    if (
+      r1XpEntries.length !== 1 ||
+      r1BitEntries.length !== 1 ||
+      r1XpEntries[0].amount !== 300 ||
+      r1BitEntries[0].amount !== 100 ||
+      r1BitEntries[0].balanceAfter - startBits !== 100
+    ) {
+      throw new Error(`Expected single Round 1 victory payout (+100 Bits + 300 XP), got ${JSON.stringify(r1Econ)}`);
+    }
+    console.log('>>> QUICK MATCH ROUND 1 PASSED: WebRTC match-end & single Round 1 payout verified!');
+
+    // Vote Rematch 1/2 -> 2/2 over WebRTC
+    await guestPage.evaluate(() => document.getElementById('voteRematchBtn')?.click());
+    await hostPage.waitForFunction(() => {
+      return document.getElementById('rematchVoteLabel')?.textContent?.includes('1 / 2');
+    }, { timeout: 10000, polling: 100 });
+
+    await hostPage.evaluate(() => document.getElementById('voteRematchBtn')?.click());
+    await hostPage.waitForFunction(() => {
+      const ov = document.getElementById('overlay');
+      return window.__dbg.running() && ov && ov.style.display === 'none' && window.__dbg.state.multiplayerRoundId === 2;
+    }, { timeout: 10000, polling: 100 });
+    await guestPage.waitForFunction(() => {
+      const ov = document.getElementById('overlay');
+      return window.__dbg.running() && ov && ov.style.display === 'none' && window.__dbg.state.multiplayerRoundId === 2;
+    }, { timeout: 10000, polling: 100 });
+
+    const r2Init = await hostPage.evaluate(() => ({
+      roundId: window.__dbg.state.multiplayerRoundId,
+      countdown: window.__dbg.countdownTimer(),
+      payoutFlag: window.__dbg.state.multiplayerPayoutProcessed,
+      onCountdownEnd: window.__dbg.state.onCountdownEnd
+    }));
+    if (r2Init.roundId !== 2 || r2Init.countdown <= 0 || r2Init.payoutFlag !== false || r2Init.onCountdownEnd !== null) {
+      throw new Error(`Round 2 state reset invalid: ${JSON.stringify(r2Init)}`);
+    }
+    console.log('>>> QUICK MATCH REMATCH START PASSED: Round 2 started over WebRTC with clean countdown & payout reset!');
+
+    // Round 2 End -> verify Round 2 payout (+300 XP again)
+    await hostPage.evaluate(() => window.__dbg.finishCountdown());
+    await guestPage.evaluate(() => window.__dbg.finishCountdown());
+    await guestPage.evaluate(() => {
+      window.__dbg.setPlayerPos(0, -18, -20);
+      window.__dbg.step(0.016);
+    });
+
+    await hostPage.waitForFunction(() => {
+      const ov = document.getElementById('overlay');
+      return ov && ov.style.display === 'flex' && ov.querySelector('h1')?.textContent === 'VICTORY';
+    }, { timeout: 10000, polling: 100 });
+    await guestPage.waitForFunction(() => {
+      const ov = document.getElementById('overlay');
+      return ov && ov.style.display === 'flex' && ov.querySelector('h1')?.textContent === 'DEREZZED';
+    }, { timeout: 10000, polling: 100 });
+
+    const r2Econ = await hostPage.evaluate(async () => {
+      const { duelEconomyBridge } = await import('/src/modes/DuelEconomyBridge.js');
+      const vicLogs = duelEconomyBridge.economy.getAuditLog().filter(e => e.source === 'duel_multiplayer_victory');
+      return {
+        bits: duelEconomyBridge.economy.getBits(),
+        xp: duelEconomyBridge.economy.getXP(),
+        level: duelEconomyBridge.economy.getLevel(),
+        vicLogs
+      };
+    });
+    const r2XpEntries = r2Econ.vicLogs.filter(e => e.type === 'XP_GAINED');
+    const r2BitEntries = r2Econ.vicLogs.filter(e => e.type === 'BITS_EARNED');
+    if (
+      r2XpEntries.length !== 2 ||
+      r2BitEntries.length !== 2 ||
+      r2XpEntries.some(e => e.amount !== 300) ||
+      r2BitEntries.some(e => e.amount !== 100)
+    ) {
+      throw new Error(`Expected exact Round 2 payout (2x victory payouts of +100 Bits / +300 XP), got ${JSON.stringify(r2Econ)}`);
+    }
+    const guestDefLogs = await guestPage.evaluate(async () => {
+      const { duelEconomyBridge } = await import('/src/modes/DuelEconomyBridge.js');
+      return duelEconomyBridge.economy.getAuditLog().filter(e => e.source === 'duel_multiplayer_defeat');
+    });
+    if (guestDefLogs.length !== 2 || guestDefLogs.some(e => e.type !== 'XP_GAINED' || e.amount !== 75)) {
+      throw new Error(`Expected 2x defeat participation payouts (+75 XP) on Guest, got ${JSON.stringify(guestDefLogs)}`);
+    }
+    console.log('>>> QUICK MATCH ROUND 2 PAYOUT PASSED: Single payout per win across Round 1 and Round 2!');
+
+    // Host leaves via RETURN TO MENU -> Guest gets OPPONENT LEFT, Host queue resets to IDLE & can re-queue
+    await hostPage.evaluate(() => document.getElementById('multiMenuBtn')?.click());
+    await guestPage.waitForFunction(() => {
+      const btn = document.getElementById('voteRematchBtn');
+      const label = document.getElementById('rematchVoteLabel');
+      return btn?.textContent === 'OPPONENT LEFT' && btn?.disabled === true && label?.textContent?.includes('OPPONENT RETURNED TO MENU');
+    }, { timeout: 10000, polling: 100 });
+
+    const requeueStatus = await hostPage.evaluate(async () => {
+      const { matchmakingQueue, QUEUE_STATES } = await import('/src/network/matchmakingQueue.js');
+      const statusAfterLeave = matchmakingQueue.status;
+      matchmakingQueue.startQueue();
+      const statusAfterRequeue = matchmakingQueue.status;
+      matchmakingQueue.cancelQueue();
+      return { statusAfterLeave, statusAfterRequeue, IDLE: QUEUE_STATES.IDLE, SEARCHING: QUEUE_STATES.SEARCHING };
+    });
+    if (requeueStatus.statusAfterLeave !== requeueStatus.IDLE || requeueStatus.statusAfterRequeue !== requeueStatus.SEARCHING) {
+      throw new Error(`Quick Match re-queue failed: ${JSON.stringify(requeueStatus)}`);
+    }
+    console.log('>>> QUICK MATCH EXIT & RE-QUEUE PASSED: Guest saw OPPONENT LEFT and Host re-queued cleanly!');
+  });
+}
+
+run()
+  .then(() => runQuickMatchWebRTCRematchTest())
+  .catch(err => {
+    console.error(err);
+    process.exit(1);
+  });

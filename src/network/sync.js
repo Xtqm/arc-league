@@ -34,7 +34,7 @@ export function handleIncomingFastPacket(data) {
  */
 export function syncNetworkState(dt) {
   if (state.gameMode !== 'duel_multi' && state.gameMode !== 'duos_multi') return;
-  if (!state.currentRoomId || !state.playerRole) return;
+  if (!state.currentRoomId || !state.playerRole || state.multiplayerMatchFinished) return;
 
   state.netSyncTimer -= dt;
   if (state.netSyncTimer > 0) return;
@@ -66,7 +66,7 @@ export function syncNetworkState(dt) {
   }
 
   // 2. Legacy database / mock channel fallback
-  if (state.db && state.currentUser) {
+  if (state.db && state.currentUser && state.roomUnsubscribe) {
     const roomRef = getRoomRef(state.currentRoomId);
     const payload = {};
     payload[`state.${state.playerRole}`] = myState;

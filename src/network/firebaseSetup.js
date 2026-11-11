@@ -15,6 +15,42 @@ state.mockChannel = null;
 export const mockStore = new Map();
 export const mockListeners = new Map();
 
+function applyDocPatch(existing, patch) {
+  const clonedPatch = JSON.parse(JSON.stringify(patch || {}));
+  const merged = Object.assign({}, existing || {});
+  for (const k in clonedPatch) {
+    if (k.includes('.')) {
+      const parts = k.split('.');
+      let curr = merged;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!curr[parts[i]] || typeof curr[parts[i]] !== 'object') {
+          curr[parts[i]] = {};
+        }
+        curr = curr[parts[i]];
+      }
+      curr[parts[parts.length - 1]] = clonedPatch[k];
+    } else {
+      merged[k] = clonedPatch[k];
+    }
+  }
+  if (clonedPatch.p1 && existing && existing.p1) merged.p1 = Object.assign({}, existing.p1, clonedPatch.p1);
+  if (clonedPatch.p2 && existing && existing.p2) merged.p2 = Object.assign({}, existing.p2, clonedPatch.p2);
+  return merged;
+}
+
+function notifyMockListeners(path, data) {
+  const set = mockListeners.get(path);
+  if (set) {
+    const snap = {
+      exists: () => true,
+      data: () => JSON.parse(JSON.stringify(data))
+    };
+    for (const cb of set) {
+      try { cb(snap); } catch (err) { console.error(err); }
+    }
+  }
+}
+
 export function initMockNetwork() {
   if (state.currentUser && state.db) return;
   if (!state.currentUser) {
@@ -35,16 +71,18 @@ export function initMockNetwork() {
       if (!msg) return;
       if (msg.type === 'doc_set' || msg.type === 'doc_update') {
         mockStore.set(msg.path, msg.data);
-        const set = mockListeners.get(msg.path);
-        if (set) {
-          const snap = {
-            exists: () => true,
-            data: () => JSON.parse(JSON.stringify(msg.data))
-          };
-          for (const cb of set) {
-            try { cb(snap); } catch (err) { console.error(err); }
-          }
+        notifyMockListeners(msg.path, msg.data);
+      } else if (msg.type === 'doc_patch') {
+        let existing = mockStore.get(msg.path);
+        if (!existing && typeof localStorage !== 'undefined') {
+          try {
+            const item = localStorage.getItem('tron_doc_' + msg.path);
+            if (item) existing = JSON.parse(item);
+          } catch (_) {}
         }
+        const merged = applyDocPatch(existing, msg.patch);
+        mockStore.set(msg.path, merged);
+        notifyMockListeners(msg.path, merged);
       } else if (msg.type === 'doc_query') {
         let stored = mockStore.get(msg.path);
         if (!stored && typeof localStorage !== 'undefined') {
@@ -112,37 +150,20 @@ export function mockUpdateDoc(ref, patch) {
       if (item) existing = JSON.parse(item);
     } catch (_) {}
   }
-  const merged = Object.assign({}, existing || {}, JSON.parse(JSON.stringify(patch)));
-  for (const k in patch) {
-    if (k.includes('.')) {
-      const parts = k.split('.');
-      let curr = merged;
-      for (let i = 0; i < parts.length - 1; i++) {
-        if (!curr[parts[i]] || typeof curr[parts[i]] !== 'object') {
-          curr[parts[i]] = {};
-        }
-        curr = curr[parts[i]];
-      }
-      curr[parts[parts.length - 1]] = patch[k];
-    }
-  }
-  if (patch.p1 && existing && existing.p1) merged.p1 = Object.assign({}, existing.p1, patch.p1);
-  if (patch.p2 && existing && existing.p2) merged.p2 = Object.assign({}, existing.p2, patch.p2);
+  const merged = applyDocPatch(existing, patch);
 
   mockStore.set(ref.path, merged);
   if (typeof localStorage !== 'undefined') {
     try { localStorage.setItem('tron_doc_' + ref.path, JSON.stringify(merged)); } catch (_) {}
   }
   if (state.mockChannel) {
-    state.mockChannel.postMessage({ type: 'doc_update', path: ref.path, data: merged });
+    state.mockChannel.postMessage({
+      type: 'doc_patch',
+      path: ref.path,
+      patch: JSON.parse(JSON.stringify(patch || {}))
+    });
   }
-  const set = mockListeners.get(ref.path);
-  if (set) {
-    const snap = { exists: () => true, data: () => JSON.parse(JSON.stringify(merged)) };
-    for (const cb of set) {
-      try { cb(snap); } catch (err) { console.error(err); }
-    }
-  }
+  notifyMockListeners(ref.path, merged);
   return Promise.resolve();
 }
 

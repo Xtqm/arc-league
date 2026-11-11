@@ -60,7 +60,9 @@ export class WebRTCPeer {
 
       this.peerConnection.onconnectionstatechange = () => {
         const state = this.peerConnection.connectionState;
-        this._updateState(state);
+        if (state !== 'connected' || this._bothChannelsOpen()) {
+          this._updateState(state);
+        }
       };
 
       this.peerConnection.oniceconnectionstatechange = () => {
@@ -156,7 +158,8 @@ export class WebRTCPeer {
     }
     const offer = await this.peerConnection.createOffer();
     await this.peerConnection.setLocalDescription(offer);
-    return this.peerConnection.localDescription;
+    const desc = this.peerConnection.localDescription;
+    return desc && desc.toJSON ? desc.toJSON() : { type: desc.type, sdp: desc.sdp };
   }
 
   /**
@@ -172,7 +175,8 @@ export class WebRTCPeer {
     this._flushPendingCandidates();
     const answer = await this.peerConnection.createAnswer();
     await this.peerConnection.setLocalDescription(answer);
-    return this.peerConnection.localDescription;
+    const desc = this.peerConnection.localDescription;
+    return desc && desc.toJSON ? desc.toJSON() : { type: desc.type, sdp: desc.sdp };
   }
 
   /**

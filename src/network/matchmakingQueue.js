@@ -32,10 +32,24 @@ export function registerFastPacketHandler(fn) {
 
 let _remoteThrowHandler = null;
 let _remoteTileHandler = null;
+let _remoteMatchHandler = null;
+let _peerConnectionChangeHandler = null;
 
 export function registerMatchmakingCombatHandlers(onThrow, onTile) {
   _remoteThrowHandler = onThrow;
   _remoteTileHandler = onTile;
+}
+
+export function registerMatchmakingSessionHandlers({
+  onThrow,
+  onTile,
+  onMatchMessage,
+  onConnectionChange
+} = {}) {
+  if (onThrow !== undefined) _remoteThrowHandler = onThrow;
+  if (onTile !== undefined) _remoteTileHandler = onTile;
+  if (onMatchMessage !== undefined) _remoteMatchHandler = onMatchMessage;
+  if (onConnectionChange !== undefined) _peerConnectionChangeHandler = onConnectionChange;
 }
 
 function safeMessage(txt) {
@@ -94,6 +108,12 @@ export class MatchmakingQueue {
 
     this.bridge.onPeerJoined = (remotePeerId) => {
       this._handleDiscoveredPeer(remotePeerId);
+    };
+
+    this.bridge.onPeerLeft = (remotePeerId) => {
+      if (this.status === QUEUE_STATES.MATCHED && remotePeerId === this.matchedPeerId && _remoteMatchHandler) {
+        _remoteMatchHandler({ type: 'PEER_LEFT', reason: 'SIGNALING_LEFT' });
+      }
     };
 
     this.bridge.onOffer = async (offer, senderId) => {
@@ -198,15 +218,22 @@ export class MatchmakingQueue {
           if (_remoteThrowHandler) _remoteThrowHandler(msg.lastThrow);
         } else if (msg.type === 'TILE_DESTABILIZED') {
           if (_remoteTileHandler) _remoteTileHandler(msg);
+        } else if (_remoteMatchHandler) {
+          _remoteMatchHandler(msg);
         }
       },
       onConnectionChange: (connState) => {
         if (connState === 'connected') {
           this._handleConnectionSuccess();
-        } else if (connState === 'failed' || connState === 'disconnected') {
-          if (this.status === QUEUE_STATES.CONNECTING) {
+          if (_peerConnectionChangeHandler) {
+            _peerConnectionChangeHandler(connState);
+          }
+        } else if (connState === 'failed' || connState === 'disconnected' || connState === 'closed') {
+          if (this.status === QUEUE_STATES.CONNECTING && connState !== 'closed') {
             console.warn('Peer connection failed during handshake, returning to search pool');
             this._setStatus(QUEUE_STATES.SEARCHING);
+          } else if (this.status === QUEUE_STATES.MATCHED && _peerConnectionChangeHandler) {
+            _peerConnectionChangeHandler(connState);
           }
         }
       }
@@ -255,6 +282,25 @@ export class MatchmakingQueue {
     }
   }
 
+  resetAfterMatch() {
+    this._clearTimer();
+    if (this.bridge && this.bridge.isSubscribed) {
+      try { this.bridge.disconnect(); } catch (_) {}
+    }
+    this.matchedPeerId = null;
+    this.assignedRole = null;
+    this.peer = null;
+    this.bridge = null;
+    this._setStatus(QUEUE_STATES.IDLE);
+    state.matchmakingQueueState = QUEUE_STATES.IDLE;
+    state.queueTimer = 0;
+
+    if (typeof document !== 'undefined') {
+      const banner = document.getElementById('matchmakingQueueHUD');
+      if (banner) banner.style.display = 'none';
+    }
+  }
+
   cancelQueue() {
     this._clearTimer();
 
@@ -267,6 +313,8 @@ export class MatchmakingQueue {
       this.peer = null;
     }
 
+    this.matchedPeerId = null;
+    this.assignedRole = null;
     this._setStatus(QUEUE_STATES.IDLE);
     state.matchmakingQueueState = QUEUE_STATES.IDLE;
     state.queueTimer = 0;

@@ -5,7 +5,7 @@ import { scene, camera } from '../graphics/scene.js';
 import { makeProgram } from '../graphics/materials.js';
 import { disposeDiscEntity } from '../entities/Disc.js';
 import { burst } from '../graphics/particles.js';
-import { tiles, tileMatIntact, tileEdgeMatIntact, triggerTileWarning } from '../entities/Arena.js';
+import { tiles, tileMatIntact, tileEdgeMatIntact, triggerTileWarning, teardownSectorArena } from '../entities/Arena.js';
 import { spawnDisc } from '../entities/Disc.js';
 import { initNetwork, getRoomRef, roomSetDoc, roomGetDoc, roomUpdateDoc, roomOnSnapshot } from './firebaseSetup.js';
 import { tryLock, focusGame, setCursor } from '../input/InputManager.js';
@@ -16,7 +16,7 @@ import { duelEconomyBridge } from '../modes/DuelEconomyBridge.js';
 import { WebRTCPeer } from './webrtcPeer.js';
 import { SignalingBridge } from './signalingBridge.js';
 import { handleIncomingFastPacket } from './sync.js';
-import { matchmakingQueue, registerMatchmakingCombatHandlers } from './matchmakingQueue.js';
+import { matchmakingQueue, registerMatchmakingSessionHandlers } from './matchmakingQueue.js';
 
 export function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -121,7 +121,356 @@ export function handleRemoteTileDestabilized(tileData) {
   }
 }
 
-registerMatchmakingCombatHandlers(handleRemoteThrow, handleRemoteTileDestabilized);
+export function isWebRTCConnected() {
+  return !!(state.webrtcPeer && state.webrtcPeer.connectionState === 'connected');
+}
+
+export function dispatchReliableMatchEvent(msg) {
+  if (state.gameMode === 'duel_multi' && state.webrtcPeer && typeof state.webrtcPeer.sendReliable === 'function') {
+    return state.webrtcPeer.sendReliable(msg);
+  }
+  return false;
+}
+
+export function clearMultiplayerEntities() {
+  for (const f of state.foes) {
+    if (f && f.obj) scene.remove(f.obj);
+  }
+  for (const t of state.teammates) {
+    if (t && t.obj) scene.remove(t.obj);
+  }
+  for (const key in state.multiPlayers) {
+    if (state.multiPlayers[key] && state.multiPlayers[key].obj) {
+      scene.remove(state.multiPlayers[key].obj);
+    }
+  }
+  for (const d of state.discs) disposeDiscEntity(d);
+  state.foes = [];
+  state.teammates = [];
+  state.multiPlayers = {};
+  state.discs = [];
+  state.duelOpponent = null;
+}
+
+export function getSpawnCoords(mode = '1v1') {
+  const spawns = {
+    p1: { x: -8, z: 18, yaw: Math.PI, team: 1 },
+    p2: { x: -8, z: -18, yaw: 0, team: 2 },
+    p3: { x: 8, z: 18, yaw: Math.PI, team: 1 },
+    p4: { x: 8, z: -18, yaw: 0, team: 2 }
+  };
+  if (mode === '1v1') {
+    spawns.p1.x = 0;
+    spawns.p2.x = 0;
+  }
+  return spawns;
+}
+
+export function getActivePlayerRoles(data = null) {
+  if (data && data.players) {
+    const roles = Object.keys(data.players).filter(k => !!data.players[k]);
+    if (roles.length > 0) return roles;
+  }
+  const mpKeys = Object.keys(state.multiPlayers || {});
+  if (mpKeys.length > 0 && state.playerRole) {
+    return Array.from(new Set([state.playerRole, ...mpKeys])).sort();
+  }
+  return state.gameMode === 'duos_multi' ? ['p1', 'p2', 'p3', 'p4'] : ['p1', 'p2'];
+}
+
+export function getRematchTally(data = null) {
+  const rv = Object.assign(
+    { p1: false, p2: false, p3: false, p4: false },
+    state.rematchVotes || {},
+    (data && data.rematchVotes) ? data.rematchVotes : {}
+  );
+  const roles = getActivePlayerRoles(data);
+  let vCount = 0;
+  for (const r of roles) {
+    if (rv[r]) vCount++;
+  }
+  return {
+    rv,
+    vCount,
+    pCount: roles.length,
+    hasVoted: !!(state.playerRole && rv[state.playerRole])
+  };
+}
+
+export function updateRematchUI(data = null) {
+  if (typeof document === 'undefined') return;
+  const voteBtn = document.getElementById('voteRematchBtn');
+  const voteLabel = document.getElementById('rematchVoteLabel');
+  if (state.peerDeparted || (data && data.status === 'closed')) {
+    if (voteBtn) {
+      voteBtn.disabled = true;
+      voteBtn.textContent = 'OPPONENT LEFT';
+    }
+    if (voteLabel) {
+      voteLabel.textContent = 'OPPONENT RETURNED TO MENU';
+    }
+    return;
+  }
+  const { vCount, pCount, hasVoted } = getRematchTally(data);
+  if (voteLabel) {
+    voteLabel.textContent = `REMATCH VOTES: ${vCount} / ${pCount}`;
+  }
+  if (voteBtn && hasVoted) {
+    voteBtn.textContent = 'VOTED';
+    voteBtn.disabled = true;
+  }
+}
+
+export function evaluateHostRematchConsensus(data = null) {
+  if (state.playerRole !== 'p1' || state.peerDeparted) return;
+  const { vCount, pCount } = getRematchTally(data);
+  if (vCount < pCount || pCount <= 0) return;
+
+  const dataRoundId = (data && typeof data.roundId === 'number') ? data.roundId : 0;
+  const nextRoundId = Math.max((state.multiplayerRoundId || 1) + 1, dataRoundId + 1);
+  if (state._launchingRematchRoundId === nextRoundId) return;
+  state._launchingRematchRoundId = nextRoundId;
+
+  const mode = (data && data.mode) ? data.mode : (state.gameMode === 'duos_multi' ? '2v2' : '1v1');
+  if (dispatchReliableMatchEvent({ type: 'REMATCH_START', roundId: nextRoundId, mode })) {
+    startMultiplayerDuel(state.playerRole, state.currentRoomId, mode, { roundId: nextRoundId });
+    message('REMATCH — FIGHT!');
+    return;
+  }
+
+  if (state.db && state.currentRoomId && state.roomUnsubscribe) {
+    const roomRef = getRoomRef(state.currentRoomId);
+    const spawns = getSpawnCoords(mode);
+    const resetPatch = {
+      status: 'active',
+      roundId: nextRoundId,
+      winner: null,
+      winnerTeam: null,
+      lastThrow: null,
+      fallen: [],
+      rematchVotes: { p1: false, p2: false, p3: false, p4: false }
+    };
+    const roles = getActivePlayerRoles(data);
+    for (const k of roles) {
+      const sp = spawns[k] || spawns.p1;
+      resetPatch[`state.${k}`] = {
+        x: sp.x, y: 0, z: sp.z, yaw: sp.yaw, pitch: -0.1,
+        hp: 100, blocking: false, hasDisc: true
+      };
+      resetPatch[k] = null;
+    }
+    roomUpdateDoc(roomRef, resetPatch).catch(err => console.warn("Reset rematch err:", err));
+  }
+}
+
+export function handleRemoteGameOver(msg) {
+  if (!msg) return;
+  const ev = msg.payload ? { ...msg.payload, roundId: msg.roundId ?? msg.payload.roundId } : msg;
+  if (typeof ev.roundId === 'number' && state.multiplayerRoundId && ev.roundId !== state.multiplayerRoundId) {
+    return;
+  }
+  if (state.multiplayerMatchFinished) return;
+
+  let isWin = false;
+  if (state.gameMode === 'duos_multi') {
+    const myTeam = (state.playerRole === 'p1' || state.playerRole === 'p3') ? 1 : 2;
+    isWin = ev.winnerTeam === myTeam;
+  } else if (ev.winner) {
+    isWin = ev.winner === state.playerRole;
+  } else if (ev.loserRole) {
+    isWin = ev.loserRole !== state.playerRole;
+  }
+
+  state.multiplayerMatchFinished = true;
+  state.running = false;
+  clearMatchEndOverlayTimer();
+
+  if (isWin) {
+    const loser = ev.loserRole ? state.multiPlayers[ev.loserRole] : state.foes[0];
+    if (loser && loser.alive) {
+      loser.alive = false;
+      loser.hp = 0;
+      if (loser.pos) {
+        burst(loser.pos.clone().setY((loser.y || 0) + 1.4), config.PURPLE, 80, 15);
+      }
+      if (loser.obj) loser.obj.visible = false;
+    }
+    showMultiplayerVictory(ev);
+  } else {
+    state.player.alive = false;
+    state.player.hp = 0;
+    if (state.player.obj) state.player.obj.visible = false;
+    if (ev.reason) state.gameOverReason = ev.reason;
+    showMultiplayerDefeat(ev);
+  }
+}
+
+export function handleRemoteRematchVote(msg) {
+  if (!msg || state.peerDeparted) return;
+  if (typeof msg.roundId === 'number' && state.multiplayerRoundId && msg.roundId !== state.multiplayerRoundId) {
+    return;
+  }
+  if (!state.rematchVotes) {
+    state.rematchVotes = { p1: false, p2: false, p3: false, p4: false };
+  }
+  if (msg.role) {
+    state.rematchVotes[msg.role] = !!msg.voted;
+  }
+  updateRematchUI();
+  if (state.playerRole === 'p1') {
+    evaluateHostRematchConsensus();
+  }
+}
+
+export function handleRemoteRematchStart(msg) {
+  if (!msg || state.peerDeparted) return;
+  const nextRoundId = typeof msg.roundId === 'number' ? msg.roundId : (state.multiplayerRoundId || 1) + 1;
+  if (nextRoundId <= (state.multiplayerRoundId || 0)) return;
+
+  const rm = typeof document !== 'undefined' ? document.getElementById('roomModal') : null;
+  if (rm) rm.style.display = 'none';
+  const jm = typeof document !== 'undefined' ? document.getElementById('joinModal') : null;
+  if (jm) jm.style.display = 'none';
+
+  const mode = msg.mode || (state.gameMode === 'duos_multi' ? '2v2' : '1v1');
+  startMultiplayerDuel(state.playerRole, state.currentRoomId, mode, { roundId: nextRoundId });
+  message('REMATCH — FIGHT!');
+}
+
+export function handleRemotePeerLeft() {
+  if (state.isTearingDownMultiplayer) return;
+  if (state.gameMode !== 'duel_multi' && state.gameMode !== 'duos_multi') return;
+  if (state.peerDeparted) {
+    updateRematchUI({ status: 'closed' });
+    return;
+  }
+  state.peerDeparted = true;
+  clearMatchEndOverlayTimer();
+
+  const overlay = typeof document !== 'undefined' ? document.getElementById('overlay') : null;
+  const hasVoteBtn = typeof document !== 'undefined' && !!document.getElementById('voteRematchBtn');
+  const isOverlayVisible = !!(overlay && overlay.style.display === 'flex');
+
+  if (state.running) {
+    state.running = false;
+    state.multiplayerMatchFinished = true;
+    showMultiplayerVictory({ status: 'closed' });
+  } else if (!isOverlayVisible || !hasVoteBtn) {
+    if (state.player && state.player.alive === false) {
+      showMultiplayerDefeat({ status: 'closed' });
+    } else {
+      showMultiplayerVictory({ status: 'closed' });
+    }
+  }
+  if (overlay) overlay.style.display = 'flex';
+  updateRematchUI({ status: 'closed' });
+  message('OPPONENT LEFT THE MATCH');
+}
+
+export function handleReliableMatchMessage(msg) {
+  if (!msg || !msg.type) return;
+  switch (msg.type) {
+    case 'DISC_THROW':
+    case 'DISC_PARRY':
+      handleRemoteThrow(msg.lastThrow);
+      break;
+    case 'TILE_DESTABILIZED':
+      handleRemoteTileDestabilized(msg);
+      break;
+    case 'GAME_OVER_EVENT':
+      handleRemoteGameOver(msg);
+      break;
+    case 'REMATCH_VOTE':
+      handleRemoteRematchVote(msg);
+      break;
+    case 'REMATCH_START':
+      handleRemoteRematchStart(msg);
+      break;
+    case 'PEER_LEFT':
+      handleRemotePeerLeft(msg);
+      break;
+    default:
+      break;
+  }
+}
+
+export function handlePeerConnectionStateChange(connState, { hasRoomFallback = false, hadConnected = true } = {}) {
+  if (state.isTearingDownMultiplayer) return;
+  if (connState === 'connected') {
+    message('P2P WEBRTC CONNECTED');
+    return;
+  }
+  if (connState === 'disconnected' || connState === 'closed' || connState === 'failed') {
+    if (!hasRoomFallback || hadConnected) {
+      handleRemotePeerLeft({ reason: 'CONNECTION_LOST' });
+    }
+  }
+}
+
+export function reportMultiplayerMatchEnd({
+  winner = null,
+  winnerTeam = null,
+  loserRole = null,
+  reason = '',
+  playerState = null,
+  isLocalWin = false
+} = {}) {
+  const allFinished = isLocalWin || state.gameMode !== 'duos_multi' || state.teammates.every(t => t.hp <= 0);
+  if (allFinished) {
+    state.multiplayerMatchFinished = true;
+  }
+
+  const eventPayload = {
+    type: 'GAME_OVER_EVENT',
+    roundId: state.multiplayerRoundId || 1,
+    winner,
+    winnerTeam,
+    loserRole,
+    reason
+  };
+
+  let sentOverWebRTC = false;
+  if (allFinished) {
+    sentOverWebRTC = dispatchReliableMatchEvent(eventPayload);
+  }
+
+  if (!sentOverWebRTC && state.db && state.currentRoomId && state.currentUser && state.roomUnsubscribe) {
+    const roomRef = getRoomRef(state.currentRoomId);
+    const patch = {};
+    if (playerState && state.playerRole) {
+      patch[`state.${state.playerRole}`] = playerState;
+    }
+    if (allFinished) {
+      patch.status = 'finished';
+      patch.roundId = state.multiplayerRoundId || 1;
+      patch.winnerTeam = winnerTeam;
+      if (state.gameMode === 'duel_multi') {
+        patch.winner = winner;
+      }
+    }
+    if (Object.keys(patch).length > 0) {
+      roomUpdateDoc(roomRef, patch).catch(err => console.warn("Game over sync err:", err));
+    }
+  }
+
+  if (allFinished) {
+    clearMatchEndOverlayTimer();
+    state.matchEndOverlayTimer = setTimeout(() => {
+      state.matchEndOverlayTimer = null;
+      if (isLocalWin) showMultiplayerVictory();
+      else showMultiplayerDefeat();
+    }, 900);
+  }
+}
+
+registerMatchmakingSessionHandlers({
+  onThrow: handleRemoteThrow,
+  onTile: handleRemoteTileDestabilized,
+  onMatchMessage: handleReliableMatchMessage,
+  onConnectionChange: (connState) => {
+    handlePeerConnectionStateChange(connState, { hasRoomFallback: false, hadConnected: true });
+  }
+});
 
 export function transitionFromWarmupToPeerMatch(role, opponentId) {
   if (typeof document !== 'undefined') {
@@ -129,7 +478,7 @@ export function transitionFromWarmupToPeerMatch(role, opponentId) {
     if (banner) banner.style.display = 'none';
   }
   const roomCode = 'MATCH_' + Math.random().toString(36).substring(2, 6).toUpperCase();
-  startMultiplayerDuel(role, roomCode, '1v1');
+  startMultiplayerDuel(role, roomCode, '1v1', { roundId: 1 });
   message('CHALLENGER CONNECTED — FIGHT!');
 }
 
@@ -180,28 +529,24 @@ export function initWebRTCPeerSession(isHost, roomCode) {
   }
 
   const role = isHost ? 'p1' : (state.playerRole || 'p2');
+  let hadConnected = false;
   const peer = new WebRTCPeer({
     isHost,
     onFastMessage: (data) => {
       handleIncomingFastPacket(data);
     },
     onReliableMessage: (msg) => {
-      if (!msg) return;
-      if (msg.type === 'DISC_THROW' || msg.type === 'DISC_PARRY') {
-        handleRemoteThrow(msg.lastThrow);
-      } else if (msg.type === 'TILE_DESTABILIZED') {
-        handleRemoteTileDestabilized(msg);
-      } else if (msg.type === 'GAME_OVER_EVENT') {
-        if (msg.winner && msg.winner === state.playerRole) {
-          showMultiplayerVictory();
-        }
-      }
+      handleReliableMatchMessage(msg);
     },
     onConnectionChange: (connState) => {
       console.log(`WebRTC Peer connection state: ${connState}`);
       if (connState === 'connected') {
-        message('P2P WEBRTC CONNECTED');
+        hadConnected = true;
       }
+      handlePeerConnectionStateChange(connState, {
+        hasRoomFallback: !!state.roomUnsubscribe,
+        hadConnected
+      });
     }
   });
 
@@ -242,11 +587,35 @@ export function initWebRTCPeerSession(isHost, roomCode) {
     }
   };
 
+  bridge.onPeerLeft = () => {
+    if (hadConnected || !state.roomUnsubscribe) {
+      handleRemotePeerLeft({ reason: 'SIGNALING_LEFT' });
+    }
+  };
+
   bridge.connect(roomCode);
 
   state.webrtcPeer = peer;
   state.signalingBridge = bridge;
   return { peer, bridge };
+}
+
+export function clearMatchEndOverlayTimer() {
+  if (state.matchEndOverlayTimer) {
+    clearTimeout(state.matchEndOverlayTimer);
+    state.matchEndOverlayTimer = null;
+  }
+}
+
+export function resetMultiplayerSessionTracking(roundId = 0) {
+  clearMatchEndOverlayTimer();
+  state.multiplayerRoundId = roundId;
+  state.multiplayerMatchFinished = false;
+  state.multiplayerPayoutProcessed = false;
+  state.rematchVotes = { p1: false, p2: false, p3: false, p4: false };
+  state.peerDeparted = false;
+  state.isTearingDownMultiplayer = false;
+  state._launchingRematchRoundId = null;
 }
 
 export async function onClickCreateRoom(e, mode = '1v1') {
@@ -264,6 +633,7 @@ export async function onClickCreateRoom(e, mode = '1v1') {
       return;
     }
     const code = generateRoomCode();
+    resetMultiplayerSessionTracking(0);
     state.currentRoomId = code;
     state.playerRole = 'p1';
     state.roomFallenTiles = [];
@@ -275,6 +645,7 @@ export async function onClickCreateRoom(e, mode = '1v1') {
       mode,
       createdAt: Date.now(),
       status: 'waiting',
+      roundId: 1,
       players: {
         p1: state.currentUser.uid,
         p2: null,
@@ -363,7 +734,8 @@ export async function onClickConfirmJoin(e) {
     if (!assignedRole) {
       throw new Error('ROOM FULL');
     }
-    
+
+    resetMultiplayerSessionTracking(0);
     state.currentRoomId = code;
     state.playerRole = assignedRole;
     state.roomFallenTiles = data.fallen || [];
@@ -415,7 +787,17 @@ export async function onClickConfirmJoin(e) {
   }
 }
 
-export function startMultiplayerDuel(role, roomCode, mode = '1v1') {
+export function startMultiplayerDuel(role, roomCode, mode = '1v1', options = {}) {
+  const nextRoundId = typeof options.roundId === 'number'
+    ? options.roundId
+    : Math.max(1, state.multiplayerRoundId || 1);
+  resetMultiplayerSessionTracking(nextRoundId);
+  state.onCountdownEnd = null;
+  state.spawnTimer = 0;
+  if (state.activeGridId) {
+    teardownSectorArena();
+  }
+
   state.gameMode = mode === '2v2' ? 'duos_multi' : 'duel_multi';
   state.playerRole = role;
   state.currentRoomId = roomCode;
@@ -425,13 +807,7 @@ export function startMultiplayerDuel(role, roomCode, mode = '1v1') {
   const overlay = document.getElementById('overlay');
   if (overlay) overlay.style.display = 'none';
 
-  for (const f of state.foes) scene.remove(f.obj);
-  for (const t of state.teammates) scene.remove(t.obj);
-  for (const key in state.multiPlayers) {
-    if (state.multiPlayers[key] && state.multiPlayers[key].obj) scene.remove(state.multiPlayers[key].obj);
-  }
-  for (const d of state.discs) disposeDiscEntity(d);
-  state.foes = []; state.teammates = []; state.multiPlayers = {}; state.discs = [];
+  clearMultiplayerEntities();
 
   for (const tile of tiles.values()) {
     tile.state = config.TILE_INTACT;
@@ -447,16 +823,7 @@ export function startMultiplayerDuel(role, roomCode, mode = '1v1') {
     }
   }
 
-  const spawns = {
-    p1: { x: -8, z: 18, yaw: Math.PI, team: 1 },
-    p2: { x: -8, z: -18, yaw: 0, team: 2 },
-    p3: { x: 8, z: 18, yaw: Math.PI, team: 1 },
-    p4: { x: 8, z: -18, yaw: 0, team: 2 }
-  };
-  
-  if (mode === '1v1') {
-    spawns.p1.x = 0; spawns.p2.x = 0;
-  }
+  const spawns = getSpawnCoords(mode);
 
   const mySpawn = spawns[role];
   state.player.pos.set(mySpawn.x, 0, mySpawn.z);
@@ -472,6 +839,12 @@ export function startMultiplayerDuel(role, roomCode, mode = '1v1') {
   state.player.hasDisc = true;
   state.player.alive = true;
   state.player.blocking = false;
+  state.player.invuln = 0;
+  state.player.hurtFlash = 0;
+  state.player.chargingThrow = false;
+  state.player.throwCharge = 0;
+  state.player.throwChargeTime = 0;
+  state.player.noDiscTimer = 0;
   state.player.obj.visible = true;
   state.player.obj.position.copy(state.player.pos);
   state.player.obj.rotation.y = state.player.yaw;
@@ -547,18 +920,28 @@ export function onRoomSnapshot(snap) {
     const data = snap.data();
     if (!data) return;
 
-  if (data.status === 'active' && (!state.running || state.gameMode === 'swarm')) {
+  const docRoundId = typeof data.roundId === 'number' ? data.roundId : 1;
+  const isInitialStart = data.status === 'active' && (state.multiplayerRoundId || 0) === 0;
+  const isRematchStart = data.status === 'active' && docRoundId > (state.multiplayerRoundId || 0);
+  if (isInitialStart || isRematchStart) {
     const rm = document.getElementById('roomModal');
     if (rm) rm.style.display = 'none';
     const jm = document.getElementById('joinModal');
     if (jm) jm.style.display = 'none';
-    
-    startMultiplayerDuel(state.playerRole, state.currentRoomId, data.mode || '1v1');
-    message('CHALLENGERS DETECTED — FIGHT!');
+
+    startMultiplayerDuel(state.playerRole, state.currentRoomId, data.mode || '1v1', { roundId: docRoundId });
+    message(isInitialStart ? 'CHALLENGERS DETECTED — FIGHT!' : 'REMATCH — FIGHT!');
     return;
   }
 
   if (state.gameMode !== 'duel_multi' && state.gameMode !== 'duos_multi') return;
+
+  if (data.status === 'closed') {
+    handleRemotePeerLeft({ reason: data.closedReason || 'RETURN_TO_MENU' });
+    return;
+  }
+
+  if (state.multiplayerMatchFinished && data.status === 'active') return;
 
   if (data.state) {
     for (const r in state.multiPlayers) {
@@ -629,28 +1012,20 @@ export function onRoomSnapshot(snap) {
     }
   }
 
-  if (data.status === 'closed') {
-    if (state.running) {
-      state.running = false;
-      showMultiplayerVictory(data);
-    }
-    const overlay = document.getElementById('overlay');
-    if (overlay) overlay.style.display = 'flex';
-
-    const voteBtn = document.getElementById('voteRematchBtn');
-    if (voteBtn) {
-      voteBtn.disabled = true;
-      voteBtn.textContent = 'OPPONENT LEFT';
-    }
-    const voteLabel = document.getElementById('rematchVoteLabel');
-    if (voteLabel) {
-      voteLabel.textContent = 'OPPONENT RETURNED TO MENU';
-    }
-    message('OPPONENT LEFT THE MATCH');
-    return;
-  }
-
   if (data.status === 'finished') {
+    if (typeof data.roundId === 'number' && state.multiplayerRoundId && data.roundId < state.multiplayerRoundId) {
+      return;
+    }
+    state.multiplayerMatchFinished = true;
+    clearMatchEndOverlayTimer();
+    if (data.rematchVotes) {
+      state.rematchVotes = Object.assign(
+        { p1: false, p2: false, p3: false, p4: false },
+        state.rematchVotes || {},
+        data.rematchVotes
+      );
+    }
+
     let isWin = false;
     if (data.mode === '2v2' || state.gameMode === 'duos_multi') {
       const myTeam = (state.playerRole === 'p1' || state.playerRole === 'p3') ? 1 : 2;
@@ -671,43 +1046,9 @@ export function onRoomSnapshot(snap) {
       }
     }
 
-    const rv = data.rematchVotes || {};
-    let vCount = 0;
-    let pCount = 0;
-    const players = data.players || (state.gameMode === 'duos_multi' ? { p1: true, p2: true, p3: true, p4: true } : { p1: true, p2: true });
-    for (const k in players) {
-      if (players[k]) {
-        pCount++;
-        if (rv[k]) vCount++;
-      }
-    }
-    const voteLabel = document.getElementById('rematchVoteLabel');
-    if (voteLabel) {
-      voteLabel.textContent = `REMATCH VOTES: ${vCount} / ${pCount}`;
-    }
-
-    const voteBtn = document.getElementById('voteRematchBtn');
-    if (voteBtn && state.playerRole && rv[state.playerRole]) {
-      voteBtn.textContent = 'VOTED';
-      voteBtn.disabled = true;
-    }
-
-    if (state.playerRole === 'p1' && vCount >= pCount && pCount > 0) {
-      const roomRef = getRoomRef(state.currentRoomId);
-      const resetPatch = {
-        status: 'active',
-        winner: null,
-        winnerTeam: null,
-        lastThrow: null,
-        fallen: [],
-        rematchVotes: { p1: false, p2: false, p3: false, p4: false }
-      };
-      for (const k in data.players) {
-        if (data.players[k]) {
-          resetPatch[`state.${k}.hp`] = 100;
-        }
-      }
-      roomUpdateDoc(roomRef, resetPatch).catch(err => console.warn("Reset rematch err:", err));
+    updateRematchUI(data);
+    if (state.playerRole === 'p1') {
+      evaluateHostRematchConsensus(data);
     }
   }
   } catch (err) {
@@ -716,7 +1057,7 @@ export function onRoomSnapshot(snap) {
 }
 
 export function renderGameOverActions(data = null) {
-  if (data && data.status === 'closed') {
+  if (state.peerDeparted || (data && data.status === 'closed')) {
     return `
       <button id="voteRematchBtn" class="btn" style="border-color:var(--cyan);color:var(--cyan);margin-bottom:12px;" disabled>OPPONENT LEFT</button>
       <div id="rematchVoteLabel" style="font-size:12px;letter-spacing:2px;margin-bottom:20px;">OPPONENT RETURNED TO MENU</div>
@@ -724,33 +1065,7 @@ export function renderGameOverActions(data = null) {
     `;
   }
 
-  let vCount = 0;
-  let pCount = 0;
-  let hasVoted = false;
-
-  const rv = (data && data.rematchVotes) ? data.rematchVotes : {};
-  const players = (data && data.players) ? data.players : null;
-
-  if (players) {
-    for (const k in players) {
-      if (players[k]) {
-        pCount++;
-        if (rv[k]) vCount++;
-      }
-    }
-  } else {
-    const maxPlayers = state.gameMode === 'duos_multi' ? 4 : 2;
-    pCount = Object.keys(state.multiPlayers).length + 1;
-    if (pCount < 2) pCount = maxPlayers;
-    for (const k in rv) {
-      if (rv[k]) vCount++;
-    }
-  }
-
-  if (state.playerRole && rv[state.playerRole]) {
-    hasVoted = true;
-  }
-
+  const { vCount, pCount, hasVoted } = getRematchTally(data);
   const btnText = hasVoted ? 'VOTED' : 'VOTE REMATCH';
   const btnDisabled = hasVoted ? 'disabled' : '';
 
@@ -762,7 +1077,18 @@ export function renderGameOverActions(data = null) {
 }
 
 export function leaveMultiplayerAndReturnToMenu() {
-  if (state.db && state.currentRoomId && state.playerRole) {
+  state.isTearingDownMultiplayer = true;
+  if (state.webrtcPeer && typeof state.webrtcPeer.sendReliable === 'function') {
+    try {
+      state.webrtcPeer.sendReliable({
+        type: 'PEER_LEFT',
+        roundId: state.multiplayerRoundId || 1,
+        role: state.playerRole,
+        reason: 'RETURN_TO_MENU'
+      });
+    } catch (_) {}
+  }
+  if (state.db && state.currentRoomId && state.playerRole && state.roomUnsubscribe) {
     const roomRef = getRoomRef(state.currentRoomId);
     const patch = {
       status: 'closed',
@@ -772,7 +1098,7 @@ export function leaveMultiplayerAndReturnToMenu() {
     patch[`players.${state.playerRole}`] = null;
     roomUpdateDoc(roomRef, patch).catch(() => {});
   }
-  teardownMultiplayer();
+  teardownMultiplayer({ flushPeerMs: 50 });
   if (typeof window !== 'undefined' && window.__tronShowModeSelectMenu) {
     window.__tronShowModeSelectMenu();
   }
@@ -788,14 +1114,34 @@ export function bindGameOverActions() {
     e.stopPropagation();
     leaveMultiplayerAndReturnToMenu();
   };
-  
+
   const voteBtn = el('voteRematchBtn');
   if (voteBtn) {
     voteBtn.onclick = (e) => {
       e.stopPropagation();
-      voteBtn.textContent = 'VOTED';
-      voteBtn.disabled = true;
-      if (state.db && state.currentRoomId && state.playerRole) {
+      if (state.peerDeparted) return;
+      if (!state.rematchVotes) {
+        state.rematchVotes = { p1: false, p2: false, p3: false, p4: false };
+      }
+      if (state.playerRole) {
+        state.rematchVotes[state.playerRole] = true;
+      }
+      updateRematchUI();
+
+      const sentOverWebRTC = dispatchReliableMatchEvent({
+        type: 'REMATCH_VOTE',
+        roundId: state.multiplayerRoundId || 1,
+        role: state.playerRole,
+        voted: true
+      });
+      if (sentOverWebRTC) {
+        if (state.playerRole === 'p1') {
+          evaluateHostRematchConsensus();
+        }
+        return;
+      }
+
+      if (state.db && state.currentRoomId && state.playerRole && state.roomUnsubscribe) {
         const roomRef = getRoomRef(state.currentRoomId);
         const patch = {};
         patch[`rematchVotes.${state.playerRole}`] = true;
@@ -807,6 +1153,7 @@ export function bindGameOverActions() {
 
 export function showMultiplayerVictory(data = null) {
   state.running = false;
+  state.multiplayerMatchFinished = true;
   if (!state.multiplayerPayoutProcessed) {
     state.multiplayerPayoutProcessed = true;
     duelEconomyBridge.processMatchOutcome('victory', 'multiplayer');
@@ -816,23 +1163,7 @@ export function showMultiplayerVictory(data = null) {
 
   const existingVoteLabel = document.getElementById('rematchVoteLabel');
   if (existingVoteLabel && overlay && overlay.querySelector('.card:not(.dead)')) {
-    if (data) {
-      const rv = data.rematchVotes || {};
-      let vCount = 0, pCount = 0;
-      const players = data.players || (state.gameMode === 'duos_multi' ? { p1: true, p2: true, p3: true, p4: true } : { p1: true, p2: true });
-      for (const k in players) {
-        if (players[k]) {
-          pCount++;
-          if (rv[k]) vCount++;
-        }
-      }
-      existingVoteLabel.textContent = `REMATCH VOTES: ${vCount} / ${pCount}`;
-      const voteBtn = document.getElementById('voteRematchBtn');
-      if (voteBtn && state.playerRole && rv[state.playerRole]) {
-        voteBtn.textContent = 'VOTED';
-        voteBtn.disabled = true;
-      }
-    }
+    updateRematchUI(data);
     return;
   }
 
@@ -851,6 +1182,7 @@ export function showMultiplayerVictory(data = null) {
 
 export function showMultiplayerDefeat(data = null) {
   state.running = false;
+  state.multiplayerMatchFinished = true;
   if (!state.multiplayerPayoutProcessed) {
     state.multiplayerPayoutProcessed = true;
     duelEconomyBridge.processMatchOutcome('defeat', 'multiplayer');
@@ -861,23 +1193,7 @@ export function showMultiplayerDefeat(data = null) {
 
   const existingVoteLabel = document.getElementById('rematchVoteLabel');
   if (existingVoteLabel && overlay && overlay.querySelector('.card.dead')) {
-    if (data) {
-      const rv = data.rematchVotes || {};
-      let vCount = 0, pCount = 0;
-      const players = data.players || (state.gameMode === 'duos_multi' ? { p1: true, p2: true, p3: true, p4: true } : { p1: true, p2: true });
-      for (const k in players) {
-        if (players[k]) {
-          pCount++;
-          if (rv[k]) vCount++;
-        }
-      }
-      existingVoteLabel.textContent = `REMATCH VOTES: ${vCount} / ${pCount}`;
-      const voteBtn = document.getElementById('voteRematchBtn');
-      if (voteBtn && state.playerRole && rv[state.playerRole]) {
-        voteBtn.textContent = 'VOTED';
-        voteBtn.disabled = true;
-      }
-    }
+    updateRematchUI(data);
     return;
   }
 
@@ -894,25 +1210,38 @@ export function showMultiplayerDefeat(data = null) {
   bindGameOverActions();
 }
 
-export function teardownMultiplayer() {
-  if (state.webrtcPeer) {
-    try { state.webrtcPeer.close(); } catch (_) {}
-    state.webrtcPeer = null;
+export function teardownMultiplayer({ flushPeerMs = 0 } = {}) {
+  state.isTearingDownMultiplayer = true;
+
+  const peerToClose = state.webrtcPeer;
+  const bridgeToClose = state.signalingBridge;
+  state.webrtcPeer = null;
+  state.signalingBridge = null;
+
+  if (peerToClose) {
+    peerToClose.onFastMessage = () => {};
+    peerToClose.onReliableMessage = () => {};
+    peerToClose.onConnectionChange = () => {};
+    if (flushPeerMs > 0) {
+      setTimeout(() => {
+        try { peerToClose.close(); } catch (_) {}
+      }, flushPeerMs);
+    } else {
+      try { peerToClose.close(); } catch (_) {}
+    }
   }
-  if (state.signalingBridge) {
-    try { state.signalingBridge.disconnect(); } catch (_) {}
-    state.signalingBridge = null;
+  if (bridgeToClose) {
+    try { bridgeToClose.disconnect(); } catch (_) {}
+  }
+  if (typeof matchmakingQueue.resetAfterMatch === 'function') {
+    matchmakingQueue.resetAfterMatch();
   }
   if (state.roomUnsubscribe) {
     state.roomUnsubscribe();
     state.roomUnsubscribe = null;
   }
-  if (state.duelOpponent && state.duelOpponent.obj) {
-    scene.remove(state.duelOpponent.obj);
-    state.duelOpponent = null;
-  }
-  for (const d of state.discs) disposeDiscEntity(d);
-  state.discs = [];
+  clearMultiplayerEntities();
+  resetMultiplayerSessionTracking(0);
   state.currentRoomId = null;
   state.playerRole = null;
   state.lastProcessedThrowId = null;

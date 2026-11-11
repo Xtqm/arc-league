@@ -9,8 +9,7 @@ import { resolveCircle, lineOfSight } from '../physics/collision.js';
 import { getTileAt, findNearestIntactTile, pillars } from './Arena.js';
 import { spawnDisc } from './Disc.js';
 import { updateHUD } from '../ui/hud.js';
-import { getRoomRef, roomUpdateDoc } from '../network/firebaseSetup.js';
-import { showMultiplayerVictory } from '../network/roomManager.js';
+import { reportMultiplayerMatchEnd } from '../network/roomManager.js';
 import { ArbiterBossController, ARBITER_CONFIGS } from '../ai/ArbiterBossController.js';
 import { swarmEconomyBridge } from '../modes/SwarmEconomyBridge.js';
 import { duelEconomyBridge } from '../modes/DuelEconomyBridge.js';
@@ -208,20 +207,15 @@ export function killFoe(f) {
       message('OPPONENT DEREZZED');
       return;
     }
-    duelEconomyBridge.processMatchOutcome('victory', 'multiplayer');
     message('VICTORY — OPPONENT DEREZZED');
-    if (state.db && state.currentRoomId && state.playerRole) {
-      const roomRef = getRoomRef(state.currentRoomId);
-      const myTeam = (state.playerRole === 'p1' || state.playerRole === 'p3') ? 1 : 2;
-      const payload = { status: 'finished', winnerTeam: myTeam };
-      if (state.gameMode === 'duel_multi') {
-        payload.winner = state.playerRole;
-      }
-      roomUpdateDoc(roomRef, payload).catch(() => {});
-    }
-    setTimeout(() => {
-      showMultiplayerVictory();
-    }, 900);
+    const myTeam = (state.playerRole === 'p1' || state.playerRole === 'p3') ? 1 : 2;
+    reportMultiplayerMatchEnd({
+      winner: state.gameMode === 'duel_multi' ? state.playerRole : null,
+      winnerTeam: myTeam,
+      loserRole: f && f.role ? f.role : null,
+      reason: 'ELIMINATED BY OPPONENT',
+      isLocalWin: true
+    });
     return;
   }
 

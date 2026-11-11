@@ -13,7 +13,7 @@ import { getPlayerCurveIntent } from '../input/keyboard.js';
 import { touchMove, updateCurveButtons, updateTouchMomentum } from '../input/touch.js';
 import { getLeftStick, getRightStick, playGamepadHaptics } from '../input/gamepad.js';
 import { getRoomRef, roomUpdateDoc } from '../network/firebaseSetup.js';
-import { showMultiplayerDefeat } from '../network/roomManager.js';
+import { showMultiplayerDefeat, reportMultiplayerMatchEnd } from '../network/roomManager.js';
 import { updateHUD } from '../ui/hud.js';
 import { swarmEconomyBridge } from '../modes/SwarmEconomyBridge.js';
 
@@ -404,6 +404,7 @@ export function aimDir() {
 export function damagePlayer(amount, from) {
   if (state.countdownTimer > 0) return;
   if (!state.player.alive) return;
+  if (state.multiplayerMatchFinished) return;
   if (state.player.invuln > 0) return;
   state.player.invuln = 0.25;
   state.player.hp -= amount;
@@ -421,45 +422,29 @@ export function damagePlayer(amount, from) {
     if (state.player.obj) state.player.obj.visible = false;
 
     if (state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi') {
-      if (state.db && state.currentRoomId && state.currentUser) {
-        const roomRef = getRoomRef(state.currentRoomId);
-        const myState = {
-          x: +state.player.pos.x.toFixed(2),
-          y: +state.player.y.toFixed(2),
-          z: +state.player.pos.z.toFixed(2),
-          yaw: +state.player.yaw.toFixed(2),
-          pitch: +state.player.pitch.toFixed(2),
-          hp: 0,
-          blocking: false,
-          hasDisc: state.player.hasDisc
-        };
-        const payload = {};
-        payload[`state.${state.playerRole}`] = myState;
-        
-        let allTeammatesDead = true;
-        for (const t of state.teammates) {
-          if (t.hp > 0) allTeammatesDead = false;
-        }
-
-        if (allTeammatesDead) {
-          payload.status = 'finished';
-          const myTeam = (state.playerRole === 'p1' || state.playerRole === 'p3') ? 1 : 2;
-          payload.winnerTeam = myTeam === 1 ? 2 : 1;
-          if (state.gameMode === 'duel_multi') {
-            payload.winner = state.playerRole === 'p1' ? 'p2' : 'p1';
-          }
-        }
-        if (state.webrtcPeer && state.webrtcPeer.connectionState === 'connected') {
-          state.webrtcPeer.sendReliable({
-            type: 'GAME_OVER_EVENT',
-            payload
-          });
-        }
-        roomUpdateDoc(roomRef, payload).catch(err => console.warn("Game over sync err:", err));
-      }
-      if (state.gameMode !== 'duos_multi' || state.teammates.every(t => t.hp <= 0)) {
-        setTimeout(showMultiplayerDefeat, 900);
-      }
+      const myState = {
+        x: +state.player.pos.x.toFixed(2),
+        y: +state.player.y.toFixed(2),
+        z: +state.player.pos.z.toFixed(2),
+        yaw: +state.player.yaw.toFixed(2),
+        pitch: +state.player.pitch.toFixed(2),
+        hp: 0,
+        blocking: false,
+        hasDisc: state.player.hasDisc
+      };
+      const myTeam = (state.playerRole === 'p1' || state.playerRole === 'p3') ? 1 : 2;
+      const winnerTeam = myTeam === 1 ? 2 : 1;
+      const winner = state.gameMode === 'duel_multi'
+        ? (state.playerRole === 'p1' ? 'p2' : 'p1')
+        : null;
+      reportMultiplayerMatchEnd({
+        winner,
+        winnerTeam,
+        loserRole: state.playerRole,
+        reason: state.gameOverReason || '',
+        playerState: myState,
+        isLocalWin: false
+      });
     } else {
       swarmEconomyBridge.resetStreak();
       setTimeout(showGameOver, 900);

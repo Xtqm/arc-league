@@ -57,7 +57,8 @@ assert.strictEqual(disc.userData.pointLight.userData.part, 'disc_light');
 const prog1 = makeProgram(0x00f3ff);
 assert.strictEqual(prog1.userData.part, 'chassis_root');
 assert.ok(prog1.userData.suitMaterial instanceof THREE.MeshStandardMaterial);
-assert.ok(prog1.userData.litMaterial instanceof THREE.MeshBasicMaterial);
+assert.ok(prog1.userData.litMaterial instanceof THREE.MeshStandardMaterial);
+assert.ok(prog1.userData.litMaterial.emissiveIntensity >= 1.5);
 assert.strictEqual(prog1.userData.backDisc.userData.part, 'chassis_back_disc');
 assert.strictEqual(prog1.userData.halo.userData.part, 'chassis_halo');
 
@@ -171,6 +172,9 @@ engine.applyChassisSkin(sampleRig, 'chassis_iso_guardian');
 assert.strictEqual(sampleRig.userData.suitMaterial.roughness, 0.2);
 assert.strictEqual(sampleRig.userData.suitMaterial.metalness, 0.95);
 assert.strictEqual('#' + sampleRig.userData.litMaterial.color.getHexString(), '#ffea00');
+assert.strictEqual('#' + sampleRig.userData.litMaterial.emissive.getHexString(), '#ffea00');
+assert.ok(sampleRig.userData.litMaterial.emissiveIntensity > 2.2, 'Glowing chassis skin must scale HDR emissiveIntensity');
+assert.ok(sampleRig.userData.edgeMaterial, 'Construct rig must expose edgeMaterial for hairline trim tinting');
 assert.strictEqual('#' + sampleRig.userData.halo.color.getHexString(), '#ffea00');
 
 // 4.2 Apply Infiltrator (matte stealth)

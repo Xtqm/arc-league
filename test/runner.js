@@ -35,7 +35,8 @@ const TEST_DOMAINS = {
     'armory/armory_modal.test.js'
   ],
   graphics: [
-    'graphics/humanoid_rig.test.js'
+    'graphics/humanoid_rig.test.js',
+    'graphics/cinematic_pipeline.test.js'
   ],
   network: [
     'network/webrtc_peer.test.js',

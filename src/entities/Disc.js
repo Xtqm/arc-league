@@ -1,9 +1,10 @@
 import * as THREE from '../../vendor/three.module.js';
 import { state, player } from '../core/state.js';
 import { config } from '../core/config.js';
-import { scene } from '../graphics/scene.js';
+import { scene, camera } from '../graphics/scene.js';
 import { makeDisc, tmp, _discMat, _fwd, _r0, _u0, _uBank, _rBank, _localX, _localY } from '../graphics/materials.js';
-import { burst } from '../graphics/particles.js';
+import { RibbonTrail } from '../graphics/RibbonTrail.js';
+import { burst, isParticlesEnabled, trackFadingRibbon } from '../graphics/particles.js';
 import { shake, message } from '../ui/UIManager.js';
 import { lineOfSight } from '../physics/collision.js';
 import { getTileAt, triggerTileWarning, pillars, sectorHazardBuilder } from './Arena.js';
@@ -40,6 +41,33 @@ export function applyDamageToTarget(f, dmg, D) {
   return f.hp <= 0;
 }
 
+export function setDiscVisualColor(D, primaryHex, secondaryHex = primaryHex) {
+  if (!D) return;
+  D.color = primaryHex;
+  if (D.obj) {
+    D.obj.traverse((o) => {
+      if (o.material && o.material.color) o.material.color.setHex(primaryHex);
+      if (o.material && o.material.emissive) o.material.emissive.setHex(primaryHex);
+      if (o.isPointLight) o.color.setHex(primaryHex);
+    });
+  }
+  if (D.trail) {
+    D.trail.setColors(primaryHex, secondaryHex);
+  }
+}
+
+export function disposeDiscEntity(D) {
+  if (!D) return;
+  if (D.trail) {
+    trackFadingRibbon(D.trail, 0.24);
+    D.trail = null;
+  }
+  if (D.obj) {
+    scene.remove(D.obj);
+    disposeHierarchy(D.obj);
+  }
+}
+
 export function spawnDisc(pos, vel, owner, color, curve = 0, charge = 0) {
   const obj = makeDisc(color);
   obj.position.copy(pos);
@@ -50,8 +78,30 @@ export function spawnDisc(pos, vel, owner, color, curve = 0, charge = 0) {
     cosmeticMaterialEngine.applyDiscSkin(obj, cosmeticMaterialEngine.activeDiscSkinId);
   }
   const clCharge = THREE.MathUtils.clamp(charge || 0, 0, 1);
+
+  let trail = null;
+  if (isParticlesEnabled()) {
+    const trailPrimary = cosmetics ? cosmetics.primaryColor : new THREE.Color(color);
+    const trailSecondary = cosmetics
+      ? cosmetics.secondaryColor
+      : new THREE.Color(color).multiplyScalar(0.55);
+    const trailOpacity = cosmetics ? cosmetics.opacity : 0.85;
+    trail = new RibbonTrail({
+      primaryColor: trailPrimary,
+      secondaryColor: trailSecondary,
+      opacity: trailOpacity,
+      width: 0.44 + clCharge * 0.14,
+      maxPoints: 26,
+      minDistance: 0.18,
+      hdrBoost: 1.9
+    });
+    trail.pushPoint(pos, vel, camera?.position || null);
+    scene.add(trail.mesh);
+  }
+
   const d = {
     obj,
+    trail,
     pos: pos.clone(),
     vel: vel.clone(),
     launchY: pos.y,
@@ -93,8 +143,7 @@ export function updateDiscs(dt) {
     }
 
     if (!holderAlive) {
-      scene.remove(D.obj);
-      disposeHierarchy(D.obj);
+      disposeDiscEntity(D);
       state.discs.splice(i, 1);
       continue;
     }
@@ -108,11 +157,7 @@ export function updateDiscs(dt) {
         const targetFoe = (D.originalOwner && state.foes.includes(D.originalOwner)) ? D.originalOwner : (state.foes[0] || null);
         if (targetFoe) {
           D.owner = targetFoe;
-          D.color = config.ORANGE;
-          D.obj.traverse(o => {
-            if (o.material && o.material.color) o.material.color.setHex(config.ORANGE);
-            if (o.isPointLight) o.color.setHex(config.ORANGE);
-          });
+          setDiscVisualColor(D, config.ORANGE, 0x993300);
         }
       }
     }
@@ -135,8 +180,7 @@ export function updateDiscs(dt) {
             D.owner.obj.userData.backDisc.visible = true;
           }
         }
-        scene.remove(D.obj);
-        disposeHierarchy(D.obj);
+        disposeDiscEntity(D);
         state.discs.splice(i, 1);
         continue;
       }
@@ -169,9 +213,27 @@ export function updateDiscs(dt) {
         D.pos.y += (cruiseY - D.pos.y) * Math.min(1, dt * 2.2);
       }
     }
-    if (D.cosmetics && !D.returning && Math.random() < 0.3) {
-      const trailHex = Math.random() > 0.4 ? D.cosmetics.primaryHex : D.cosmetics.secondaryEmissiveHex;
-      burst(D.pos.clone(), trailHex, 2, 2.0);
+    if (isParticlesEnabled()) {
+      if (!D.trail) {
+        const trailPrimary = D.cosmetics ? D.cosmetics.primaryColor : new THREE.Color(D.color);
+        const trailSecondary = D.cosmetics
+          ? D.cosmetics.secondaryColor
+          : new THREE.Color(D.color).multiplyScalar(0.55);
+        D.trail = new RibbonTrail({
+          primaryColor: trailPrimary,
+          secondaryColor: trailSecondary,
+          opacity: D.cosmetics ? D.cosmetics.opacity : 0.85,
+          width: 0.44 + (D.charge || 0) * 0.14,
+          maxPoints: 26,
+          minDistance: 0.18,
+          hdrBoost: 1.9
+        });
+        scene.add(D.trail.mesh);
+      }
+      D.trail.pushPoint(D.pos, D.vel, camera?.position || null);
+    } else if (D.trail) {
+      D.trail.dispose();
+      D.trail = null;
     }
 
     // Floor collision & void plunge
@@ -280,7 +342,7 @@ export function updateDiscs(dt) {
               ? Math.min(0.85, 0.75 + ((state.tier || state.duelTier) - 1) * 0.03)
               : 0.35);
             if (Math.random() < catchChance) {
-              scene.remove(D.obj);
+              disposeDiscEntity(D);
               state.discs.splice(i, 1);
               f.hasDisc = true;
               if (f.obj && f.obj.userData && f.obj.userData.backDisc) {
@@ -316,11 +378,7 @@ export function updateDiscs(dt) {
                 D.vel.z += (Math.random() - 0.5) * 4;
                 D.vel.y = Math.random() * 2 + 1;
                 D.isDeflected = false;
-                D.color = config.ORANGE;
-                D.obj.traverse(o => {
-                  if (o.material && o.material.color) o.material.color.setHex(config.ORANGE);
-                  if (o.isPointLight) o.color.setHex(config.ORANGE);
-                });
+                setDiscVisualColor(D, config.ORANGE, 0x993300);
                 D.owner = f;
                 D.returning = true;
               }
@@ -354,11 +412,7 @@ export function updateDiscs(dt) {
               D.vel.z += (Math.random() - 0.5) * 4;
               D.vel.y = Math.random() * 2 + 1;
               D.isDeflected = false;
-              D.color = config.ORANGE;
-              D.obj.traverse(o => {
-                if (o.material && o.material.color) o.material.color.setHex(config.ORANGE);
-                if (o.isPointLight) o.color.setHex(config.ORANGE);
-              });
+              setDiscVisualColor(D, config.ORANGE, 0x993300);
               D.owner = f;
               D.returning = true;
             }
@@ -432,8 +486,7 @@ export function updateDiscs(dt) {
 
           if (D.pos.distanceTo(tmp.copy(holder.pos).setY(1.7 + (holder.y || 0))) < 1.4) {
             state.player.hasDisc = true;
-            scene.remove(D.obj);
-            disposeHierarchy(D.obj);
+            disposeDiscEntity(D);
             state.discs.splice(i, 1);
             discCaught = true;
             SFX.catchDisc();
@@ -471,10 +524,7 @@ export function updateDiscs(dt) {
           D.t = 0;
           D.curve = 0;
           if (D.hitFoes) D.hitFoes.clear();
-          D.obj.traverse(o => {
-            if (o.material && o.material.color) o.material.color.setHex(config.WHITE);
-            if (o.isPointLight) o.color.setHex(config.WHITE);
-          });
+          setDiscVisualColor(D, config.WHITE, config.CYAN);
           const incomingSpd = D.vel.length();
           const spd = Math.max(36, incomingSpd * 1.25);
           let targetFoe = (D.originalOwner && state.foes.includes(D.originalOwner)) ? D.originalOwner : state.foes[0];
@@ -550,8 +600,7 @@ export function updateDiscs(dt) {
                 D.owner.obj.userData.backDisc.visible = true;
               }
             }
-            scene.remove(D.obj);
-            disposeHierarchy(D.obj);
+            disposeDiscEntity(D);
             state.discs.splice(i, 1);
             discCaught = true;
             SFX.catchDisc();

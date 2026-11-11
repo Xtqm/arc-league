@@ -6,7 +6,10 @@
  */
 
 import * as THREE from '../../vendor/three.module.js';
-import { makeDisc, makeProgram } from '../graphics/materials.js';
+import { makeDisc, makeProgram, animateProgramKinematics } from '../graphics/materials.js';
+import { createProceduralEnvironment } from '../graphics/Environment.js';
+import { CinematicComposer } from '../graphics/PostProcessing.js';
+import { settingsManager } from '../core/settings.js';
 import { cosmeticMaterialEngine as defaultCosmeticEngine, disposeHierarchy } from './CosmeticMaterialEngine.js';
 
 export class ArmoryPreviewScene {
@@ -38,6 +41,8 @@ export class ArmoryPreviewScene {
     this.scene = null;
     this.camera = null;
     this.renderer = null;
+    this.composer = null;
+    this._envHandle = null;
     this.pivot = null;
     this.stagedMesh = null;
     this.stagedType = null;
@@ -96,6 +101,15 @@ export class ArmoryPreviewScene {
         this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         this.renderer.setSize(this.width, this.height);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this.renderer.toneMappingExposure = 1.05;
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+        this._envHandle = createProceduralEnvironment(this.renderer);
+        if (this._envHandle) {
+          this.scene.environment = this._envHandle.texture;
+        }
+        this.composer = new CinematicComposer(this.renderer, { enabled: settingsManager.get('bloom', true) });
 
         if (this.container) {
           this.container.appendChild(this.renderer.domElement);
@@ -177,7 +191,7 @@ export class ArmoryPreviewScene {
   previewChassis(chassisSkinIdOrConfig, activeDiscSkinId = null) {
     this.clearStaged();
 
-    const rig = makeProgram(0x00f3ff, { isPlayer: true, helmetType: 'flynn' });
+    const rig = makeProgram(0x00f3ff, { archetype: 'player' });
     this.cosmetics.applyChassisSkin(rig, chassisSkinIdOrConfig);
 
     if (activeDiscSkinId && rig.userData?.backDisc) {
@@ -216,6 +230,9 @@ export class ArmoryPreviewScene {
     }
     if (this.renderer) {
       this.renderer.setSize(width, height);
+      if (this.composer) {
+        this.composer.setSize(width, height, this.renderer.getPixelRatio());
+      }
     }
   }
 
@@ -249,10 +266,25 @@ export class ArmoryPreviewScene {
       this.pivot.rotation.y += this.autoRotateSpeed * dt;
     }
 
+    if (!this.isPaused && this.stagedType === 'chassis' && this.stagedMesh) {
+      animateProgramKinematics(this.stagedMesh, dt, {
+        speed: 0,
+        grounded: true,
+        blocking: false,
+        hasDisc: true,
+        time: now / 1000
+      });
+    }
+
     // Skip rendering if container is hidden in DOM
     const isHidden = this.container && this.container.offsetParent === null;
     if (!this.isPaused && !isHidden && this.renderer && this.scene && this.camera) {
-      this.renderer.render(this.scene, this.camera);
+      if (this.composer) {
+        this.composer.setEnabled(settingsManager.get('bloom', true));
+        this.composer.render(this.scene, this.camera);
+      } else {
+        this.renderer.render(this.scene, this.camera);
+      }
     }
 
     this._rafId = requestAnimationFrame(this._tick);
@@ -339,7 +371,18 @@ export class ArmoryPreviewScene {
       this.pivot = null;
     }
 
+    if (this.composer) {
+      this.composer.dispose();
+      this.composer = null;
+    }
+
+    if (this._envHandle) {
+      this._envHandle.dispose();
+      this._envHandle = null;
+    }
+
     if (this.scene) {
+      this.scene.environment = null;
       disposeHierarchy(this.scene);
       this.scene = null;
     }

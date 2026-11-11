@@ -1,5 +1,6 @@
 import * as THREE from '../../vendor/three.module.js';
 import { state } from '../core/state.js';
+import { animateProgramKinematics } from '../graphics/materials.js';
 import { getRoomRef, roomUpdateDoc } from './firebaseSetup.js';
 
 /**
@@ -128,14 +129,19 @@ export function updateRemotePlayers(dt) {
     );
     opp.obj.rotation.y = opp.yaw;
     if (opp.obj.userData && opp.obj.userData.backDisc) {
-      opp.obj.userData.backDisc.visible = opp.hasDisc;
-      if (opp.blocking && opp.hasDisc) {
-        opp.obj.userData.backDisc.position.set(-0.06, -0.15, 0.22);
-        opp.obj.userData.backDisc.rotation.set(0.65, 0.35, 0);
-      } else {
-        opp.obj.userData.backDisc.position.set(0.04, -0.28, 0.02);
-        opp.obj.userData.backDisc.rotation.set(0, Math.PI / 2, 0);
-      }
+      opp.obj.userData.backDisc.visible = !!opp.hasDisc;
     }
+    const speedEst = opp.targetPos ? opp.pos.distanceTo(opp.targetPos) * 16 : 0;
+    animateProgramKinematics(opp.obj, dt, {
+      speed: speedEst,
+      vy: 0,
+      grounded: (opp.y || 0) <= 0.05,
+      blocking: !!opp.blocking,
+      hurt: 0,
+      time: state.time,
+      hasDisc: !!opp.hasDisc,
+      chargingThrow: !!opp.chargingThrow,
+      throwCharge: opp.throwCharge || 0
+    });
   }
 }

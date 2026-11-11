@@ -3,6 +3,7 @@ import { state } from '../core/state.js';
 import { config } from '../core/config.js';
 import { scene, camera } from '../graphics/scene.js';
 import { makeProgram } from '../graphics/materials.js';
+import { disposeDiscEntity } from '../entities/Disc.js';
 import { burst } from '../graphics/particles.js';
 import { tiles, tileMatIntact, tileEdgeMatIntact, triggerTileWarning } from '../entities/Arena.js';
 import { spawnDisc } from '../entities/Disc.js';
@@ -429,7 +430,7 @@ export function startMultiplayerDuel(role, roomCode, mode = '1v1') {
   for (const key in state.multiPlayers) {
     if (state.multiPlayers[key] && state.multiPlayers[key].obj) scene.remove(state.multiPlayers[key].obj);
   }
-  for (const d of state.discs) scene.remove(d.obj);
+  for (const d of state.discs) disposeDiscEntity(d);
   state.foes = []; state.teammates = []; state.multiPlayers = {}; state.discs = [];
 
   for (const tile of tiles.values()) {
@@ -483,7 +484,7 @@ export function startMultiplayerDuel(role, roomCode, mode = '1v1') {
     
     const isTeammate = spawns[r].team === mySpawn.team;
     const color = isTeammate ? config.CYAN : config.PURPLE;
-    const oppObj = makeProgram(color, { isPlayer: isTeammate, helmetType: isTeammate ? 'flynn' : 'rinzler' });
+    const oppObj = makeProgram(color, { archetype: 'player', isPlayer: isTeammate });
     scene.add(oppObj);
     
     const s = spawns[r];
@@ -910,7 +911,7 @@ export function teardownMultiplayer() {
     scene.remove(state.duelOpponent.obj);
     state.duelOpponent = null;
   }
-  for (const d of state.discs) scene.remove(d.obj);
+  for (const d of state.discs) disposeDiscEntity(d);
   state.discs = [];
   state.currentRoomId = null;
   state.playerRole = null;

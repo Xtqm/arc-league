@@ -1,20 +1,50 @@
 import * as THREE from '../../vendor/three.module.js';
 import { state } from '../core/state.js';
 import { config } from '../core/config.js';
+import { settingsManager } from '../core/settings.js';
 import { makeProgram } from './materials.js';
+import { createProceduralEnvironment } from './Environment.js';
+import { CinematicComposer } from './PostProcessing.js';
 import { cosmeticMaterialEngine } from '../armory/CosmeticMaterialEngine.js';
 
 export const renderer = typeof document !== 'undefined' ? new THREE.WebGLRenderer({ antialias: true }) : null;
+export let composer = null;
 if (renderer) {
   renderer.setPixelRatio(Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, state.isTouchDevice ? 1.5 : 2));
   renderer.setSize(typeof innerWidth !== 'undefined' ? innerWidth : 800, typeof innerHeight !== 'undefined' ? innerHeight : 600);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  composer = new CinematicComposer(renderer, { enabled: settingsManager.get('bloom', true) });
 
   if (typeof document !== 'undefined' && document.body && !renderer.domElement.parentElement) {
     document.body.appendChild(renderer.domElement);
   }
 }
+
+export function setBloomEnabled(enabled) {
+  if (composer) {
+    composer.setEnabled(!!enabled);
+  }
+}
+
+export function renderScene() {
+  if (composer) {
+    composer.render(scene, camera);
+  } else if (renderer) {
+    renderer.render(scene, camera);
+  }
+}
+
+settingsManager.onChange((key, value, all) => {
+  if (key === 'bloom') {
+    setBloomEnabled(value);
+  } else if (key === '*' && all) {
+    setBloomEnabled(all.bloom !== false);
+  }
+});
 
 export const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x01060a);
@@ -76,8 +106,14 @@ export function onResize() {
   if (typeof innerWidth === 'undefined' || typeof innerHeight === 'undefined') return;
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, state.isTouchDevice ? 1.5 : 2));
+  if (renderer) {
+    renderer.setSize(innerWidth, innerHeight);
+    const pr = Math.min(window.devicePixelRatio, state.isTouchDevice ? 1.5 : 2);
+    renderer.setPixelRatio(pr);
+    if (composer) {
+      composer.setSize(innerWidth, innerHeight, pr);
+    }
+  }
   if (typeof window !== 'undefined' && window.__tronCheckOrientation) {
     window.__tronCheckOrientation();
   }
@@ -150,8 +186,16 @@ export function initGraphics() {
   if (renderer && renderer.domElement && typeof document !== 'undefined' && document.body && !renderer.domElement.parentElement) {
     document.body.appendChild(renderer.domElement);
   }
+  if (renderer && !scene.environment) {
+    const envHandle = createProceduralEnvironment(renderer);
+    if (envHandle) {
+      scene.environment = envHandle.texture;
+      scene.userData.envHandle = envHandle;
+    }
+  }
+  setBloomEnabled(settingsManager.get('bloom', true));
   if (!state.player.obj) {
-    state.player.obj = makeProgram(config.CYAN, { isPlayer: true, helmetType: 'flynn' });
+    state.player.obj = makeProgram(config.CYAN, { archetype: 'player' });
     scene.add(state.player.obj);
     cosmeticMaterialEngine.init({ playerObj: state.player.obj });
   } else {

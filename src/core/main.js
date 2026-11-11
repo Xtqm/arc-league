@@ -2,7 +2,7 @@ import './env.js';
 import * as THREE from '../../vendor/three.module.js';
 import { state, player, touchState } from './state.js';
 import { config } from './config.js';
-import { renderer, scene, camera, grid, ring, floor, initGraphics, updateCamera } from '../graphics/scene.js';
+import { renderer, scene, camera, grid, ring, floor, initGraphics, updateCamera, renderScene } from '../graphics/scene.js';
 import { updateSparks } from '../graphics/particles.js';
 import { tiles, getTileAt, worldToTile, tileToWorld, triggerTileWarning, updateTiles, rebuildArenaTiles } from '../entities/Arena.js';
 import { updatePlayer, throwDisc, startChargingThrow, releaseChargingThrow, aimTarget, aimDir } from '../entities/Player.js';
@@ -273,7 +273,7 @@ export function loop() {
     camera.lookAt(0, 2, 0);
     updateSparks(dt, scene);
   }
-  renderer.render(scene, camera);
+  renderScene();
 }
 
 export const animate = loop;

@@ -3,7 +3,7 @@ import { state } from '../core/state.js';
 import { config } from '../core/config.js';
 import { scene } from '../graphics/scene.js';
 import { makeProgram, animateProgramKinematics, tmp, _duelLead, _duelOrigin, _duelAimDir, _duelWant, _duelSafe } from '../graphics/materials.js';
-import { burst } from '../graphics/particles.js';
+import { burst, emitHoverDashStreak } from '../graphics/particles.js';
 import { shake, message } from '../ui/UIManager.js';
 import { resolveCircle, lineOfSight } from '../physics/collision.js';
 import { getTileAt, findNearestIntactTile, pillars } from './Arena.js';
@@ -51,7 +51,7 @@ export function findBestCoverPillar(foePos, playerPos) {
 export function spawnDuelBoss(tier = 1) {
   for (const f of state.foes) scene.remove(f.obj);
   state.foes = [];
-  const obj = makeProgram(config.ORANGE);
+  const obj = makeProgram(config.ORANGE, { archetype: 'sentinel' });
   obj.scale.setScalar(1.15);
   const halo = new THREE.PointLight(config.ORANGE, 3.2, 14);
   halo.position.y = 1.6;
@@ -102,7 +102,7 @@ export function spawnArbiterBoss(levelId = 'level_01_06') {
   state.foes = [];
 
   const cfg = ARBITER_CONFIGS[levelId] || ARBITER_CONFIGS.level_01_06;
-  const obj = makeProgram(cfg.primaryColor || config.ORANGE);
+  const obj = makeProgram(cfg.primaryColor || config.ORANGE, { archetype: 'sentinel' });
   obj.scale.setScalar(1.22);
   const halo = new THREE.PointLight(cfg.primaryColor || config.ORANGE, 3.5, 16);
   halo.position.y = 1.6;
@@ -152,7 +152,7 @@ export function spawnWave() {
   const n = Math.min(2 + Math.floor(state.wave * 0.8), 8);
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2, r = 24 + Math.random() * 14;
-    const obj = makeProgram(config.ORANGE);
+    const obj = makeProgram(config.ORANGE, { archetype: 'drone' });
     scene.add(obj);
     state.foes.push({
       obj,
@@ -427,6 +427,7 @@ export function updateDuelFoe(f, dt) {
       f.vel.z += perpZ * 32;
       f.dashCd = 1.8 + Math.random() * 0.8;
       burst(tmp.copy(f.pos).setY(f.y + 0.4), config.ORANGE, 16, 6);
+      emitHoverDashStreak(tmp.copy(f.pos).setY(f.y), new THREE.Vector3(perpX, 0, perpZ), config.ORANGE, scene);
       shake(0.12);
     } else if (f.grounded && f.jumps === 0) {
       f.vy = 11.5;
@@ -512,6 +513,7 @@ export function updateDuelFoe(f, dt) {
       f.vel.z += evadeZ * 32;
       f.dashCd = 1.8 + Math.random() * 0.8;
       burst(tmp.copy(f.pos).setY(f.y + 0.4), config.ORANGE, 16, 6);
+      emitHoverDashStreak(tmp.copy(f.pos).setY(f.y), new THREE.Vector3(evadeX, 0, evadeZ), config.ORANGE, scene);
       shake(0.12);
     }
   }
@@ -650,7 +652,8 @@ export function updateDuelFoe(f, dt) {
     grounded: f.grounded,
     blocking: false,
     hurt: f.hurt || 0,
-    time: state.time
+    time: state.time,
+    hasDisc: f.hasDisc
   });
   if (f.hurt > 0) { f.hurt -= dt; f.obj.position.x += Math.sin(state.time * 60) * 0.05; }
 }
@@ -800,7 +803,8 @@ export function updateFoes(dt) {
       grounded: f.grounded,
       blocking: false,
       hurt: f.hurt || 0,
-      time: state.time
+      time: state.time,
+      hasDisc: f.hasDisc
     });
     if (f.hurt > 0) { f.hurt -= dt; f.obj.position.x += Math.sin(state.time * 60) * .05; }
 

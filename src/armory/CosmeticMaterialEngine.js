@@ -16,9 +16,9 @@ import { config } from '../core/config.js';
  */
 export const CHASSIS_PBR_PRESETS = Object.freeze({
   chassis_default: Object.freeze({
-    roughness: 0.35,
-    metalness: 0.9,
-    suitColor: 0x07090c
+    roughness: 0.38,
+    metalness: 0.78,
+    suitColor: 0x1e2631
   }),
   chassis_infiltrator: Object.freeze({
     roughness: 0.85,
@@ -233,11 +233,21 @@ export class CosmeticMaterialEngine {
     const secondaryColor = new THREE.Color(shader.secondaryEmissiveHex);
     const glowScale = typeof shader.glowIntensity === 'number' ? shader.glowIntensity : 1.5;
 
-    // Direct single mesh case (e.g. back-mounted simplified disc)
+    // Direct single mesh case (Hover-Palm held construct disc)
     if (discMesh.isMesh && discMesh.material && discMesh.userData.part === 'chassis_back_disc') {
       if (discMesh.material.color) {
         discMesh.material.color.copy(primaryColor);
       }
+      if ('emissive' in discMesh.material && discMesh.material.emissive) {
+        discMesh.material.emissive.copy(primaryColor);
+        discMesh.material.emissiveIntensity = 2.0 * (glowScale / 1.5);
+      }
+      discMesh.traverse((child) => {
+        if (child !== discMesh && child.userData?.part === 'chassis_back_disc_face' && child.material?.color) {
+          child.material.color.copy(primaryColor);
+          child.material.opacity = Math.min(0.65, 0.25 * (glowScale / 1.5));
+        }
+      });
       return true;
     }
 
@@ -261,6 +271,10 @@ export class CosmeticMaterialEngine {
     // 1. Outer rim emissive update
     if (outerMesh && outerMesh.material && outerMesh.material.color) {
       outerMesh.material.color.copy(primaryColor);
+      if ('emissive' in outerMesh.material && outerMesh.material.emissive) {
+        outerMesh.material.emissive.copy(primaryColor);
+        outerMesh.material.emissiveIntensity = 2.4 * (glowScale / 1.5);
+      }
     }
 
     // 2. Translucent face disc update
@@ -273,6 +287,10 @@ export class CosmeticMaterialEngine {
     // 3. Central hub color
     if (hubMesh && hubMesh.material && hubMesh.material.color) {
       hubMesh.material.color.set(config.WHITE || 0xffffff);
+      if ('emissive' in hubMesh.material && hubMesh.material.emissive) {
+        hubMesh.material.emissive.set(config.WHITE || 0xffffff);
+        hubMesh.material.emissiveIntensity = 2.2 * (glowScale / 1.5);
+      }
     }
 
     // 4. Point light radiance update
@@ -344,7 +362,9 @@ export class CosmeticMaterialEngine {
 
     const primaryColor = new THREE.Color(shader.primaryHex);
     const secondaryColor = new THREE.Color(shader.secondaryEmissiveHex);
+    const edgeTrimColor = primaryColor.clone().lerp(secondaryColor, 0.4).multiplyScalar(0.55);
     const glowScale = typeof shader.glowIntensity === 'number' ? shader.glowIntensity : 1.2;
+    const hdrEmissiveIntensity = 2.2 * (glowScale / 1.2);
 
     // Resolve PBR parameters from presets or skin properties
     const skinId = typeof skinIdOrConfig === 'string' ? skinIdOrConfig : (item?.id || 'chassis_default');
@@ -361,6 +381,13 @@ export class CosmeticMaterialEngine {
     }
     if (playerRig.userData?.litMaterial) {
       playerRig.userData.litMaterial.color.copy(primaryColor);
+      if ('emissive' in playerRig.userData.litMaterial && playerRig.userData.litMaterial.emissive) {
+        playerRig.userData.litMaterial.emissive.copy(primaryColor);
+        playerRig.userData.litMaterial.emissiveIntensity = hdrEmissiveIntensity;
+      }
+    }
+    if (playerRig.userData?.edgeMaterial && playerRig.userData.edgeMaterial.color) {
+      playerRig.userData.edgeMaterial.color.copy(edgeTrimColor);
     }
 
     // 2. Traversal guard for decoupled or multi-material rigs
@@ -372,7 +399,12 @@ export class CosmeticMaterialEngine {
         if ('roughness' in child.material) child.material.roughness = roughness;
         if ('metalness' in child.material) child.material.metalness = metalness;
       } else if ((part === 'chassis_trim' || part === 'chassis_visor') && child.material) {
-        if (child.material.color) child.material.color.copy(primaryColor);
+        const targetColor = child.userData?.isEdgeTrim ? edgeTrimColor : primaryColor;
+        if (child.material.color) child.material.color.copy(targetColor);
+        if ('emissive' in child.material && child.material.emissive) {
+          child.material.emissive.copy(targetColor);
+          child.material.emissiveIntensity = hdrEmissiveIntensity;
+        }
       } else if (part === 'chassis_halo' || (child.isPointLight && child !== playerRig.userData?.halo)) {
         child.color.copy(primaryColor);
         child.intensity = 1.6 * (glowScale / 1.2);

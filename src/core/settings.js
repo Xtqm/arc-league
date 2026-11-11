@@ -29,6 +29,7 @@ export class SettingsManager {
       }
     } catch (_) {}
     this.applyAll();
+    this.emitChange('*', this.settings);
     return this.settings;
   }
 

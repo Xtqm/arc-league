@@ -3,12 +3,12 @@ import { state, player } from '../core/state.js';
 import { config } from '../core/config.js';
 import { scene, camera, snapCamera } from '../graphics/scene.js';
 import { resolveCircle } from '../physics/collision.js';
-import { burst } from '../graphics/particles.js';
+import { burst, emitHoverDashStreak } from '../graphics/particles.js';
 import { playDeRezSound, SFX } from '../audio/sfx.js';
 import { animateProgramKinematics } from '../graphics/materials.js';
 import { message, shake, showGameOver } from '../ui/UIManager.js';
 import { getTileAt, rebuildArenaTiles, pillars } from './Arena.js';
-import { spawnDisc } from './Disc.js';
+import { spawnDisc, disposeDiscEntity } from './Disc.js';
 import { getPlayerCurveIntent } from '../input/keyboard.js';
 import { touchMove, updateCurveButtons, updateTouchMomentum } from '../input/touch.js';
 import { getLeftStick, getRightStick, playGamepadHaptics } from '../input/gamepad.js';
@@ -188,6 +188,7 @@ export function updatePlayer(dt) {
     state.player.dashCd = .45;
     shake(.18);
     burst(state.player.pos.clone().setY(state.player.y + .4), config.CYAN, 14, 5);
+    emitHoverDashStreak(state.player.pos.clone().setY(state.player.y), dashDir, config.CYAN, scene);
     if (inRecoveryZone) message('RECOVERY DASH');
     playGamepadHaptics({ duration: 110, weakMagnitude: 0.5, strongMagnitude: 0.7 });
   }
@@ -216,7 +217,10 @@ export function updatePlayer(dt) {
       grounded: state.player.grounded,
       blocking: !!(state.player.blocking || state.touchBlocking || state.gamepadBlocking),
       hurt: state.player.invuln > 0 ? 0.2 : 0,
-      time: state.time
+      time: state.time,
+      hasDisc: state.player.hasDisc,
+      chargingThrow: !!state.player.chargingThrow,
+      throwCharge: state.player.throwCharge || 0
     });
 
     if (state.player.obj.userData && state.player.obj.userData.backDisc) {
@@ -495,7 +499,7 @@ export function resetRound(spawnX = 0, spawnZ = 14, yaw = Math.PI) {
 
   rebuildArenaTiles();
 
-  for (const d of state.discs) scene.remove(d.obj);
+  for (const d of state.discs) disposeDiscEntity(d);
   state.discs = [];
   for (const f of state.foes) scene.remove(f.obj);
   state.foes = [];

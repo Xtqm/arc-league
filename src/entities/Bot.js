@@ -15,6 +15,9 @@ import { swarmEconomyBridge } from '../modes/SwarmEconomyBridge.js';
 import { duelEconomyBridge } from '../modes/DuelEconomyBridge.js';
 import { storageManager } from '../core/storage/StorageManager.js';
 import { syncGameStateRichPresence } from '../core/steamTelemetry.js';
+import { campaignManager } from '../campaign/CampaignManager.js';
+import { campaignRegistry } from '../campaign/CampaignRegistry.js';
+import { trialDebriefModal } from '../ui/campaign/TrialDebriefModal.js';
 export { ArbiterBossController, ARBITER_CONFIGS };
 
 export function getPillarCoverPoint(pillar, playerPos, out) {
@@ -174,6 +177,126 @@ export function spawnWave() {
   }
 }
 
+export function spawnCampaignWave(levelConfig, waveIndex = 1) {
+  if (!levelConfig) return null;
+  state.campaignLevelId = levelConfig.id;
+  state.campaignWave = waveIndex;
+
+  if (levelConfig.type === 'arbiter' || levelConfig.difficultyTier === 'ARBITER') {
+    return spawnArbiterBoss(levelConfig.id);
+  }
+
+  const waves = levelConfig.waves || [];
+  const wave = waves.find(w => w.waveNumber === waveIndex) || waves[0];
+  if (!wave) return [];
+
+  const spawnedFoes = [];
+  const enemies = wave.enemies || [];
+  for (const group of enemies) {
+    const tier = group.type || 'RECON';
+    const count = group.count || 1;
+    const hp = group.hp || 60;
+
+    let archetype = 'drone';
+    let color = config.ORANGE;
+    let skill = 0.35;
+
+    switch (tier) {
+      case 'INTRUDER':
+        archetype = 'drone';
+        color = 0xff9900;
+        skill = 0.55;
+        break;
+      case 'GUARDIAN':
+        archetype = 'sentinel';
+        color = 0xff4400;
+        skill = 0.70;
+        break;
+      case 'ELITE':
+        archetype = 'sentinel';
+        color = 0xff0055;
+        skill = 0.85;
+        break;
+      case 'RECON':
+      default:
+        archetype = 'drone';
+        color = config.ORANGE;
+        skill = 0.35;
+        break;
+    }
+
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 18 + Math.random() * 8;
+      const obj = makeProgram(color, { archetype });
+      scene.add(obj);
+
+      const bot = {
+        obj,
+        pos: new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r),
+        vel: new THREE.Vector3(),
+        hp,
+        maxHp: hp,
+        hasDisc: true,
+        cd: 1.2 + Math.random() * 2.0,
+        strafe: Math.random() < 0.5 ? 1 : -1,
+        strafeT: 1 + Math.random() * 2,
+        hurt: 0,
+        skill,
+        y: 0,
+        vy: 0,
+        grounded: true,
+        jumps: 0,
+        dashCd: 0,
+        didRecover: false,
+        campaignTier: tier,
+        alive: true
+      };
+
+      state.foes.push(bot);
+      spawnedFoes.push(bot);
+    }
+  }
+
+  if (typeof document !== 'undefined') {
+    const remaining = state.foes.filter(f => f.alive).length;
+    const el = document.getElementById('objHostiles');
+    if (el) el.textContent = remaining;
+  }
+
+  return spawnedFoes;
+}
+
+export function completeCampaignTrial() {
+  if (!state.campaignLevelId) return null;
+  if (state.isCompletingTrial) return null;
+  state.isCompletingTrial = true;
+
+  let outcome = null;
+  try {
+    outcome = campaignManager.completeTrial({
+      finalHp: state.player ? state.player.hp : 100,
+      maxHp: (state.player && state.player.maxHp) ? state.player.maxHp : 100
+    });
+  } catch (err) {
+    console.error('[Bot] Error completing campaign trial:', err);
+  }
+
+  state.running = false;
+  state.isCompletingTrial = false;
+
+  if (typeof document !== 'undefined' && document.pointerLockElement) {
+    try {
+      document.exitPointerLock();
+    } catch (_) {}
+  }
+
+  if (outcome) {
+    trialDebriefModal.show(outcome);
+  }
+  return outcome;
+}
+
 export function killFoe(f) {
   if (f) {
     f.alive = false;
@@ -224,9 +347,32 @@ export function killFoe(f) {
 
   if (state.gameMode === 'campaign') {
     state.score += 250;
-    if (state.foes.length === 0) {
-      if (typeof window !== 'undefined' && window.__tronCompleteCampaignTrial) {
-        window.__tronCompleteCampaignTrial();
+    try {
+      campaignManager.recordMetric('enemyKilled', 1);
+    } catch (_) {}
+
+    const remainingFoes = state.foes.filter(x => x.alive && x.hp > 0);
+    if (remainingFoes.length === 0) {
+      const levelConfig = campaignRegistry.getLevel(state.campaignLevelId);
+      const currentWave = state.campaignWave || 1;
+      const totalWaves = (levelConfig && levelConfig.waves) ? levelConfig.waves.length : 1;
+
+      if (currentWave < totalWaves) {
+        state.campaignWave = currentWave + 1;
+        message(`WAVE ${state.campaignWave} INCOMING`);
+        if (typeof window !== 'undefined' && window.__tronStartCountdown) {
+          window.__tronStartCountdown(2.0, () => {
+            spawnCampaignWave(levelConfig, state.campaignWave);
+          });
+        } else {
+          spawnCampaignWave(levelConfig, state.campaignWave);
+        }
+      } else {
+        if (typeof window !== 'undefined' && window.__tronCompleteCampaignTrial) {
+          window.__tronCompleteCampaignTrial();
+        } else {
+          completeCampaignTrial();
+        }
       }
     }
     return;
@@ -268,6 +414,8 @@ if (typeof window !== 'undefined') {
   window.__tronSpawnDuelBoss = spawnDuelBoss;
   window.__tronSpawnArbiterBoss = spawnArbiterBoss;
   window.__tronSpawnWave = spawnWave;
+  window.__tronSpawnCampaignWave = spawnCampaignWave;
+  window.__tronCompleteCampaignTrial = completeCampaignTrial;
   window.__tronKillFoe = killFoe;
 }
 

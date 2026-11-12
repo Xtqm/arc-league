@@ -16,6 +16,9 @@ import { getRoomRef, roomUpdateDoc } from '../network/firebaseSetup.js';
 import { showMultiplayerDefeat, reportMultiplayerMatchEnd } from '../network/roomManager.js';
 import { updateHUD, resetHintVisibility, clearArenaNameplates } from '../ui/hud.js';
 import { swarmEconomyBridge } from '../modes/SwarmEconomyBridge.js';
+import { campaignManager } from '../campaign/CampaignManager.js';
+import { campaignHUD } from '../ui/campaign/CampaignHUD.js';
+import { trialDebriefModal } from '../ui/campaign/TrialDebriefModal.js';
 
 export function updatePlayer(dt) {
   if (!state.player.alive) return;
@@ -413,6 +416,14 @@ export function damagePlayer(amount, from) {
   shake(0.35);
   playGamepadHaptics({ duration: 200, weakMagnitude: 0.6, strongMagnitude: 0.9 });
 
+  if (state.gameMode === 'campaign') {
+    try {
+      campaignManager.recordMetric('damageTaken', amount);
+      campaignManager.recordMetric('finalHp', Math.max(0, state.player.hp));
+      campaignHUD.updateIntegrity(state.player.hp, state.player.maxHp || 100);
+    } catch (_) {}
+  }
+
   if (state.player.hp <= 0) {
     state.player.hp = 0;
     state.player.alive = false;
@@ -446,6 +457,24 @@ export function damagePlayer(amount, from) {
         playerState: myState,
         isLocalWin: false
       });
+    } else if (state.gameMode === 'campaign') {
+      let outcome = null;
+      try {
+        outcome = campaignManager.failTrial(state.gameOverReason || 'INTEGRITY_DEPLETED');
+      } catch (err) {
+        console.error('[Player] Error failing campaign trial:', err);
+      }
+      if (typeof document !== 'undefined' && document.pointerLockElement) {
+        try { document.exitPointerLock(); } catch (_) {}
+      }
+      setTimeout(() => {
+        trialDebriefModal.show(outcome || {
+          success: false,
+          levelId: state.campaignLevelId,
+          reason: state.gameOverReason || 'INTEGRITY_DEPLETED',
+          rewards: { bits: 0, xp: 0 }
+        });
+      }, 900);
     } else {
       swarmEconomyBridge.resetStreak();
       setTimeout(showGameOver, 900);
@@ -545,7 +574,9 @@ export function resetCampaignRound(levelConfig) {
   state.gameOverReason = '';
   resetRound(0, 14, Math.PI);
   state.onCountdownEnd = () => {
-    if (levelConfig && (levelConfig.type === 'arbiter' || levelConfig.difficultyTier === 'ARBITER')) {
+    if (typeof window !== 'undefined' && window.__tronSpawnCampaignWave) {
+      window.__tronSpawnCampaignWave(levelConfig, 1);
+    } else if (levelConfig && (levelConfig.type === 'arbiter' || levelConfig.difficultyTier === 'ARBITER')) {
       if (typeof window !== 'undefined' && window.__tronSpawnArbiterBoss) {
         window.__tronSpawnArbiterBoss(levelConfig.id);
       }

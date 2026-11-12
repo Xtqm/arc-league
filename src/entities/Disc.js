@@ -15,6 +15,7 @@ import { getRoomRef, roomUpdateDoc } from '../network/firebaseSetup.js';
 import { cosmeticMaterialEngine, disposeHierarchy } from '../armory/CosmeticMaterialEngine.js';
 import { duelEconomyBridge } from '../modes/DuelEconomyBridge.js';
 import { playGamepadHaptics } from '../input/gamepad.js';
+import { campaignManager } from '../campaign/CampaignManager.js';
 
 export function applyDamageToTarget(f, dmg, D) {
   const isGuardCrush = D && (D.charge || 0) >= 0.85;
@@ -393,6 +394,9 @@ export function updateDiscs(dt) {
           D.hitFoes.add(f);
 
           if (D.isDeflected) {
+            if (state.gameMode === 'campaign') {
+              try { campaignManager.recordMetric('ricochetHit', 1); } catch (_) {}
+            }
             const critDmg = 85 + D.bounces * 20;
             const isDead = applyDamageToTarget(f, critDmg, D);
             f.hurt = 0.8;
@@ -456,6 +460,17 @@ export function updateDiscs(dt) {
 
           if (D.bounces >= 2) {
             duelEconomyBridge.rewardRicochetHit(D.bounces);
+          }
+
+          if (state.gameMode === 'campaign') {
+            try {
+              if (Math.abs(D.initialCurve || 0) > 0.05 || Math.abs(D.curve || 0) > 0.05) {
+                campaignManager.recordMetric('curveHit', 1);
+              }
+              if (D.bounces > 0) {
+                campaignManager.recordMetric('ricochetHit', 1);
+              }
+            } catch (_) {}
           }
 
           const isDead = applyDamageToTarget(f, dmg, D);

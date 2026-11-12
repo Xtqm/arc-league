@@ -47,7 +47,8 @@ const TEST_DOMAINS = {
   campaign: [
     'campaign/campaign_phase1.test.js',
     'campaign/campaign_phase2.test.js',
-    'campaign/campaign_phase3.test.js'
+    'campaign/campaign_phase3.test.js',
+    'campaign/campaign_runtime_bridge.test.js'
   ],
   achievements: [
     'achievements/achievement_registry.test.js',

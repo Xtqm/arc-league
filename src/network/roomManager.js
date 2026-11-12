@@ -11,13 +11,81 @@ import { spawnDisc } from '../entities/Disc.js';
 import { initNetwork, getRoomRef, roomSetDoc, roomGetDoc, roomUpdateDoc, roomOnSnapshot } from './firebaseSetup.js';
 import { tryLock, focusGame, setCursor } from '../input/InputManager.js';
 import { shake } from '../ui/UIManager.js';
-import { updateHUD, message, el } from '../ui/hud.js';
+import { updateHUD, message, el, resetHintVisibility, clearArenaNameplates, updateArenaNameplates } from '../ui/hud.js';
 import { requestFullScreen } from '../ui/modals.js';
 import { duelEconomyBridge } from '../modes/DuelEconomyBridge.js';
 import { WebRTCPeer } from './webrtcPeer.js';
 import { SignalingBridge } from './signalingBridge.js';
 import { handleIncomingFastPacket } from './sync.js';
 import { matchmakingQueue, registerMatchmakingSessionHandlers } from './matchmakingQueue.js';
+import { authManager } from '../auth/AuthManager.js';
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+export function getLocalCallsign() {
+  const handle =
+    authManager?.currentUser?.handle ||
+    authManager?.saveState?.handle ||
+    state.currentUser?.handle ||
+    'PROGRAM';
+  const clean = String(handle).trim().toUpperCase();
+  return clean || 'PROGRAM';
+}
+
+export function applyPlayerName(role, name) {
+  if (!role || !name) return;
+  const clean = String(name).trim().toUpperCase();
+  if (!clean) return;
+  if (!state.multiplayerNames) {
+    state.multiplayerNames = { p1: null, p2: null, p3: null, p4: null };
+  }
+  state.multiplayerNames[role] = clean;
+  if (state.multiPlayers && state.multiPlayers[role]) {
+    state.multiPlayers[role].name = clean;
+  }
+  if (typeof document !== 'undefined') {
+    const matchupEl = document.getElementById('postMatchMatchup');
+    if (matchupEl) {
+      matchupEl.innerHTML = renderPostMatchMatchupInner();
+    }
+    updateArenaNameplates();
+  }
+}
+
+export function getDisplayNameForRole(role, fallback = null) {
+  if (!role) return fallback || 'PROGRAM';
+  if (role === state.playerRole) return getLocalCallsign();
+  return (
+    state.multiPlayers?.[role]?.name ||
+    state.multiplayerNames?.[role] ||
+    fallback ||
+    role.toUpperCase()
+  );
+}
+
+function renderPostMatchMatchupInner() {
+  const myRole = state.playerRole || 'p1';
+  if (state.gameMode === 'duos_multi') {
+    const myTeam = (myRole === 'p1' || myRole === 'p3') ? 1 : 2;
+    const team1Roles = ['p1', 'p3'];
+    const team2Roles = ['p2', 'p4'];
+    const allyRoles = myTeam === 1 ? team1Roles : team2Roles;
+    const foeRoles = myTeam === 1 ? team2Roles : team1Roles;
+    const allyText = allyRoles.map(r => escapeHtml(getDisplayNameForRole(r))).join(' &amp; ');
+    const foeText = foeRoles.map(r => escapeHtml(getDisplayNameForRole(r))).join(' &amp; ');
+    return `<b style="color:var(--cyan)">${allyText}</b> <span style="opacity:.6;margin:0 8px;">VS</span> <b style="color:#d896ff">${foeText}</b>`;
+  }
+  const oppRole = myRole === 'p1' ? 'p2' : 'p1';
+  const myName = escapeHtml(getDisplayNameForRole(myRole));
+  const oppName = escapeHtml(getDisplayNameForRole(oppRole));
+  return `<b style="color:var(--cyan)">${myName}</b> <span style="opacity:.6;margin:0 8px;">VS</span> <b style="color:#d896ff">${oppName}</b>`;
+}
 
 export function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -151,14 +219,15 @@ export function clearMultiplayerEntities() {
   state.multiPlayers = {};
   state.discs = [];
   state.duelOpponent = null;
+  clearArenaNameplates();
 }
 
 export function getSpawnCoords(mode = '1v1') {
   const spawns = {
-    p1: { x: -8, z: 18, yaw: Math.PI, team: 1 },
-    p2: { x: -8, z: -18, yaw: 0, team: 2 },
-    p3: { x: 8, z: 18, yaw: Math.PI, team: 1 },
-    p4: { x: 8, z: -18, yaw: 0, team: 2 }
+    p1: { x: -8, z: 18, yaw: 0, team: 1 },
+    p2: { x: -8, z: -18, yaw: Math.PI, team: 2 },
+    p3: { x: 8, z: 18, yaw: 0, team: 1 },
+    p4: { x: 8, z: -18, yaw: Math.PI, team: 2 }
   };
   if (mode === '1v1') {
     spawns.p1.x = 0;
@@ -262,7 +331,13 @@ export function evaluateHostRematchConsensus(data = null) {
 
   const mode = (data && data.mode) ? data.mode : (state.gameMode === 'duos_multi' ? '2v2' : '1v1');
   const mapId = (data && data.mapId !== undefined) ? data.mapId : (state.multiplayerMapId || null);
-  if (dispatchReliableMatchEvent({ type: 'REMATCH_START', roundId: nextRoundId, mode, mapId })) {
+  if (dispatchReliableMatchEvent({
+    type: 'REMATCH_START',
+    roundId: nextRoundId,
+    mode,
+    mapId,
+    playerNames: { ...(state.multiplayerNames || {}) }
+  })) {
     startMultiplayerDuel(state.playerRole, state.currentRoomId, mode, { roundId: nextRoundId, mapId });
     message('REMATCH — FIGHT!');
     return;
@@ -361,6 +436,12 @@ export function handleRemoteRematchStart(msg) {
   const nextRoundId = typeof msg.roundId === 'number' ? msg.roundId : (state.multiplayerRoundId || 1) + 1;
   if (nextRoundId <= (state.multiplayerRoundId || 0)) return;
 
+  if (msg.playerNames && typeof msg.playerNames === 'object') {
+    for (const [r, n] of Object.entries(msg.playerNames)) {
+      applyPlayerName(r, n);
+    }
+  }
+
   const rm = typeof document !== 'undefined' ? document.getElementById('roomModal') : null;
   if (rm) rm.style.display = 'none';
   const jm = typeof document !== 'undefined' ? document.getElementById('joinModal') : null;
@@ -424,6 +505,11 @@ export function handleReliableMatchMessage(msg) {
       break;
     case 'PEER_LEFT':
       handleRemotePeerLeft(msg);
+      break;
+    case 'PLAYER_INFO':
+      if (msg.role && msg.name) {
+        applyPlayerName(msg.role, msg.name);
+      }
       break;
     default:
       break;
@@ -514,6 +600,7 @@ export function transitionFromWarmupToPeerMatch(role, opponentId) {
     if (banner) banner.style.display = 'none';
   }
   state.multiplayerMapId = null;
+  applyPlayerName(role, getLocalCallsign());
   const roomCode = 'MATCH_' + Math.random().toString(36).substring(2, 6).toUpperCase();
   startMultiplayerDuel(role, roomCode, '1v1', { roundId: 1, mapId: null });
   message('CHALLENGER CONNECTED — FIGHT!');
@@ -523,6 +610,7 @@ export function startMatchmakingWithWarmup() {
   if (state.isTouchDevice) {
     requestFullScreen();
   }
+  state.multiplayerNames = { p1: null, p2: null, p3: null, p4: null };
   state.multiplayerMapId = null;
   teardownSectorArena();
   if (typeof window !== 'undefined' && window.__tronStartMode) {
@@ -581,6 +669,13 @@ export function initWebRTCPeerSession(isHost, roomCode) {
       console.log(`WebRTC Peer connection state: ${connState}`);
       if (connState === 'connected') {
         hadConnected = true;
+        try {
+          peer.sendReliable({
+            type: 'PLAYER_INFO',
+            role: state.playerRole || role,
+            name: getLocalCallsign()
+          });
+        } catch (_) {}
       }
       handlePeerConnectionStateChange(connState, {
         hasRoomFallback: !!state.roomUnsubscribe,
@@ -740,6 +835,8 @@ export async function onClickCreateRoom(e, mode = '1v1', mapId = null) {
       : (state.selectedArenaMap || null);
     const resolvedGridId = resolvedMapId ? getGridIdForMap(resolvedMapId) : null;
     resetMultiplayerSessionTracking(0);
+    const myName = getLocalCallsign();
+    state.multiplayerNames = { p1: myName, p2: null, p3: null, p4: null };
     state.currentRoomId = code;
     state.playerRole = 'p1';
     state.roomFallenTiles = [];
@@ -761,11 +858,17 @@ export async function onClickCreateRoom(e, mode = '1v1', mapId = null) {
         p3: null,
         p4: null
       },
+      playerNames: {
+        p1: myName,
+        p2: null,
+        p3: null,
+        p4: null
+      },
       state: {
-        p1: { x: -8, y: 0, z: 18, yaw: 3.14, pitch: -0.1, hp: 100, blocking: false, hasDisc: true },
-        p2: { x: -8, y: 0, z: -18, yaw: 0, pitch: -0.1, hp: 100, blocking: false, hasDisc: true },
-        p3: { x: 8, y: 0, z: 18, yaw: 3.14, pitch: -0.1, hp: 100, blocking: false, hasDisc: true },
-        p4: { x: 8, y: 0, z: -18, yaw: 0, pitch: -0.1, hp: 100, blocking: false, hasDisc: true }
+        p1: { x: -8, y: 0, z: 18, yaw: 0, pitch: -0.1, hp: 100, blocking: false, hasDisc: true },
+        p2: { x: -8, y: 0, z: -18, yaw: 3.14, pitch: -0.1, hp: 100, blocking: false, hasDisc: true },
+        p3: { x: 8, y: 0, z: 18, yaw: 0, pitch: -0.1, hp: 100, blocking: false, hasDisc: true },
+        p4: { x: 8, y: 0, z: -18, yaw: 3.14, pitch: -0.1, hp: 100, blocking: false, hasDisc: true }
       },
       lastThrow: null,
       fallen: [],
@@ -845,6 +948,9 @@ export async function onClickConfirmJoin(e) {
     }
 
     resetMultiplayerSessionTracking(0);
+    const myName = getLocalCallsign();
+    state.multiplayerNames = Object.assign({ p1: null, p2: null, p3: null, p4: null }, data.playerNames || {});
+    state.multiplayerNames[assignedRole] = myName;
     state.currentRoomId = code;
     state.playerRole = assignedRole;
     state.roomFallenTiles = data.fallen || [];
@@ -853,7 +959,8 @@ export async function onClickConfirmJoin(e) {
     initWebRTCPeerSession(false, code);
 
     const patch = {
-      [`players.${assignedRole}`]: state.currentUser.uid
+      [`players.${assignedRole}`]: state.currentUser.uid,
+      [`playerNames.${assignedRole}`]: myName
     };
     
     if (currentPlayers + 1 === maxPlayers) {
@@ -919,9 +1026,11 @@ export function startMultiplayerDuel(role, roomCode, mode = '1v1', options = {})
   state.gameMode = mode === '2v2' ? 'duos_multi' : 'duel_multi';
   state.playerRole = role;
   state.currentRoomId = roomCode;
+  applyPlayerName(role, getLocalCallsign());
   state.lastProcessedThrowId = null;
   state.netSyncTimer = 0;
   state.roomFallenTiles = [];
+  state.hintTimer = 4.5;
   const overlay = document.getElementById('overlay');
   if (overlay) overlay.style.display = 'none';
 
@@ -988,6 +1097,7 @@ export function startMultiplayerDuel(role, roomCode, mode = '1v1', options = {})
     
     const mp = {
       role: r,
+      name: (state.multiplayerNames && state.multiplayerNames[r]) ? state.multiplayerNames[r] : r.toUpperCase(),
       obj: oppObj,
       pos: new THREE.Vector3(s.x, 0, s.z),
       targetPos: new THREE.Vector3(s.x, 0, s.z),
@@ -1005,6 +1115,16 @@ export function startMultiplayerDuel(role, roomCode, mode = '1v1', options = {})
     state.multiPlayers[r] = mp;
     if (isTeammate) state.teammates.push(mp);
     else state.foes.push(mp);
+  }
+
+  if (isWebRTCConnected() && role) {
+    try {
+      state.webrtcPeer.sendReliable({
+        type: 'PLAYER_INFO',
+        role,
+        name: getLocalCallsign()
+      });
+    } catch (_) {}
   }
   
   if (mode === '1v1') {
@@ -1029,6 +1149,8 @@ export function startMultiplayerDuel(role, roomCode, mode = '1v1', options = {})
   camera.rotation.set(state.player.pitch, state.player.yaw, 0, 'YXZ');
 
   updateHUD();
+  resetHintVisibility(4.5);
+  updateArenaNameplates();
   if (typeof window !== 'undefined' && window.__tronStartCountdown) {
     window.__tronStartCountdown(3.0);
   }
@@ -1041,6 +1163,12 @@ export function onRoomSnapshot(snap) {
     if (!snap.exists()) return;
     const data = snap.data();
     if (!data) return;
+
+  if (data.playerNames && typeof data.playerNames === 'object') {
+    for (const [r, n] of Object.entries(data.playerNames)) {
+      applyPlayerName(r, n);
+    }
+  }
 
   const docRoundId = typeof data.roundId === 'number' ? data.roundId : 1;
   const isInitialStart = data.status === 'active' && (state.multiplayerRoundId || 0) === 0;
@@ -1307,8 +1435,11 @@ export function showMultiplayerVictory(data = null) {
   if (overlay) overlay.innerHTML = `<div class="card" style="border-color:#b026ff;box-shadow:0 0 60px rgba(176,38,255,.3);">
     <h1 style="color:#d896ff;text-shadow:0 0 30px #b026ff">VICTORY</h1>
     <h2>GRID SECURED</h2>
-    <div style="font-size:15px;letter-spacing:4px;margin-bottom:26px">
-      ROOM <b style="color:#fff">${state.currentRoomId || '----'}</b> &nbsp;·&nbsp; ROLE <b style="color:#fff">${state.playerRole ? state.playerRole.toUpperCase() : ''}</b>
+    <div id="postMatchMatchup" style="font-size:14px;letter-spacing:3px;margin-bottom:10px;color:#fff;">
+      ${renderPostMatchMatchupInner()}
+    </div>
+    <div style="font-size:12px;letter-spacing:3px;opacity:0.75;margin-bottom:22px">
+      ROOM <b style="color:#fff">${state.currentRoomId || '----'}</b>
     </div>
     <div class="menu-actions" style="max-width:320px;margin:0 auto">
       ${renderGameOverActions(data)}
@@ -1337,8 +1468,11 @@ export function showMultiplayerDefeat(data = null) {
   if (overlay) overlay.innerHTML = `<div class="card dead">
     <h1>DEREZZED</h1>
     <h2>${subtitle}</h2>
-    <div style="font-size:15px;letter-spacing:4px;margin-bottom:26px">
-      ROOM <b style="color:#fff">${state.currentRoomId || '----'}</b> &nbsp;·&nbsp; ROLE <b style="color:#fff">${state.playerRole ? state.playerRole.toUpperCase() : ''}</b>
+    <div id="postMatchMatchup" style="font-size:14px;letter-spacing:3px;margin-bottom:10px;color:#fff;">
+      ${renderPostMatchMatchupInner()}
+    </div>
+    <div style="font-size:12px;letter-spacing:3px;opacity:0.75;margin-bottom:22px">
+      ROOM <b style="color:#fff">${state.currentRoomId || '----'}</b>
     </div>
     <div class="menu-actions" style="max-width:320px;margin:0 auto">
       ${renderGameOverActions(data)}
@@ -1385,6 +1519,7 @@ export function teardownMultiplayer({ flushPeerMs = 0 } = {}) {
   }
   state.currentRoomId = null;
   state.playerRole = null;
+  state.multiplayerNames = { p1: null, p2: null, p3: null, p4: null };
   state.lastProcessedThrowId = null;
   state.roomFallenTiles = [];
   state.gameMode = 'swarm';

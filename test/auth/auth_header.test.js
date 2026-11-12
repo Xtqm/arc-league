@@ -127,8 +127,10 @@ const mockElements = {
   tabHubIdent: new MockDomElement('tabHubIdent'),
   tabHubLoadout: new MockDomElement('tabHubLoadout'),
   tabHubDirectives: new MockDomElement('tabHubDirectives'),
+  tabHubConfig: new MockDomElement('tabHubConfig'),
   hubLoadoutView: new MockDomElement('hubLoadoutView'),
   hubDirectivesView: new MockDomElement('hubDirectivesView'),
+  hubConfigView: new MockDomElement('hubConfigView'),
   identityHeader: new MockDomElement('identityHeader'),
 };
 
@@ -206,13 +208,23 @@ assert.notStrictEqual(mockElements.hubDirectivesView.style.display, 'none', 'hub
 assert.strictEqual(mockElements.hubLoadoutView.style.display, 'none', 'hubLoadoutView must be hidden');
 console.log('✓ setTerminalHubTab("directives") activates Directives view and updates header titles');
 
+// Test setTerminalHubTab('config')
+setTerminalHubTab('config');
+assert.ok(mockElements.tabHubConfig.classList.contains('active'), 'tabHubConfig must have active class');
+assert.strictEqual(mockElements.tabHubDirectives.classList.contains('active'), false, 'tabHubDirectives must not be active');
+assert.strictEqual(mockElements.terminalHeaderTitle.textContent, 'SYSTEM CONFIG', 'Header title must update to SYSTEM CONFIG');
+assert.notStrictEqual(mockElements.hubConfigView.style.display, 'none', 'hubConfigView must be displayed');
+assert.strictEqual(mockElements.hubDirectivesView.style.display, 'none', 'hubDirectivesView must be hidden');
+console.log('✓ setTerminalHubTab("config") activates System Config view and updates header titles');
+
 // Test setTerminalHubTab('ident')
 authManager._currentUser = { uid: 'u-123', handle: 'GRID_RUNNER', isAnonymous: false };
 setTerminalHubTab('ident');
 assert.ok(mockElements.tabHubIdent.classList.contains('active'), 'tabHubIdent must have active class');
-assert.strictEqual(mockElements.tabHubDirectives.classList.contains('active'), false, 'tabHubDirectives must not be active');
+assert.strictEqual(mockElements.tabHubConfig.classList.contains('active'), false, 'tabHubConfig must not be active');
 assert.strictEqual(mockElements.hubLoadoutView.style.display, 'none', 'hubLoadoutView must be hidden');
 assert.strictEqual(mockElements.hubDirectivesView.style.display, 'none', 'hubDirectivesView must be hidden');
+assert.strictEqual(mockElements.hubConfigView.style.display, 'none', 'hubConfigView must be hidden');
 assert.strictEqual(mockElements.dossierView.style.display, 'block', 'dossierView must be displayed for authenticated user');
 console.log('✓ setTerminalHubTab("ident") restores Program Dossier view');
 

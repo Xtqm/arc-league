@@ -218,12 +218,16 @@ async function runQuickMatchWebRTCRematchTest() {
 
     await hostPage.goto(`${baseUrl}/index.html`);
     await guestPage.goto(`${baseUrl}/index.html`);
-    await hostPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.state?.player?.obj, { polling: 100 });
-    await guestPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.state?.player?.obj, { polling: 100 });
+    await hostPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.state?.player?.obj && !!window.__TRON__?.auth()?._currentUser, { polling: 100 });
+    await guestPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.state?.player?.obj && !!window.__TRON__?.auth()?._currentUser, { polling: 100 });
 
     // Ensure deterministic lexicographical host assignment (player_a_host < player_z_guest)
     // and verify zero Firestore/mock room DB is initialized.
     await hostPage.evaluate(async () => {
+      const auth = window.__TRON__.auth();
+      await auth.init();
+      if (auth._currentUser) auth._currentUser.handle = 'QM_HOST';
+      if (auth._saveState) auth._saveState.handle = 'QM_HOST';
       const { matchmakingQueue } = await import('/src/network/matchmakingQueue.js');
       const { startMatchmakingWithWarmup } = await import('/src/network/roomManager.js');
       matchmakingQueue.peerId = 'player_a_host';
@@ -233,6 +237,10 @@ async function runQuickMatchWebRTCRematchTest() {
     await new Promise(r => setTimeout(r, 400));
 
     await guestPage.evaluate(async () => {
+      const auth = window.__TRON__.auth();
+      await auth.init();
+      if (auth._currentUser) auth._currentUser.handle = 'QM_GUEST';
+      if (auth._saveState) auth._saveState.handle = 'QM_GUEST';
       const { matchmakingQueue } = await import('/src/network/matchmakingQueue.js');
       const { startMatchmakingWithWarmup } = await import('/src/network/roomManager.js');
       matchmakingQueue.peerId = 'player_z_guest';
@@ -286,6 +294,44 @@ async function runQuickMatchWebRTCRematchTest() {
       throw new Error(`Expected exactly 1 peer foe after countdown, got ${foesAfterCountdown}`);
     }
 
+    try {
+      await hostPage.waitForFunction(() => {
+        if (window.__dbg?.step) window.__dbg.step(0.016);
+        const plate = document.querySelector('#arenaNameplates .arena-nameplate');
+        return plate && plate.textContent === 'QM_GUEST';
+      }, { timeout: 5000, polling: 100 });
+      await guestPage.waitForFunction(() => {
+        if (window.__dbg?.step) window.__dbg.step(0.016);
+        const plate = document.querySelector('#arenaNameplates .arena-nameplate');
+        return plate && plate.textContent === 'QM_HOST';
+      }, { timeout: 5000, polling: 100 });
+    } catch (err) {
+      const diag = await Promise.all([
+        hostPage.evaluate(() => ({
+          role: window.__dbg.state.playerRole,
+          names: window.__dbg.state.multiplayerNames,
+          mp: Object.keys(window.__dbg.state.multiPlayers || {}),
+          html: document.getElementById('arenaNameplates')?.innerHTML
+        })),
+        guestPage.evaluate(() => ({
+          role: window.__dbg.state.playerRole,
+          names: window.__dbg.state.multiplayerNames,
+          mp: Object.keys(window.__dbg.state.multiPlayers || {}),
+          html: document.getElementById('arenaNameplates')?.innerHTML,
+          p1State: window.__dbg.state.multiPlayers?.p1 ? {
+            alive: window.__dbg.state.multiPlayers.p1.alive,
+            hp: window.__dbg.state.multiPlayers.p1.hp,
+            name: window.__dbg.state.multiPlayers.p1.name,
+            pos: window.__dbg.state.multiPlayers.p1.pos,
+            hasParent: !!window.__dbg.state.multiPlayers.p1.obj?.parent,
+            vis: window.__dbg.state.multiPlayers.p1.obj?.visible
+          } : null
+        }))
+      ]);
+      throw new Error(`QuickMatch nameplate timeout: ${err.message} | diag=${JSON.stringify(diag)}`);
+    }
+    console.log('>>> QUICK MATCH CALLSIGNS VERIFIED: WebRTC peers exchanged QM_HOST / QM_GUEST without DB writes!');
+
     // Round 1 End: Eliminate Guest over WebRTC only
     await guestPage.evaluate(() => {
       window.__dbg.setPlayerPos(0, -18, -20);
@@ -300,6 +346,15 @@ async function runQuickMatchWebRTCRematchTest() {
       const ov = document.getElementById('overlay');
       return ov && ov.style.display === 'flex' && ov.querySelector('h1')?.textContent === 'DEREZZED';
     }, { timeout: 10000, polling: 100 });
+
+    const qmPostMatchNames = await Promise.all([
+      hostPage.evaluate(() => document.getElementById('postMatchMatchup')?.textContent || ''),
+      guestPage.evaluate(() => document.getElementById('postMatchMatchup')?.textContent || '')
+    ]);
+    if (!qmPostMatchNames[0].includes('QM_HOST') || !qmPostMatchNames[0].includes('QM_GUEST') ||
+        !qmPostMatchNames[1].includes('QM_HOST') || !qmPostMatchNames[1].includes('QM_GUEST')) {
+      throw new Error(`Quick Match post-match overlay missing callsigns: ${JSON.stringify(qmPostMatchNames)}`);
+    }
 
     const r1Econ = await hostPage.evaluate(async () => {
       const { duelEconomyBridge } = await import('/src/modes/DuelEconomyBridge.js');
@@ -368,6 +423,15 @@ async function runQuickMatchWebRTCRematchTest() {
       return ov && ov.style.display === 'flex' && ov.querySelector('h1')?.textContent === 'DEREZZED';
     }, { timeout: 10000, polling: 100 });
 
+    const qmR2PostMatchNames = await Promise.all([
+      hostPage.evaluate(() => document.getElementById('postMatchMatchup')?.textContent || ''),
+      guestPage.evaluate(() => document.getElementById('postMatchMatchup')?.textContent || '')
+    ]);
+    if (!qmR2PostMatchNames[0].includes('QM_HOST') || !qmR2PostMatchNames[0].includes('QM_GUEST') ||
+        !qmR2PostMatchNames[1].includes('QM_HOST') || !qmR2PostMatchNames[1].includes('QM_GUEST')) {
+      throw new Error(`Quick Match post-match overlay missing callsigns: ${JSON.stringify(qmR2PostMatchNames)}`);
+    }
+
     const r2Econ = await hostPage.evaluate(async () => {
       const { duelEconomyBridge } = await import('/src/modes/DuelEconomyBridge.js');
       const vicLogs = duelEconomyBridge.economy.getAuditLog().filter(e => e.source === 'duel_multiplayer_victory');
@@ -434,8 +498,30 @@ async function runStalledHostRematchTimeoutTest() {
     const roomCode = await hostPage.evaluate(() => window.__dbg.currentRoomId());
     await guestPage.evaluate(async (code) => { await window.__dbg.joinRoom(code); }, roomCode);
 
-    await hostPage.waitForFunction(() => window.__dbg.running() && window.__dbg.mode() === 'duel_multi', { timeout: 15000, polling: 100 });
-    await guestPage.waitForFunction(() => window.__dbg.running() && window.__dbg.mode() === 'duel_multi', { timeout: 15000, polling: 100 });
+    try {
+      await hostPage.waitForFunction(() => window.__dbg.running() && window.__dbg.mode() === 'duel_multi', { timeout: 15000, polling: 100 });
+      await guestPage.waitForFunction(() => window.__dbg.running() && window.__dbg.mode() === 'duel_multi', { timeout: 15000, polling: 100 });
+    } catch (err) {
+      const diag = await Promise.all([
+        hostPage.evaluate(async () => ({
+          running: window.__dbg.running(),
+          mode: window.__dbg.mode(),
+          room: window.__dbg.currentRoomId(),
+          roundId: window.__dbg.state.multiplayerRoundId,
+          role: window.__dbg.state.playerRole,
+          data: await window.__dbg.getRoomData()
+        })),
+        guestPage.evaluate(async () => ({
+          running: window.__dbg.running(),
+          mode: window.__dbg.mode(),
+          room: window.__dbg.currentRoomId(),
+          roundId: window.__dbg.state.multiplayerRoundId,
+          role: window.__dbg.state.playerRole,
+          data: await window.__dbg.getRoomData()
+        }))
+      ]);
+      throw new Error(`Hosted arena sync start timeout: ${err.message} | diag=${JSON.stringify(diag)}`);
+    }
 
     // Trigger match end without host responding to rematch
     await guestPage.evaluate(() => {
@@ -511,8 +597,30 @@ async function runHostedArenaSyncAndTeardownTest() {
       await window.__dbg.joinRoom(code);
     }, hostRoom.code);
 
-    await hostPage.waitForFunction(() => window.__dbg.running() && window.__dbg.mode() === 'duel_multi', { timeout: 15000, polling: 100 });
-    await guestPage.waitForFunction(() => window.__dbg.running() && window.__dbg.mode() === 'duel_multi', { timeout: 15000, polling: 100 });
+    try {
+      await hostPage.waitForFunction(() => window.__dbg.running() && window.__dbg.mode() === 'duel_multi', { timeout: 15000, polling: 100 });
+      await guestPage.waitForFunction(() => window.__dbg.running() && window.__dbg.mode() === 'duel_multi', { timeout: 15000, polling: 100 });
+    } catch (err) {
+      const diag = await Promise.all([
+        hostPage.evaluate(async () => ({
+          running: window.__dbg.running(),
+          mode: window.__dbg.mode(),
+          room: window.__dbg.currentRoomId(),
+          roundId: window.__dbg.state.multiplayerRoundId,
+          role: window.__dbg.state.playerRole,
+          data: await window.__dbg.getRoomData()
+        })),
+        guestPage.evaluate(async () => ({
+          running: window.__dbg.running(),
+          mode: window.__dbg.mode(),
+          room: window.__dbg.currentRoomId(),
+          roundId: window.__dbg.state.multiplayerRoundId,
+          role: window.__dbg.state.playerRole,
+          data: await window.__dbg.getRoomData()
+        }))
+      ]);
+      throw new Error(`Hosted arena sync start timeout: ${err.message} | diag=${JSON.stringify(diag)}`);
+    }
 
     const inspectArena = async (page) => page.evaluate(async () => {
       const { sectorHazardBuilder } = await import('/src/arena/hazards/SectorHazardBuilder.js');

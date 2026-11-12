@@ -1,5 +1,6 @@
 import { state } from '../core/state.js';
 import { tryLock, focusGame, setCursor } from '../input/InputManager.js';
+import { resetHintVisibility, clearArenaNameplates } from './hud.js';
 import { requestFullScreen, toggleFullScreen, isFullScreen, bindPauseAndModalEvents } from './modals.js';
 import { showJoinInputModal, onClickCreateRoom, onClickConfirmJoin, copyRoomCode, teardownMultiplayer, startMatchmakingWithWarmup } from '../network/roomManager.js';
 import { updateIdentityHeader, showAuthTerminal } from './authTerminal.js';
@@ -171,6 +172,8 @@ export function showModeSelectMenu() {
   state.authModalOpen = false;
   state.armoryModalOpen = false;
   state.achievementsModalOpen = false;
+  clearArenaNameplates();
+  resetHintVisibility(0);
   const overlay = document.getElementById('overlay');
   if (!overlay) return;
   overlay.style.display = 'flex';
@@ -263,16 +266,9 @@ export function bindMainMenuEvents() {
     showAuthTerminal('directives');
   };
 
-  const openSettings = (e) => {
-    e.stopPropagation();
-    if (e.cancelable) e.preventDefault();
-    settingsModal.show();
-  };
-
   bind('campaignBtn', openCampaign);
   bind('armoryBtn', openArmory);
   bind('achievementsBtn', openAchievements);
-  bind('settingsBtn', openSettings);
   bind('swarmBtn', startSwarm);
   bind('hostMatchBtn', openHostModal);
   bind('joinOnlineBtn', openJoinModal);

@@ -189,6 +189,24 @@ async function runUnifiedFlowTests() {
   }
 
   // =============================================================
+  const singlePlayerHudCheck = await page.evaluate(() => {
+    const scoreVisible = document.getElementById('scoreRow')?.style.display !== 'none';
+    const nameplatesDisplay = document.getElementById('arenaNameplates')?.style.display;
+    const hintInitialVisible = window.getComputedStyle(document.getElementById('hint')).display !== 'none';
+    for (let i = 0; i < 100; i++) window.__dbg.step(0.05);
+    const hintAutoHidden = window.getComputedStyle(document.getElementById('hint')).display === 'none';
+    return {
+      scoreVisible,
+      nameplatesHidden: !nameplatesDisplay || nameplatesDisplay === 'none',
+      hintInitialVisible,
+      hintAutoHidden
+    };
+  });
+  if (!singlePlayerHudCheck.scoreVisible || !singlePlayerHudCheck.nameplatesHidden || !singlePlayerHudCheck.hintInitialVisible || !singlePlayerHudCheck.hintAutoHidden) {
+    throw new Error(`Test 4B FAILED (single-player HUD / hint auto-hide): ${JSON.stringify(singlePlayerHudCheck)}`);
+  }
+  console.log('>>> TEST 4B PASSED: Single-player preserves score, omits online nameplates, and auto-hides control hint!');
+
   // TEST 5: Defeating Rival -> Tier 2 Escalation & Round Reset
   // =============================================================
   console.log('\n--- TEST 5: Defeating Rival -> Tier 2 Escalation & Round Reset ---');

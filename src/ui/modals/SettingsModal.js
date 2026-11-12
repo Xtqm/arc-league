@@ -12,6 +12,8 @@ export class SettingsModal {
   constructor(options = {}) {
     this.settings = options.settings || settingsManager;
     this._containerId = 'settingsModal';
+    this._customContainer = null;
+    this._inHub = false;
     this._onClose = null;
 
     if (typeof window !== 'undefined') {
@@ -22,6 +24,7 @@ export class SettingsModal {
 
   get container() {
     if (typeof document === 'undefined') return null;
+    if (this._customContainer) return this._customContainer;
     let el = document.getElementById(this._containerId);
     if (!el && typeof document.createElement === 'function') {
       el = document.createElement('div');
@@ -59,10 +62,10 @@ export class SettingsModal {
     setCursor(true);
   }
 
-  hide() {
+  hide(options = {}) {
     const el = this.container;
-    if (el) el.style.display = 'none';
-    if (typeof this._onClose === 'function') {
+    if (el && el.style) el.style.display = 'none';
+    if (!this._inHub && !options.skipCloseCallback && typeof this._onClose === 'function') {
       this._onClose();
     }
   }
@@ -80,8 +83,8 @@ export class SettingsModal {
     const currentParticles = this.settings.get('particles', true);
 
     el.innerHTML = `
-      <div class="card" style="max-width:540px; text-align:left; padding:28px 32px; border:1px solid rgba(79,242,255,0.6); box-shadow:0 0 35px rgba(79,242,255,0.22); background:rgba(2,16,24,0.95); color:var(--cyan); border-radius:8px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(79,242,255,0.3); padding-bottom:12px; margin-bottom:20px;">
+      <div class="card settings-card" style="max-width:540px; text-align:left; padding:28px 32px; border:1px solid rgba(79,242,255,0.6); box-shadow:0 0 35px rgba(79,242,255,0.22); background:rgba(2,16,24,0.95); color:var(--cyan); border-radius:8px;">
+        <div class="settings-modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(79,242,255,0.3); padding-bottom:12px; margin-bottom:20px;">
           <h1 style="font-size:20px; letter-spacing:4px; margin:0; text-transform:uppercase;">SYSTEM SETTINGS</h1>
           <button id="closeSettingsX" class="btn" style="padding:4px 10px; font-size:14px; min-width:32px; border-color:rgba(79,242,255,0.4); cursor:pointer;">✕</button>
         </div>
@@ -148,7 +151,7 @@ export class SettingsModal {
         </div>
 
         <!-- Footer Actions -->
-        <div style="display:flex; justify-content:flex-end; gap:12px; border-top:1px solid rgba(79,242,255,0.3); padding-top:14px;">
+        <div class="settings-modal-footer" style="display:flex; justify-content:flex-end; gap:12px; border-top:1px solid rgba(79,242,255,0.3); padding-top:14px;">
           <button id="closeSettingsBtn" class="btn" style="padding:8px 24px; font-size:12px; letter-spacing:2px; cursor:pointer;">RETURN</button>
         </div>
       </div>

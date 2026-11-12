@@ -4,6 +4,7 @@ import { AuthEvents } from '../auth/events.js';
 import { setCursor } from '../input/InputManager.js';
 import { armoryModal } from './modals/ArmoryModal.js';
 import { achievementsModal } from './modals/AchievementsModal.js';
+import { settingsModal } from './modals/SettingsModal.js';
 import { economyManager, EconomyEvents } from '../core/economy/EconomyManager.js';
 import { storageManager } from '../core/storage/StorageManager.js';
 import { StorageEvents } from '../core/storage/schema.js';
@@ -12,7 +13,7 @@ import { saveSaveState } from '../auth/saveState.js';
 let activeStep = 1;
 let activeMode = 'signin'; // 'signin' | 'create'
 let activeView = 'dossier'; // 'dossier' | 'auth'
-let activeHubTab = 'ident'; // 'ident' | 'loadout' | 'directives'
+let activeHubTab = 'ident'; // 'ident' | 'loadout' | 'directives' | 'config'
 
 /**
  * Calculates current level tier from player save state.
@@ -71,8 +72,8 @@ export function setTerminalView(view) {
 }
 
 /**
- * Sets the active hub tab ('ident' | 'loadout' | 'directives').
- * @param {'ident'|'loadout'|'directives'} tabName
+ * Sets the active hub tab ('ident' | 'loadout' | 'directives' | 'config').
+ * @param {'ident'|'loadout'|'directives'|'config'} tabName
  */
 export function setTerminalHubTab(tabName) {
   activeHubTab = tabName;
@@ -82,11 +83,13 @@ export function setTerminalHubTab(tabName) {
   const tabIdent = document.getElementById('tabHubIdent');
   const tabLoadout = document.getElementById('tabHubLoadout');
   const tabDirectives = document.getElementById('tabHubDirectives');
+  const tabConfig = document.getElementById('tabHubConfig');
 
   const dossierView = document.getElementById('dossierView');
   const authView = document.getElementById('authView');
   const hubLoadoutView = document.getElementById('hubLoadoutView');
   const hubDirectivesView = document.getElementById('hubDirectivesView');
+  const hubConfigView = document.getElementById('hubConfigView');
 
   const headerTitle = document.getElementById('terminalHeaderTitle');
   const headerSub = document.getElementById('terminalHeaderSub');
@@ -94,17 +97,17 @@ export function setTerminalHubTab(tabName) {
   const consoleMsg = document.getElementById('terminalConsoleMsg');
 
   // Update nav tab active classes
-  if (tabIdent && tabIdent.classList) {
-    if (tabName === 'ident') tabIdent.classList.add('active');
-    else tabIdent.classList.remove('active');
-  }
-  if (tabLoadout && tabLoadout.classList) {
-    if (tabName === 'loadout') tabLoadout.classList.add('active');
-    else tabLoadout.classList.remove('active');
-  }
-  if (tabDirectives && tabDirectives.classList) {
-    if (tabName === 'directives') tabDirectives.classList.add('active');
-    else tabDirectives.classList.remove('active');
+  const tabs = [
+    [tabIdent, 'ident'],
+    [tabLoadout, 'loadout'],
+    [tabDirectives, 'directives'],
+    [tabConfig, 'config']
+  ];
+  for (const [el, name] of tabs) {
+    if (el && el.classList) {
+      if (tabName === name) el.classList.add('active');
+      else el.classList.remove('active');
+    }
   }
 
   // Clean up any active Armory WebGL preview when leaving 'loadout'
@@ -121,12 +124,20 @@ export function setTerminalHubTab(tabName) {
     achievementsModal._inHub = false;
   }
 
+  // Clean up Settings modal when leaving 'config'
+  if (tabName !== 'config' && settingsModal && typeof settingsModal.isOpen === 'function' && settingsModal.isOpen()) {
+    settingsModal.hide({ skipCloseCallback: true });
+    settingsModal._customContainer = null;
+    settingsModal._inHub = false;
+  }
+
   if (tabName === 'ident') {
     if (card) {
-      card.classList.remove('hub-view-loadout', 'hub-view-directives');
+      card.classList.remove('hub-view-loadout', 'hub-view-directives', 'hub-view-config');
     }
     if (hubLoadoutView) hubLoadoutView.style.display = 'none';
     if (hubDirectivesView) hubDirectivesView.style.display = 'none';
+    if (hubConfigView) hubConfigView.style.display = 'none';
 
     const user = authManager.currentUser;
     const isAuth = user && !user.isAnonymous;
@@ -139,11 +150,12 @@ export function setTerminalHubTab(tabName) {
   } else if (tabName === 'loadout') {
     if (card) {
       card.classList.add('hub-view-loadout');
-      card.classList.remove('hub-view-directives');
+      card.classList.remove('hub-view-directives', 'hub-view-config');
     }
     if (dossierView) dossierView.style.display = 'none';
     if (authView) authView.style.display = 'none';
     if (hubDirectivesView) hubDirectivesView.style.display = 'none';
+    if (hubConfigView) hubConfigView.style.display = 'none';
     if (statusBanner) statusBanner.style.display = 'none';
     if (consoleMsg) consoleMsg.style.display = 'none';
 
@@ -162,11 +174,12 @@ export function setTerminalHubTab(tabName) {
   } else if (tabName === 'directives') {
     if (card) {
       card.classList.add('hub-view-directives');
-      card.classList.remove('hub-view-loadout');
+      card.classList.remove('hub-view-loadout', 'hub-view-config');
     }
     if (dossierView) dossierView.style.display = 'none';
     if (authView) authView.style.display = 'none';
     if (hubLoadoutView) hubLoadoutView.style.display = 'none';
+    if (hubConfigView) hubConfigView.style.display = 'none';
     if (statusBanner) statusBanner.style.display = 'none';
     if (consoleMsg) consoleMsg.style.display = 'none';
 
@@ -180,6 +193,29 @@ export function setTerminalHubTab(tabName) {
         achievementsModal._inHub = true;
         achievementsModal._onHubClose = () => setTerminalHubTab('ident');
         achievementsModal.show();
+      }
+    }
+  } else if (tabName === 'config') {
+    if (card) {
+      card.classList.add('hub-view-config');
+      card.classList.remove('hub-view-loadout', 'hub-view-directives');
+    }
+    if (dossierView) dossierView.style.display = 'none';
+    if (authView) authView.style.display = 'none';
+    if (hubLoadoutView) hubLoadoutView.style.display = 'none';
+    if (hubDirectivesView) hubDirectivesView.style.display = 'none';
+    if (statusBanner) statusBanner.style.display = 'none';
+    if (consoleMsg) consoleMsg.style.display = 'none';
+
+    if (headerTitle) headerTitle.textContent = 'SYSTEM CONFIG';
+    if (headerSub) headerSub.textContent = 'AUDIO, DISPLAY & VISUAL FIDELITY';
+
+    if (hubConfigView) {
+      hubConfigView.style.display = 'block';
+      if (settingsModal) {
+        settingsModal._customContainer = hubConfigView;
+        settingsModal._inHub = true;
+        settingsModal.show();
       }
     }
   }
@@ -357,23 +393,34 @@ export function hideAuthTerminal() {
     achievementsModal._inHub = false;
   }
 
+  // Clean up Settings modal
+  if (settingsModal && typeof settingsModal.isOpen === 'function' && settingsModal.isOpen()) {
+    settingsModal.hide({ skipCloseCallback: true });
+    settingsModal._customContainer = null;
+    settingsModal._inHub = false;
+  }
+
   const card = document.querySelector('.auth-terminal-card');
   if (card) {
-    card.classList.remove('hub-view-loadout', 'hub-view-directives');
+    card.classList.remove('hub-view-loadout', 'hub-view-directives', 'hub-view-config');
   }
 
   const hubLoadoutView = document.getElementById('hubLoadoutView');
   const hubDirectivesView = document.getElementById('hubDirectivesView');
+  const hubConfigView = document.getElementById('hubConfigView');
   if (hubLoadoutView) hubLoadoutView.style.display = 'none';
   if (hubDirectivesView) hubDirectivesView.style.display = 'none';
+  if (hubConfigView) hubConfigView.style.display = 'none';
 
   activeHubTab = 'ident';
   const tabIdent = document.getElementById('tabHubIdent');
   const tabLoadout = document.getElementById('tabHubLoadout');
   const tabDirectives = document.getElementById('tabHubDirectives');
+  const tabConfig = document.getElementById('tabHubConfig');
   if (tabIdent) tabIdent.classList.add('active');
   if (tabLoadout) tabLoadout.classList.remove('active');
   if (tabDirectives) tabDirectives.classList.remove('active');
+  if (tabConfig) tabConfig.classList.remove('active');
 
   state.authModalOpen = false;
   setCursor();
@@ -917,6 +964,7 @@ export function initAuthTerminal() {
   const tabHubIdent = document.getElementById('tabHubIdent');
   const tabHubLoadout = document.getElementById('tabHubLoadout');
   const tabHubDirectives = document.getElementById('tabHubDirectives');
+  const tabHubConfig = document.getElementById('tabHubConfig');
 
   if (tabHubIdent) {
     tabHubIdent.onclick = (e) => {
@@ -934,6 +982,12 @@ export function initAuthTerminal() {
     tabHubDirectives.onclick = (e) => {
       e.stopPropagation();
       setTerminalHubTab('directives');
+    };
+  }
+  if (tabHubConfig) {
+    tabHubConfig.onclick = (e) => {
+      e.stopPropagation();
+      setTerminalHubTab('config');
     };
   }
 

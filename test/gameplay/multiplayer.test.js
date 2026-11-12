@@ -17,6 +17,16 @@ async function runMultiplayerTests() {
   // TEST 1: Room Creation & 4-Character Code Generation
   // -------------------------------------------------------------
   console.log('\n--- TEST 1: Room Creation & 4-Character Code Generation ---');
+  await hostPage.evaluate(() => {
+    const auth = window.__TRON__.auth();
+    if (auth._currentUser) auth._currentUser.handle = 'TRON_HOST';
+    if (auth._saveState) auth._saveState.handle = 'TRON_HOST';
+  });
+  await guestPage.evaluate(() => {
+    const auth = window.__TRON__.auth();
+    if (auth._currentUser) auth._currentUser.handle = 'FLYNN_GUEST';
+    if (auth._saveState) auth._saveState.handle = 'FLYNN_GUEST';
+  });
   const hostRoomData = await hostPage.evaluate(async () => {
     await window.__dbg.createRoom();
     const code = window.__dbg.currentRoomId();
@@ -106,6 +116,57 @@ async function runMultiplayerTests() {
   } else {
     throw new Error(`Test 3 FAILED: ${JSON.stringify({ p1State, p2State })}`);
   }
+
+  // -------------------------------------------------------------
+  // -------------------------------------------------------------
+  // TEST 3B: Minimal Online HUD & Remote-Only Overhead Nameplates
+  // -------------------------------------------------------------
+  await hostPage.evaluate(() => window.__dbg.step(0.016));
+  await guestPage.evaluate(() => window.__dbg.step(0.016));
+  const hudAndNameplateCheck = await Promise.all([
+    hostPage.evaluate(() => {
+      const plates = Array.from(document.querySelectorAll('#arenaNameplates .arena-nameplate')).map(el => ({
+        role: el.getAttribute('data-role'),
+        text: el.textContent,
+        display: el.style.display,
+        isFoe: el.classList.contains('team-foe')
+      }));
+      return {
+        plates,
+        roundHidden: document.getElementById('roundLabel')?.style.display === 'none',
+        scoreHidden: document.getElementById('scoreRow')?.style.display === 'none',
+        subHidden: document.getElementById('subLabel')?.style.display === 'none',
+        bossVisible: document.getElementById('bossBarWrap')?.style.display === 'block',
+        pauseVisible: window.getComputedStyle(document.getElementById('pauseBtn')).display !== 'none'
+      };
+    }),
+    guestPage.evaluate(() => {
+      const plates = Array.from(document.querySelectorAll('#arenaNameplates .arena-nameplate')).map(el => ({
+        role: el.getAttribute('data-role'),
+        text: el.textContent,
+        display: el.style.display,
+        isFoe: el.classList.contains('team-foe')
+      }));
+      return { plates };
+    })
+  ]);
+  const hostSeesGuestPlate = hudAndNameplateCheck[0].plates.length === 1 &&
+    hudAndNameplateCheck[0].plates[0].text === 'FLYNN_GUEST' &&
+    hudAndNameplateCheck[0].plates[0].display === 'block' &&
+    hudAndNameplateCheck[0].plates[0].isFoe;
+  const guestSeesHostPlate = hudAndNameplateCheck[1].plates.length === 1 &&
+    hudAndNameplateCheck[1].plates[0].text === 'TRON_HOST' &&
+    hudAndNameplateCheck[1].plates[0].display === 'block' &&
+    hudAndNameplateCheck[1].plates[0].isFoe;
+  const onlineHudMinimal = hudAndNameplateCheck[0].roundHidden &&
+    hudAndNameplateCheck[0].scoreHidden &&
+    hudAndNameplateCheck[0].subHidden &&
+    hudAndNameplateCheck[0].bossVisible &&
+    hudAndNameplateCheck[0].pauseVisible;
+  if (!hostSeesGuestPlate || !guestSeesHostPlate || !onlineHudMinimal) {
+    throw new Error(`Test 3B FAILED (nameplates/minimal HUD): ${JSON.stringify(hudAndNameplateCheck)}`);
+  }
+  console.log('>>> TEST 3B PASSED: Minimal online HUD active and remote-only arena nameplates display opponent callsigns!');
 
   // -------------------------------------------------------------
   // TEST 4: Real-time Kinematic Synchronization & Interpolation
@@ -309,6 +370,13 @@ async function runMultiplayerTests() {
   const hostVictoryOrRunning = endState[0].header === 'VICTORY' || (typeof window !== 'undefined' && window.__dbg !== undefined);
 
   if (guestDead) {
+    const postNames = await Promise.all([
+      hostPage.evaluate(() => document.getElementById('postMatchMatchup')?.textContent || ''),
+      guestPage.evaluate(() => document.getElementById('postMatchMatchup')?.textContent || '')
+    ]);
+    if (!postNames[1].includes('TRON_HOST') || !postNames[1].includes('FLYNN_GUEST')) {
+      throw new Error(`Test 8 FAILED (post-match names): ${JSON.stringify(postNames)}`);
+    }
     console.log('>>> TEST 8 PASSED: Defeated player displayed DEREZZED screen and match concluded!');
   } else {
     throw new Error(`Test 8 FAILED: ${JSON.stringify(endState)}`);
@@ -351,6 +419,59 @@ async function runMultiplayerTests() {
   } else {
     throw new Error(`Test 9 FAILED: ${JSON.stringify(teardownResults)}`);
   }
+
+  // -------------------------------------------------------------
+  // TEST 10: 2v2 Team Rosters, Ally/Foe Nameplates & Anon Override Guard
+  // -------------------------------------------------------------
+  console.log('\n--- TEST 10: 2v2 Callsigns, Team Nameplates & Post-Match Rosters ---');
+  const duosCheck = await hostPage.evaluate(async () => {
+    const auth = window.__TRON__.auth();
+    if (auth._currentUser) auth._currentUser.handle = 'QUORRA';
+    if (auth._saveState) auth._saveState.handle = 'QUORRA';
+    // Simulate Firebase anonymous auth overwriting state.currentUser without .handle
+    window.__dbg.state.currentUser = { uid: 'fb_anon_99', isAnonymous: true };
+
+    const rm = await import('/src/network/roomManager.js');
+    const resolvedCallsign = rm.getLocalCallsign();
+
+    rm.startMultiplayerDuel('p1', 'DUO2', '2v2', { roundId: 1 });
+    rm.applyPlayerName('p2', 'Rinzler');
+    rm.applyPlayerName('p3', 'Beck');
+    rm.applyPlayerName('p4', 'Clu');
+
+    // Place all 3 remote players in front of p1 (p1 at x=-8,z=18 yaw=0 faces -Z)
+    if (window.__dbg.state.multiPlayers.p3) window.__dbg.state.multiPlayers.p3.pos.set(-6, 0, 0);
+    if (window.__dbg.state.multiPlayers.p2) window.__dbg.state.multiPlayers.p2.pos.set(-8, 0, 0);
+    if (window.__dbg.state.multiPlayers.p4) window.__dbg.state.multiPlayers.p4.pos.set(-10, 0, 0);
+    window.__dbg.step(0.016);
+
+    const plates = {};
+    document.querySelectorAll('#arenaNameplates .arena-nameplate').forEach(el => {
+      plates[el.getAttribute('data-role')] = {
+        text: el.textContent,
+        className: el.className,
+        display: el.style.display
+      };
+    });
+
+    rm.showMultiplayerVictory();
+    const postMatch2v2 = document.getElementById('postMatchMatchup')?.textContent || '';
+    window.__dbg.teardownMultiplayer();
+    window.__dbg.showModeSelect();
+    return { resolvedCallsign, plates, postMatch2v2 };
+  });
+
+  if (
+    duosCheck.resolvedCallsign !== 'QUORRA' ||
+    duosCheck.plates.p1 ||
+    duosCheck.plates.p3?.text !== 'BECK' || !duosCheck.plates.p3?.className.includes('team-ally') ||
+    duosCheck.plates.p2?.text !== 'RINZLER' || !duosCheck.plates.p2?.className.includes('team-foe') ||
+    duosCheck.plates.p4?.text !== 'CLU' || !duosCheck.plates.p4?.className.includes('team-foe') ||
+    !duosCheck.postMatch2v2.includes('QUORRA & BECK') || !duosCheck.postMatch2v2.includes('RINZLER & CLU')
+  ) {
+    throw new Error(`Test 10 FAILED (2v2 rosters/nameplates): ${JSON.stringify(duosCheck)}`);
+  }
+  console.log('>>> TEST 10 PASSED: 2v2 teammate/foe nameplates, team rosters, and callsign resolution verified!');
 
   console.log('\n========================================================');
   console.log('ALL 1v1 MULTIPLAYER DUEL ACCEPTANCE CRITERIA VERIFIED!');

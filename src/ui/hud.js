@@ -1,9 +1,12 @@
+import * as THREE from '../../vendor/three.module.js';
 import { state, player } from '../core/state.js';
+import { camera } from '../graphics/scene.js';
 import { isLocked } from '../input/mouse.js';
 import { getPlayerCurveIntent } from '../input/keyboard.js';
 
 export const el = id => (typeof document !== 'undefined' ? document.getElementById(id) : null);
 export const msgEl = el('msg');
+const _projVec = new THREE.Vector3();
 
 export function message(t) {
   const msg = msgEl || el('msg');
@@ -34,42 +37,189 @@ export function updateHUD() {
   const eb = el('energybar');
   if (eb && eb.firstElementChild) eb.firstElementChild.style.width = state.player.energy + '%';
 
+  const rl = el('roundLabel');
+  const sl = el('subLabel');
+  const sr = el('scoreRow');
+  const trHeader = el('trHeaderRow');
+  const bbw = el('bossBarWrap');
+  const bbl = el('bossBarLabel');
+  const bb = el('bossbar');
+
   if (state.gameMode === 'duel' || state.gameMode === 'duel_ai') {
-    const rl = el('roundLabel');
-    if (rl) rl.innerHTML = `TIER: <span id="wave" class="big">${state.tier || state.duelTier || 1}</span>`;
+    if (trHeader) trHeader.style.marginBottom = '4px';
+    if (rl) {
+      rl.style.display = '';
+      rl.innerHTML = `TIER: <span id="wave" class="big">${state.tier || state.duelTier || 1}</span>`;
+    }
+    if (sr) sr.style.display = '';
     const boss = state.foes[0];
     const hpPct = boss ? Math.max(0, Math.round((boss.hp / boss.maxHp) * 100)) : 0;
-    const sl = el('subLabel');
-    if (sl) sl.innerHTML = `RIVAL INTEGRITY <span id="rivalHp">${hpPct}%</span>`;
-    const bbw = el('bossBarWrap');
+    if (sl) {
+      sl.style.display = '';
+      sl.innerHTML = `RIVAL INTEGRITY <span id="rivalHp">${hpPct}%</span>`;
+    }
     if (bbw) bbw.style.display = 'block';
-    const bb = el('bossbar');
+    if (bbl) bbl.textContent = 'RIVAL SHIELD';
     if (bb && bb.firstElementChild) bb.firstElementChild.style.width = hpPct + '%';
   } else if (state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi') {
-    const rl = el('roundLabel');
-    if (rl) rl.innerHTML = `ROOM <span id="wave" class="big">${state.currentRoomId || '----'}</span>`;
+    if (trHeader) trHeader.style.marginBottom = '0';
+    if (rl) rl.style.display = 'none';
+    if (sr) sr.style.display = 'none';
+    if (sl) sl.style.display = 'none';
     let oppHp = 0;
     for (const f of state.foes) {
       if (f.alive) oppHp += Math.max(0, Math.ceil(f.hp));
     }
-    const sl = el('subLabel');
-    if (sl) sl.innerHTML = `RIVALS HP <span id="foes">${oppHp}</span>`;
-    const bbw = el('bossBarWrap');
     if (bbw) bbw.style.display = 'block';
-    const bb = el('bossbar');
+    if (bbl) bbl.textContent = state.gameMode === 'duos_multi' ? 'RIVALS' : 'RIVAL';
     const maxHp = (state.gameMode === 'duos_multi' ? 200 : 100);
-    if (bb && bb.firstElementChild) bb.firstElementChild.style.width = (oppHp / maxHp * 100) + '%';
+    const pct = Math.max(0, Math.min(100, (oppHp / maxHp) * 100));
+    if (bb && bb.firstElementChild) bb.firstElementChild.style.width = pct + '%';
   } else {
-    const rl = el('roundLabel');
-    if (rl) rl.innerHTML = `CYCLE <span id="wave" class="big">${state.wave}</span>`;
-    const sl = el('subLabel');
-    if (sl) sl.innerHTML = `HOSTILES <span id="foes">${state.foes.length}</span>`;
-    const bbw = el('bossBarWrap');
+    if (trHeader) trHeader.style.marginBottom = '4px';
+    if (rl) {
+      rl.style.display = '';
+      rl.innerHTML = `CYCLE <span id="wave" class="big">${state.wave}</span>`;
+    }
+    if (sr) sr.style.display = '';
+    if (sl) {
+      sl.style.display = '';
+      sl.innerHTML = `HOSTILES <span id="foes">${state.foes.length}</span>`;
+    }
     if (bbw) bbw.style.display = 'none';
   }
 
   const sc = el('score');
   if (sc) sc.textContent = state.score;
+}
+
+export function resetHintVisibility(duration = 4.5) {
+  state.hintTimer = duration;
+  if (typeof document === 'undefined') return;
+  const h = document.getElementById('hint');
+  const mh = document.getElementById('mobileHint');
+  if (h) {
+    h.style.display = '';
+    h.style.opacity = '';
+  }
+  if (mh) {
+    mh.style.display = '';
+    mh.style.opacity = '';
+  }
+}
+
+export function updateControlHintTimer(dt) {
+  if (typeof document === 'undefined') return;
+  if (state.hintTimer === undefined || state.hintTimer <= 0) return;
+
+  state.hintTimer = Math.max(0, state.hintTimer - dt);
+  const h = document.getElementById('hint');
+  const mh = document.getElementById('mobileHint');
+
+  if (state.hintTimer <= 0) {
+    if (h) {
+      h.style.opacity = '0';
+      h.style.display = 'none';
+    }
+    if (mh) {
+      mh.style.opacity = '0';
+      mh.style.display = 'none';
+    }
+  } else if (state.hintTimer < 0.7) {
+    const fadeOp = (state.hintTimer / 0.7).toFixed(2);
+    if (h && !state.isTouchDevice) h.style.opacity = fadeOp;
+    if (mh && state.isTouchDevice) mh.style.opacity = fadeOp;
+  }
+}
+
+export function clearArenaNameplates() {
+  if (typeof document === 'undefined') return;
+  const container = document.getElementById('arenaNameplates');
+  if (container) {
+    container.innerHTML = '';
+    container.style.display = 'none';
+  }
+}
+
+export function updateArenaNameplates() {
+  if (typeof document === 'undefined') return;
+  const container = document.getElementById('arenaNameplates');
+  if (!container) return;
+
+  const isOnline = state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi';
+  if (!isOnline || !state.running || !state.multiPlayers) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'block';
+
+  if (camera && typeof camera.updateMatrixWorld === 'function') {
+    camera.updateMatrixWorld();
+  }
+
+  const w = (typeof window !== 'undefined' && window.innerWidth) ? window.innerWidth : 800;
+  const h = (typeof window !== 'undefined' && window.innerHeight) ? window.innerHeight : 600;
+  const myRole = state.playerRole || 'p1';
+  const myTeam = (myRole === 'p1' || myRole === 'p3') ? 1 : 2;
+  const activeRoles = new Set();
+
+  for (const r in state.multiPlayers) {
+    if (r === myRole) continue;
+    const opp = state.multiPlayers[r];
+    activeRoles.add(r);
+
+    let tag = container.querySelector(`.arena-nameplate[data-role="${r}"]`);
+    if (!tag && typeof document.createElement === 'function') {
+      tag = document.createElement('div');
+      tag.className = 'arena-nameplate';
+      tag.setAttribute('data-role', r);
+      container.appendChild(tag);
+    }
+    if (!tag) continue;
+
+    if (!opp || !opp.alive || (opp.hp !== undefined && opp.hp <= 0) || (opp.obj && (opp.obj.visible === false || !opp.obj.parent)) || !opp.pos || !camera) {
+      tag.style.display = 'none';
+      continue;
+    }
+
+    const displayName = opp.name || (state.multiplayerNames && state.multiplayerNames[r]) || r.toUpperCase();
+    if (tag.textContent !== displayName) {
+      tag.textContent = displayName;
+    }
+
+    const isAlly = opp.team === myTeam;
+    const desiredClass = `arena-nameplate ${isAlly ? 'team-ally' : 'team-foe'}`;
+    if (tag.className !== desiredClass) {
+      tag.className = desiredClass;
+    }
+
+    _projVec.set(opp.pos.x, (opp.y || 0) + 2.45, opp.pos.z);
+    _projVec.project(camera);
+
+    if (!Number.isFinite(_projVec.x) || !Number.isFinite(_projVec.y) || _projVec.z < -1 || _projVec.z > 1) {
+      tag.style.display = 'none';
+      continue;
+    }
+
+    const sx = (_projVec.x * 0.5 + 0.5) * w;
+    const sy = (-_projVec.y * 0.5 + 0.5) * h;
+
+    if (sx < -60 || sx > w + 60 || sy < -30 || sy > h + 30) {
+      tag.style.display = 'none';
+      continue;
+    }
+
+    tag.style.display = 'block';
+    tag.style.transform = `translate3d(${sx.toFixed(1)}px, ${sy.toFixed(1)}px, 0) translate(-50%, -100%)`;
+  }
+
+  const existing = container.querySelectorAll('.arena-nameplate');
+  for (let i = 0; i < existing.length; i++) {
+    const roleAttr = existing[i].getAttribute('data-role');
+    if (!activeRoles.has(roleAttr)) {
+      existing[i].style.display = 'none';
+    }
+  }
 }
 
 export function updateCrosshair(aim, traj) {

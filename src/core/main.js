@@ -14,7 +14,7 @@ import { pollGamepads, isButtonPressed, isButtonJustPressed, isButtonJustRelease
 import { initNetwork, initMockNetwork, getRoomRef, roomGetDoc } from '../network/firebaseSetup.js';
 import { onClickCreateRoom, onClickConfirmJoin, copyRoomCode, teardownMultiplayer, startMultiplayerDuel } from '../network/roomManager.js';
 import { syncNetworkState, onTileDestabilizedByHost, updateRemotePlayers } from '../network/sync.js';
-import { updateHUD, message, msgEl, updateCrosshair, updateKeyMonitor, updateLockStateBanner } from '../ui/hud.js';
+import { updateHUD, message, msgEl, updateCrosshair, updateKeyMonitor, updateLockStateBanner, updateControlHintTimer, updateArenaNameplates } from '../ui/hud.js';
 import { startMode, showModeSelect, bindMenuButtons } from '../ui/menus.js';
 import { pauseGame, resumeGame, restartMatch, checkOrientation, requestFullScreen, exitFullScreen, toggleFullScreen, isFullScreen } from '../ui/modals.js';
 import { SFX, playDeRezSound } from '../audio/sfx.js';
@@ -208,6 +208,7 @@ export function update(dt) {
 
   updateSparks(dt, scene);
   updateCamera(dt);
+  updateArenaNameplates();
 
   // Analog steering when cursor unlocked (desktop)
   if (!isLocked() && state.steerX && !state.isTouchDevice) {
@@ -219,6 +220,9 @@ export function update(dt) {
 
   updateKeyMonitor();
   updateLockStateBanner();
+  if (state.countdownTimer <= 0) {
+    updateControlHintTimer(dt);
+  }
 
   // Crosshair + Trajectory preview
   const aim = aimTarget();

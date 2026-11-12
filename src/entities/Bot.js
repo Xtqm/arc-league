@@ -175,6 +175,10 @@ export function spawnWave() {
 }
 
 export function killFoe(f) {
+  if (f) {
+    f.alive = false;
+    f.hp = 0;
+  }
   burst(f.pos.clone().setY(1.5 + (f.y || 0)), config.ORANGE, 70, 14);
   scene.remove(f.obj);
   state.foes = state.foes.filter(x => x !== f);

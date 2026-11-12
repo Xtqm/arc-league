@@ -38,7 +38,20 @@ async function runTerminalIntegrationTests() {
     assert.ok(initialHeaderState.classes.includes('state-guest'), 'Initial header must be in state-guest');
     assert.ok(initialHeaderState.text.includes('[GUEST] SUB-ROUTINE'), 'Header must display guest subroutine label');
     assert.strictEqual(initialHeaderState.btnExists, true, 'Secure Identity button must be rendered');
-    console.log('✓ Main Menu Identity Header displays Guest Sub-Routine with Amber Wireframe button');
+
+    const mainMenuSettingsParity = await page.evaluate(() => {
+      const bootHasSettings = !!document.getElementById('settingsBtn');
+      const bootCopy = document.getElementById('mainMenu')?.textContent || '';
+      window.__dbg.showModeSelect();
+      const returnHasSettings = !!document.getElementById('settingsBtn');
+      const returnCopy = document.getElementById('mainMenu')?.textContent || '';
+      return { bootHasSettings, returnHasSettings, bootHasArcfield: bootCopy.includes('Arcfield'), returnHasArcfield: returnCopy.includes('Arcfield') };
+    });
+    assert.strictEqual(mainMenuSettingsParity.bootHasSettings, false, '#settingsBtn must not exist on Main Menu on cold boot');
+    assert.strictEqual(mainMenuSettingsParity.returnHasSettings, false, '#settingsBtn must not exist on Main Menu after returning');
+    assert.strictEqual(mainMenuSettingsParity.bootHasArcfield, true, 'Cold boot menu copy must match Arcfield copy');
+    assert.strictEqual(mainMenuSettingsParity.returnHasArcfield, true, 'Re-rendered menu copy must match Arcfield copy');
+    console.log('✓ Main Menu Identity Header displays Guest Sub-Routine and omits #settingsBtn consistently across boot & menu return');
 
     console.log('\n--- 2. Testing Terminal Modal Launch & PointerLock Isolation ---');
     // Click secure identity button
@@ -284,6 +297,31 @@ async function runTerminalIntegrationTests() {
     assert.strictEqual(achieveCloseBtnHidden, true, 'Inner [ESC // CLOSE] button must not be visible in Hub Directives');
     console.log('✓ Tab [ DIRECTIVES ] seamlessly mounts Trophy Matrix in Hub (inner close button omitted)');
 
+    // Click [ SYSTEM CONFIG ] tab
+    await page.click('#tabHubConfig');
+    await page.waitForFunction(() => {
+      const cfgView = document.getElementById('hubConfigView');
+      const tabCfg = document.getElementById('tabHubConfig');
+      return cfgView && cfgView.style.display !== 'none' && tabCfg.classList.contains('active');
+    });
+    const configCheck = await page.evaluate(() => {
+      const closeX = document.querySelector('#hubConfigView #closeSettingsX');
+      const closeBtn = document.querySelector('#hubConfigView #closeSettingsBtn');
+      const fps120 = document.querySelector('#hubConfigView .fps-btn[data-fps="120"]');
+      if (fps120) fps120.click();
+      return {
+        closeXHidden: !closeX || window.getComputedStyle(closeX).display === 'none' || closeX.offsetParent === null,
+        closeBtnHidden: !closeBtn || window.getComputedStyle(closeBtn).display === 'none' || closeBtn.offsetParent === null,
+        fps120Active: !!fps120?.classList.contains('hot'),
+        hasSliders: !!document.querySelector('#hubConfigView #masterVolSlider') && !!document.querySelector('#hubConfigView #sfxVolSlider')
+      };
+    });
+    assert.strictEqual(configCheck.closeXHidden, true, 'Inner Settings X button must be hidden in Hub Config');
+    assert.strictEqual(configCheck.closeBtnHidden, true, 'Inner Settings RETURN button must be hidden in Hub Config');
+    assert.strictEqual(configCheck.fps120Active, true, 'Settings controls inside Terminal Hub must remain interactive');
+    assert.strictEqual(configCheck.hasSliders, true, 'Audio sliders must render inside Hub Config');
+    console.log('✓ Tab [ SYSTEM CONFIG ] mounts System Settings inside Terminal Hub cleanly');
+
     // Click [ IDENT MATRIX ] tab
     await page.click('#tabHubIdent');
     await page.waitForFunction(() => {
@@ -322,6 +360,29 @@ async function runTerminalIntegrationTests() {
     });
     assert.strictEqual(modalClosed, true, 'Terminal modal must close on [X] button click');
     console.log('✓ [X] button cleanly dismisses terminal and returns player to Main Menu');
+
+    // Verify Pause Menu standalone SettingsModal still works with visible return controls
+    await page.evaluate(() => {
+      window.__dbg.startMode('swarm');
+      window.__dbg.pauseGame();
+      document.getElementById('pauseSettingsBtn')?.click();
+    });
+    await page.waitForFunction(() => {
+      const sm = document.getElementById('settingsModal');
+      return sm && sm.style.display === 'flex';
+    });
+    const standaloneCheck = await page.evaluate(() => {
+      const closeBtn = document.querySelector('#settingsModal #closeSettingsBtn');
+      const visible = !!closeBtn && window.getComputedStyle(closeBtn).display !== 'none';
+      closeBtn?.click();
+      return {
+        visible,
+        closedAfterReturn: document.getElementById('settingsModal')?.style.display === 'none'
+      };
+    });
+    assert.strictEqual(standaloneCheck.visible, true, 'Standalone Settings RETURN button must be visible from Pause Menu');
+    assert.strictEqual(standaloneCheck.closedAfterReturn, true, 'Clicking RETURN in standalone SettingsModal must close it');
+    console.log('✓ Pause Menu standalone SettingsModal remains functional');
 
     console.log('\n=== ALL TERMINAL INTEGRATION TESTS PASSED ===');
   });

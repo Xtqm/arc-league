@@ -103,22 +103,44 @@ async function runMobileTests() {
     const mobileControls = document.getElementById('mobileControls');
     const mobileControlsVisible = mobileControls && window.getComputedStyle(mobileControls).display === 'block';
 
+    const tlRect = document.getElementById('tl')?.getBoundingClientRect();
+    const labelSpan = document.querySelector('#pauseBtn .hud-btn-label');
+    const btnLabelHidden = !labelSpan || window.getComputedStyle(labelSpan).display === 'none';
+
     return {
       isTouch,
       isBodyTouch,
       lockBannerHidden,
       hintHidden,
       mobileHintVisible,
-      mobileControlsVisible
+      mobileControlsVisible,
+      compactTl: !!tlRect && tlRect.width <= 190,
+      btnLabelHidden
     };
   });
 
   console.log('Test 2 results:', test2);
-  if (test2.isTouch && test2.isBodyTouch && test2.lockBannerHidden && test2.hintHidden && test2.mobileHintVisible && test2.mobileControlsVisible) {
-    console.log('>>> TEST 2 PASSED: Touch environment detected, pointer lock bypassed, lock banner hidden, and mobile HUD active!');
+  if (test2.isTouch && test2.isBodyTouch && test2.lockBannerHidden && test2.hintHidden &&
+      test2.mobileHintVisible && test2.mobileControlsVisible && test2.compactTl && test2.btnLabelHidden) {
+    console.log('>>> TEST 2 PASSED: Touch environment detected, pointer lock bypassed, compact mobile HUD active!');
   } else {
     throw new Error(`Test 2 FAILED: ${JSON.stringify(test2)}`);
   }
+
+  // Test 2B: Mobile control hint auto-hides after ~4.5s of active play and resets on restart
+  const hintAutoHideCheck = await page.evaluate(() => {
+    const dbg = window.__dbg;
+    dbg.finishCountdown();
+    for (let i = 0; i < 100; i++) dbg.step(0.05);
+    const hiddenAfterDelay = window.getComputedStyle(document.getElementById('mobileHint')).display === 'none';
+    dbg.startMode('duel');
+    const visibleAfterRestart = window.getComputedStyle(document.getElementById('mobileHint')).display === 'block';
+    return { hiddenAfterDelay, visibleAfterRestart };
+  });
+  if (!hintAutoHideCheck.hiddenAfterDelay || !hintAutoHideCheck.visibleAfterRestart) {
+    throw new Error(`Test 2B FAILED (mobileHint auto-hide): ${JSON.stringify(hintAutoHideCheck)}`);
+  }
+  console.log('>>> TEST 2B PASSED: Mobile hint auto-hides after active gameplay starts and resets cleanly!');
 
   // -------------------------------------------------------------
   // TEST 3: Orientation Helper (Portrait Detection & Pause/Resume)

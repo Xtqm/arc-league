@@ -14,7 +14,7 @@ import { touchMove, updateCurveButtons, updateTouchMomentum } from '../input/tou
 import { getLeftStick, getRightStick, playGamepadHaptics } from '../input/gamepad.js';
 import { getRoomRef, roomUpdateDoc } from '../network/firebaseSetup.js';
 import { showMultiplayerDefeat, reportMultiplayerMatchEnd } from '../network/roomManager.js';
-import { updateHUD } from '../ui/hud.js';
+import { updateHUD, resetHintVisibility, clearArenaNameplates } from '../ui/hud.js';
 import { swarmEconomyBridge } from '../modes/SwarmEconomyBridge.js';
 
 export function updatePlayer(dt) {
@@ -488,6 +488,9 @@ export function resetRound(spawnX = 0, spawnZ = 14, yaw = Math.PI) {
   state.discs = [];
   for (const f of state.foes) scene.remove(f.obj);
   state.foes = [];
+
+  clearArenaNameplates();
+  resetHintVisibility(4.5);
 
   if (typeof window !== 'undefined' && window.__tronStartCountdown) {
     window.__tronStartCountdown(3.0);

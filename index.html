@@ -56,32 +56,68 @@
   }
   canvas { display:block; }
   #hud { position:fixed; inset:0; pointer-events:none; z-index:5; }
-  .panel { position:absolute; padding:10px 14px; border:1px solid rgba(79,242,255,.35);
+  .panel { position:absolute; padding:8px 11px; border:1px solid rgba(79,242,255,.35);
     background:rgba(0,16,22,.45); backdrop-filter:blur(2px);
-    text-transform:uppercase; letter-spacing:2px; font-size:12px;
+    text-transform:uppercase; letter-spacing:1.5px; font-size:11px;
     box-shadow:0 0 18px rgba(79,242,255,.18) inset, 0 0 12px rgba(79,242,255,.12); }
   #tl {
-    top: max(14px, env(safe-area-inset-top));
-    left: max(14px, env(safe-area-inset-left));
-    min-width: 240px;
-    padding-top: max(10px, env(safe-area-inset-top));
-    padding-left: max(14px, env(safe-area-inset-left));
-    padding-right: max(14px, env(safe-area-inset-right));
+    top: max(12px, env(safe-area-inset-top));
+    left: max(12px, env(safe-area-inset-left));
+    min-width: 185px;
+    padding: 8px 11px;
   }
   #tr {
-    top: max(14px, env(safe-area-inset-top));
-    right: max(14px, env(safe-area-inset-right));
+    top: max(12px, env(safe-area-inset-top));
+    right: max(12px, env(safe-area-inset-right));
     text-align: right;
-    padding-top: max(10px, env(safe-area-inset-top));
-    padding-left: max(14px, env(safe-area-inset-left));
-    padding-right: max(14px, env(safe-area-inset-right));
+    padding: 8px 11px;
     z-index: 50;
   }
-  .bar { height:9px; margin-top:6px; border:1px solid rgba(79,242,255,.5); background:rgba(0,0,0,.6); }
+  .bar { height:7px; margin-top:4px; border:1px solid rgba(79,242,255,.5); background:rgba(0,0,0,.6); }
   .bar > i { display:block; height:100%; background:var(--cyan); box-shadow:0 0 12px var(--cyan); transition:width .12s linear; }
   #discbar > i { background:#fff; box-shadow:0 0 12px #fff; }
   #energybar > i { background:var(--orange); box-shadow:0 0 12px var(--orange); }
-  .big { font-size:26px; letter-spacing:6px; }
+  .big { font-size:20px; letter-spacing:4px; }
+  .tl-label-gap { margin-top: 6px; }
+  #arenaNameplates {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 6;
+  }
+  .arena-nameplate {
+    position: absolute;
+    left: 0;
+    top: 0;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(0, 12, 18, 0.72);
+    font-family: "Courier New", Courier, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    user-select: none;
+    display: none;
+  }
+  .arena-nameplate.team-ally {
+    color: #a5f7ff;
+    border: 1px solid rgba(79, 242, 255, 0.7);
+    text-shadow: 0 0 8px rgba(79, 242, 255, 0.85);
+    box-shadow: 0 0 10px rgba(79, 242, 255, 0.25);
+  }
+  .arena-nameplate.team-foe {
+    color: #e9c2ff;
+    border: 1px solid rgba(176, 38, 255, 0.8);
+    text-shadow: 0 0 8px rgba(176, 38, 255, 0.9);
+    box-shadow: 0 0 10px rgba(176, 38, 255, 0.3);
+  }
   /* reticle: the disc flies at whatever sits under this */
   #crosshair { position:absolute; left:50%; top:50%; width:34px; height:34px; margin:-17px 0 0 -17px;
     transition:transform .1s ease, opacity .1s; }
@@ -132,11 +168,12 @@
     display: none; transition: transform 0.08s ease-out, opacity 0.25s ease;
   }
   #hint { position:absolute; left:50%; bottom:22px; transform:translateX(-50%); font-size:11px;
-    letter-spacing:3px; opacity:.55; text-transform:uppercase; }
+    letter-spacing:3px; opacity:.55; text-transform:uppercase; transition: opacity 0.3s ease; }
   #mobileHint {
     position:absolute; left:50%; bottom:max(14px, env(safe-area-inset-bottom)); transform:translateX(-50%);
     font-size:10px; letter-spacing:2px; opacity:.75; text-transform:uppercase; white-space:nowrap;
     pointer-events:none; color:var(--cyan); text-shadow:0 0 8px rgba(79,242,255,.4); display:none;
+    transition: opacity 0.3s ease;
   }
   #overlay { position:fixed; inset:0; z-index:10; display:flex; align-items:center; justify-content:center;
     background:radial-gradient(circle at 50% 50%, rgba(0,30,40,.9), rgba(0,0,0,.97)); cursor:default;
@@ -168,14 +205,14 @@
 
   /* Fullscreen & Top Controls Visibility Guarantee */
   #fullscreenBtn {
-    display: inline-block !important; /* Force visibility */
+    display: inline-flex !important; /* Force visibility */
     pointer-events: auto;
     text-align: center;
     vertical-align: middle;
     white-space: nowrap;
   }
   #hudFullscreenBtn {
-    display: inline-block !important; /* Force visibility */
+    display: inline-flex !important; /* Force visibility */
     pointer-events: auto;
     text-align: center;
     vertical-align: middle;
@@ -578,12 +615,54 @@
   }
   body.touch-device #fullscreenBtn,
   body.touch-device #hudFullscreenBtn {
-    display: inline-block !important;
+    display: inline-flex !important;
     pointer-events: auto !important;
   }
   body.touch-device #topControls {
     display: inline-flex !important;
     pointer-events: auto !important;
+  }
+  body.touch-device #tl {
+    top: max(8px, env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
+    min-width: 136px;
+    padding: 6px 8px;
+    font-size: 9px;
+    letter-spacing: 1px;
+  }
+  body.touch-device #tl .tl-label-gap {
+    margin-top: 4px;
+  }
+  body.touch-device #tl .bar,
+  body.touch-device #tr .bar {
+    height: 6px;
+    margin-top: 3px;
+  }
+  body.touch-device #tr {
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    padding: 6px 8px;
+    font-size: 9px;
+    letter-spacing: 1px;
+  }
+  body.touch-device #tr .big {
+    font-size: 16px;
+    letter-spacing: 3px;
+  }
+  body.touch-device .hud-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 4px 8px;
+    font-size: 13px;
+    letter-spacing: 0;
+  }
+  body.touch-device .hud-btn-label {
+    display: none;
+  }
+  body.touch-device .arena-nameplate {
+    font-size: 10px;
+    padding: 1px 6px;
+    letter-spacing: 1px;
   }
   @media screen and (orientation: portrait) {
     body.touch-device #orientationOverlay {
@@ -697,7 +776,7 @@
   /* ───────────────────────── Grid Authorization Terminal Card ───────────────────────── */
   .auth-terminal-card {
     position: relative;
-    max-width: 480px;
+    max-width: 560px;
     width: 92vw;
     background: rgba(1, 14, 22, 0.94) !important;
     border: 1px solid rgba(79, 242, 255, 0.45) !important;
@@ -719,18 +798,29 @@
     width: 95vw !important;
     padding: 24px 28px !important;
   }
+  .auth-terminal-card.hub-view-config {
+    max-width: 580px !important;
+    width: 95vw !important;
+    padding: 24px 28px !important;
+  }
   .auth-terminal-card.hub-view-loadout .armory-card,
-  .auth-terminal-card.hub-view-directives .trophy-matrix-card {
+  .auth-terminal-card.hub-view-directives .trophy-matrix-card,
+  .auth-terminal-card.hub-view-config .settings-card {
     border: none !important;
     box-shadow: none !important;
     width: 100% !important;
-    max-height: 80vh !important;
+    max-width: 100% !important;
+    max-height: 75vh !important;
     background: transparent !important;
     padding: 0 !important;
   }
   /* Suppress redundant inner modal close/exit buttons when hosted within the Terminal Hub */
   .auth-terminal-card #armoryCloseBtn,
-  .auth-terminal-card #achievementsCloseBtn {
+  .auth-terminal-card #achievementsCloseBtn,
+  .auth-terminal-card #closeSettingsX,
+  .auth-terminal-card #closeSettingsBtn,
+  .auth-terminal-card .settings-modal-header,
+  .auth-terminal-card .settings-modal-footer {
     display: none !important;
   }
   .terminal-close-btn {
@@ -1060,7 +1150,8 @@
   .terminal-hub-nav {
     display: flex;
     align-items: center;
-    gap: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
     margin-bottom: 18px;
     border-bottom: 1px solid rgba(79, 242, 255, 0.15);
     padding-bottom: 0px;
@@ -1073,7 +1164,7 @@
     padding: 6px 4px 8px;
     font-family: inherit;
     font-size: 11px;
-    letter-spacing: 2px;
+    letter-spacing: 1.5px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.18s ease;
@@ -2358,26 +2449,27 @@
   <span id="offlineBannerText">[GRID OFFLINE] SYNC BUFFER ACTIVE // PROGRESS SAFEGUARDED</span>
 </div>
 <div id="hud">
+  <div id="arenaNameplates"></div>
   <div class="panel" id="tl">
     <div>Program Integrity</div>
     <div class="bar" id="hpbar"><i style="width:100%"></i></div>
-    <div style="margin-top:10px">Identity Disc</div>
+    <div class="tl-label-gap">Identity Disc</div>
     <div class="bar" id="discbar"><i style="width:100%"></i></div>
-    <div style="margin-top:10px">Energy</div>
+    <div class="tl-label-gap">Energy</div>
     <div class="bar" id="energybar"><i style="width:100%"></i></div>
   </div>
   <div class="panel" id="tr">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:6px">
+    <div id="trHeaderRow" style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px">
       <div id="roundLabel">Cycle <span id="wave" class="big">1</span></div>
       <div id="topControls" style="display:flex;align-items:center;gap:6px;pointer-events:auto;z-index:50;">
-        <button id="fullscreenBtn" data-id="hudFullscreenBtn" class="hud-btn" title="Toggle Fullscreen" aria-label="Toggle Fullscreen">⛶ FULLSCREEN</button>
-        <button id="pauseBtn" class="hud-btn">II PAUSE</button>
+        <button id="fullscreenBtn" data-id="hudFullscreenBtn" class="hud-btn" title="Toggle Fullscreen" aria-label="Toggle Fullscreen">⛶<span class="hud-btn-label"> FULLSCREEN</span></button>
+        <button id="pauseBtn" class="hud-btn" title="Pause" aria-label="Pause">II<span class="hud-btn-label"> PAUSE</span></button>
       </div>
     </div>
-    <div style="margin-top:4px">Score <span id="score">0</span></div>
+    <div id="scoreRow" style="margin-top:4px">Score <span id="score">0</span></div>
     <div id="subLabel" style="margin-top:4px">Hostiles <span id="foes">0</span></div>
-    <div id="bossBarWrap" style="display:none;margin-top:8px">
-      <div style="font-size:10px;letter-spacing:2px;color:var(--orange);margin-bottom:3px">RIVAL SHIELD</div>
+    <div id="bossBarWrap" style="display:none;margin-top:6px">
+      <div id="bossBarLabel" style="font-size:10px;letter-spacing:2px;color:var(--orange);margin-bottom:3px">RIVAL SHIELD</div>
       <div class="bar" id="bossbar"><i style="width:100%"></i></div>
     </div>
   </div>
@@ -2513,6 +2605,7 @@
       <button class="hub-nav-tab active" id="tabHubIdent" type="button">IDENT MATRIX</button>
       <button class="hub-nav-tab" id="tabHubLoadout" type="button">OUTFITTING</button>
       <button class="hub-nav-tab" id="tabHubDirectives" type="button">TROPHY MATRIX</button>
+      <button class="hub-nav-tab" id="tabHubConfig" type="button">SYSTEM CONFIG</button>
     </div>
 
     <!-- Active Identity Overview -->
@@ -2660,6 +2753,9 @@
     <!-- 4. HUB DIRECTIVES VIEW (Achievements / Trophy Matrix) -->
     <div id="hubDirectivesView" class="terminal-view-container" style="display:none;"></div>
 
+    <!-- 5. HUB CONFIG VIEW (System Settings) -->
+    <div id="hubConfigView" class="terminal-view-container" style="display:none;"></div>
+
     <!-- Console Readout -->
     <div id="terminalConsoleMsg" class="terminal-console">&gt; TERMINAL READY. AWAITING INPUT...</div>
 
@@ -2680,12 +2776,12 @@
   <div class="card" id="mainMenu">
   <h1>ARC</h1><h2>L E A G U E</h2>
   <div class="keys desktop-keys">
-    <b>W A S D</b><span>Move &amp; strafe across the grid</span>
+    <b>W A S D</b><span>Move &amp; strafe across the Arcfield</span>
     <b>Q / E</b><span>Apply curve spin — hook discs around pillars &amp; obstacles</span>
     <b>Mouse</b><span>Turn the camera freely — the crosshair is your aim point</span>
     <b>Wheel</b><span>Adjust look sensitivity</span>
     <b>Arc</b><span>A live dotted trajectory shows every bounce before you throw</span>
-    <b>Left Click</b><span>Throw identity disc (it ricochets &amp; returns)</span>
+    <b>Left Click</b><span>Throw kinetic disc (it ricochets &amp; returns)</span>
     <b>Right Click</b><span>Raise disc shield — deflects incoming</span>
     <b>Space</b><span>Jump — tap twice to air-jump, hold for height</span>
     <b>Shift</b><span>Dash (costs energy)</span>
@@ -2694,19 +2790,18 @@
   <div class="keys mobile-keys" style="display:none">
     <b>DRAG LEFT</b><span>Virtual Analog Stick — Move &amp; strafe</span>
     <b>DRAG RIGHT</b><span>Swipe anywhere to turn &amp; aim camera</span>
-    <b>THROW</b><span>Launch identity disc (ricochets &amp; returns)</span>
+    <b>THROW</b><span>Launch kinetic disc (ricochets &amp; returns)</span>
     <b>L / R</b><span>Curve spin — hook disc around obstacles</span>
     <b>SHIELD</b><span>Raise disc shield — deflect incoming attacks</span>
     <b>JUMP</b><span>Tap to air-jump, hold for maximum height</span>
     <b>DASH</b><span>Instant directional sprint impulse</span>
-    <b>PAUSE</b><span>Tap top right II button to suspend grid</span>
+    <b>PAUSE</b><span>Tap top right II button to suspend simulation</span>
   </div>
   <div class="mode-select" id="mainMenuButtons">
     <button id="campaignBtn" class="mode-btn campaign-btn">LEAGUE CIRCUIT</button>
     <button id="swarmBtn" class="mode-btn swarm-btn">ENTER ARCFIELD (SURVIVAL)</button>
     <button id="hostMatchBtn" class="mode-btn multi-btn">HOST ARCFIELD MATCH</button>
     <button id="joinOnlineBtn" class="mode-btn multi-btn">JOIN ARCFIELD MATCH</button>
-    <button id="settingsBtn" class="mode-btn settings-btn" style="border-color:rgba(79,242,255,0.7);">SYSTEM CONFIG</button>
     <!-- Legacy compatibility elements for tests & programmatic navigation -->
     <button id="armoryBtn" class="mode-btn armory-btn" style="display:none;min-width:44px;min-height:44px;" aria-hidden="true">OUTFITTING</button>
     <button id="achievementsBtn" class="mode-btn achievements-btn" style="display:none;min-width:44px;min-height:44px;" aria-hidden="true">TROPHY MATRIX</button>

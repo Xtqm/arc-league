@@ -299,6 +299,8 @@ export function bindPauseAndModalEvents() {
   if (pauseSettingsBtn) {
     pauseSettingsBtn.onclick = (e) => {
       e.stopPropagation();
+      settingsModal._customContainer = null;
+      settingsModal._inHub = false;
       settingsModal.show();
     };
   }

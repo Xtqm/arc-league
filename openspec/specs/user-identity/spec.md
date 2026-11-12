@@ -60,7 +60,7 @@ The system SHALL render a persistent identity status indicator in the top-right 
 - **THEN** the main menu identity badge updates immediately without requiring a page reload or menu re-initialization.
 
 ### Requirement: Grid Authorization Terminal Modal
-The system SHALL provide a diegetic Grid Authorization Terminal modal interface aligned with the Main Menu design language, featuring clean legible typography, rounded glassmorphism, an authenticated Program Dossier hub, elevated Quick Sync authentication, a 2-step account creation wizard with Callsign pre-fill, and dedicated exit control.
+The system SHALL provide a diegetic Grid Authorization Terminal modal interface aligned with the Main Menu design language, featuring clean legible typography, rounded glassmorphism, an authenticated Program Dossier hub, elevated Quick Sync authentication, a 2-step account creation wizard with Callsign pre-fill, integrated Outfitting, Trophy Matrix, and System Config views, and a dedicated exit control.
 
 #### Scenario: Opening authorization terminal
 - **WHEN** the player activates the identity header trigger or `[ SECURE IDENTITY ]` button
@@ -91,8 +91,8 @@ The system SHALL provide a diegetic Grid Authorization Terminal modal interface 
 - **THEN** the terminal switches the active view from the dossier to the authentication wizard (Step 1), permitting sign in with alternative credentials or new account creation.
 
 #### Scenario: Terminal tabbed navigation
-- **WHEN** the player activates the hub navigation tabs (`[ IDENT MATRIX ]`, `[ LOADOUT ]`, `[ DIRECTIVES ]`)
-- **THEN** the terminal switches sub-views in real time, rendering the 3D Armory catalog under `[ LOADOUT ]`, the Trophy Matrix under `[ DIRECTIVES ]`, and the identity dossier under `[ IDENT MATRIX ]` without exiting the modal.
+- **WHEN** the player activates the hub navigation tabs (`IDENT MATRIX`, `OUTFITTING`, `TROPHY MATRIX`, `SYSTEM CONFIG`)
+- **THEN** the terminal switches sub-views in real time, rendering the identity dossier/auth wizard under `IDENT MATRIX`, the 3D Armory catalog under `OUTFITTING`, the Trophy Matrix under `TROPHY MATRIX`, and System Settings under `SYSTEM CONFIG` without exiting the modal.
 
 ### Requirement: PointerLock and Canvas Modal Safety
 The system SHALL safely isolate mouse and touch input between active modal terminals and the Three.js canvas, guaranteeing PointerLock release upon terminal launch.

@@ -1,5 +1,6 @@
 import { storageManager } from './storage/StorageManager.js';
 import { setMasterVolume, setSFXVolume } from '../audio/synth.js';
+import { state } from './state.js';
 
 export const DEFAULT_SETTINGS = Object.freeze({
   displayMode: 'fullscreen', // 'fullscreen' | 'windowed'
@@ -8,7 +9,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   sfxVolume: 1.0,            // 0.0 - 1.0
   muteOnBlur: true,
   bloom: true,
-  particles: true
+  particles: true,
+  touchSensitivity: 1.0,     // 0.5 - 2.0
+  touchInertia: 'smooth',    // 'smooth' | 'light' | 'off'
+  invertY: false
 });
 
 export class SettingsManager {
@@ -38,12 +42,22 @@ export class SettingsManager {
   }
 
   set(key, value) {
-    this.settings[key] = value;
+    let normalized = value;
+    if (key === 'touchSensitivity') {
+      const n = Number(value);
+      normalized = Number.isFinite(n) ? Math.max(0.5, Math.min(2.0, n)) : DEFAULT_SETTINGS.touchSensitivity;
+    } else if (key === 'touchInertia') {
+      const s = String(value).toLowerCase();
+      normalized = (s === 'smooth' || s === 'light' || s === 'off') ? s : DEFAULT_SETTINGS.touchInertia;
+    } else if (key === 'invertY') {
+      normalized = Boolean(value);
+    }
+    this.settings[key] = normalized;
     try {
-      storageManager.set(`settings.${key}`, value);
+      storageManager.set(`settings.${key}`, normalized);
     } catch (_) {}
-    this.apply(key, value);
-    this.emitChange(key, value);
+    this.apply(key, normalized);
+    this.emitChange(key, normalized);
   }
 
   setAll(newSettings) {
@@ -60,12 +74,15 @@ export class SettingsManager {
       setMasterVolume(value);
     } else if (key === 'sfxVolume') {
       setSFXVolume(value);
+    } else if (key === 'invertY') {
+      state.invertY = Boolean(value);
     }
   }
 
   applyAll() {
     setMasterVolume(this.settings.masterVolume);
     setSFXVolume(this.settings.sfxVolume);
+    state.invertY = Boolean(this.settings.invertY);
   }
 
   onChange(fn) {

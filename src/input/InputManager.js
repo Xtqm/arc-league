@@ -2,7 +2,7 @@ import * as THREE from '../../vendor/three.module.js';
 import { state } from '../core/state.js';
 import { initKeyboard, onDown, onUp, codeOf, EAT, getPlayerCurveIntent } from './keyboard.js';
 import { initMouse, tryLock, isLocked, lockFailed, setCursor, focusGame, look, showSens, sens } from './mouse.js';
-import { initTouch, touchMove, moveStartPos, lookLastPos, joyBase, joyThumb, R_STICK, showJoystick, updateJoystick, hideJoystick, updateCurveButtons, updateTouchMomentum, bindMobileButtons } from './touch.js';
+import { initTouch, touchMove, moveStartPos, lookLastPos, joyBase, joyThumb, R_STICK, showJoystick, updateJoystick, hideJoystick, updateCurveButtons, updateTouchMomentum, resetTouchInputs, bindMobileButtons } from './touch.js';
 import {
   initGamepad,
   pollGamepads,
@@ -118,6 +118,7 @@ export {
   hideJoystick,
   updateCurveButtons,
   updateTouchMomentum,
+  resetTouchInputs,
   bindMobileButtons,
   initGamepad,
   pollGamepads,

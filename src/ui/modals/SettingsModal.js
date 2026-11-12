@@ -7,6 +7,7 @@
 import { settingsManager } from '../../core/settings.js';
 import { toggleFullScreen, isFullScreen } from '../modals.js';
 import { setCursor } from '../../input/InputManager.js';
+import { authManager } from '../../auth/AuthManager.js';
 
 export class SettingsModal {
   constructor(options = {}) {
@@ -81,6 +82,9 @@ export class SettingsModal {
     const currentMute = this.settings.get('muteOnBlur', true);
     const currentBloom = this.settings.get('bloom', true);
     const currentParticles = this.settings.get('particles', true);
+    const currentTouchSens = Math.round(Number(this.settings.get('touchSensitivity', 1.0)) * 100);
+    const currentInertia = String(this.settings.get('touchInertia', 'smooth')).toLowerCase();
+    const currentInvertY = Boolean(this.settings.get('invertY', false));
 
     el.innerHTML = `
       <div class="card settings-card" style="max-width:540px; text-align:left; padding:28px 32px; border:1px solid rgba(79,242,255,0.6); box-shadow:0 0 35px rgba(79,242,255,0.22); background:rgba(2,16,24,0.95); color:var(--cyan); border-radius:8px;">
@@ -136,7 +140,7 @@ export class SettingsModal {
         </div>
 
         <!-- Section: Graphics -->
-        <div style="margin-bottom:24px;">
+        <div style="margin-bottom:22px;">
           <div style="font-size:12px; letter-spacing:2px; font-weight:bold; margin-bottom:10px; color:#fff; text-transform:uppercase;">Visual Quality</div>
 
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; margin-bottom:8px;">
@@ -147,6 +151,33 @@ export class SettingsModal {
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px;">
             <span>PARTICLE SPARK DENSITY</span>
             <button id="toggleParticlesBtn" class="btn" style="padding:4px 12px; font-size:11px; cursor:pointer;">${currentParticles ? 'HIGH' : 'LOW'}</button>
+          </div>
+        </div>
+
+        <!-- Section: Controls & Touch -->
+        <div style="margin-bottom:24px;">
+          <div style="font-size:12px; letter-spacing:2px; font-weight:bold; margin-bottom:10px; color:#fff; text-transform:uppercase;">Controls &amp; Touch</div>
+
+          <div style="margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+              <span>TOUCH AIM SENSITIVITY</span>
+              <span id="touchSensReadout">${currentTouchSens}%</span>
+            </div>
+            <input id="touchSensSlider" type="range" min="50" max="200" step="10" value="${currentTouchSens}" style="width:100%; accent-color:var(--cyan); cursor:pointer;">
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; margin-bottom:10px;">
+            <span>TOUCH CAMERA INERTIA</span>
+            <div style="display:flex; gap:6px;">
+              <button class="btn inertia-btn ${currentInertia === 'smooth' ? 'hot' : ''}" data-inertia="smooth" style="padding:4px 8px; font-size:10px; cursor:pointer;">SMOOTH</button>
+              <button class="btn inertia-btn ${currentInertia === 'light' ? 'hot' : ''}" data-inertia="light" style="padding:4px 8px; font-size:10px; cursor:pointer;">LIGHT</button>
+              <button class="btn inertia-btn ${currentInertia === 'off' ? 'hot' : ''}" data-inertia="off" style="padding:4px 8px; font-size:10px; cursor:pointer;">OFF</button>
+            </div>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px;">
+            <span>INVERT Y-AXIS</span>
+            <button id="toggleInvertYBtn" class="btn" style="padding:4px 12px; font-size:11px; cursor:pointer;">${currentInvertY ? 'ENABLED' : 'DISABLED'}</button>
           </div>
         </div>
 
@@ -243,6 +274,39 @@ export class SettingsModal {
         const next = !this.settings.get('particles', true);
         this.settings.set('particles', next);
         particlesBtn.textContent = next ? 'HIGH' : 'LOW';
+      };
+    }
+
+    // Touch & Controls
+    const touchSensSlider = el.querySelector('#touchSensSlider');
+    const touchSensReadout = el.querySelector('#touchSensReadout');
+    if (touchSensSlider) {
+      touchSensSlider.oninput = (e) => {
+        const val = Number(e.target.value);
+        if (touchSensReadout) touchSensReadout.textContent = `${val}%`;
+        this.settings.set('touchSensitivity', val / 100);
+      };
+    }
+
+    const inertiaButtons = el.querySelectorAll('.inertia-btn');
+    inertiaButtons.forEach((btn) => {
+      btn.onclick = () => {
+        inertiaButtons.forEach((b) => b.classList.remove('hot'));
+        btn.classList.add('hot');
+        const mode = btn.getAttribute('data-inertia');
+        this.settings.set('touchInertia', mode);
+      };
+    });
+
+    const invertYBtn = el.querySelector('#toggleInvertYBtn');
+    if (invertYBtn) {
+      invertYBtn.onclick = () => {
+        const next = !this.settings.get('invertY', false);
+        this.settings.set('invertY', next);
+        if (authManager && authManager.currentUser && typeof authManager.recordSettings === 'function') {
+          authManager.recordSettings({ invertY: next });
+        }
+        invertYBtn.textContent = next ? 'ENABLED' : 'DISABLED';
       };
     }
   }

@@ -10,7 +10,7 @@ import { message, shake, showGameOver } from '../ui/UIManager.js';
 import { getTileAt, rebuildArenaTiles, pillars } from './Arena.js';
 import { spawnDisc, disposeDiscEntity } from './Disc.js';
 import { getPlayerCurveIntent } from '../input/keyboard.js';
-import { touchMove, updateCurveButtons, updateTouchMomentum } from '../input/touch.js';
+import { touchMove, updateCurveButtons, updateTouchMomentum, resetTouchInputs } from '../input/touch.js';
 import { getLeftStick, getRightStick, playGamepadHaptics } from '../input/gamepad.js';
 import { getRoomRef, roomUpdateDoc } from '../network/firebaseSetup.js';
 import { showMultiplayerDefeat, reportMultiplayerMatchEnd } from '../network/roomManager.js';
@@ -418,6 +418,7 @@ export function damagePlayer(amount, from) {
     state.player.alive = false;
     state.running = false;
     state.gameOverT = 0;
+    resetTouchInputs();
     burst(state.player.pos.clone().setY(state.player.y + 1.4), config.CYAN, 90, 16);
     if (state.player.obj) state.player.obj.visible = false;
 
@@ -474,8 +475,7 @@ export function resetRound(spawnX = 0, spawnZ = 14, yaw = Math.PI) {
   state.player.vy = 0;
   state.player.grounded = true;
   state.player.jumps = 0;
-  state.lookMomentumX = 0;
-  state.lookMomentumY = 0;
+  resetTouchInputs();
   if (state.player.obj) {
     state.player.obj.position.copy(state.player.pos);
     state.player.obj.rotation.y = state.player.yaw;

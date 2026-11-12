@@ -524,6 +524,9 @@ async function runMobileTests() {
   const test8 = await page.evaluate(async () => {
     const dbg = window.__dbg;
     dbg.setPlayerPos(0, 0, 0);
+    dbg.state.player.hp = 100;
+    dbg.state.player.invuln = 999;
+    dbg.state.player.alive = true;
     dbg.setYaw(0);
 
     // Part A: Dynamic sensitivity check (sens * 2.5)
@@ -576,7 +579,7 @@ async function runMobileTests() {
       cancelable: true
     }));
 
-    // Part B: Swipe momentum (inertia) test
+    // Part B: Smoothed frame-rate-independent velocity inertia test
     dbg.setYaw(0);
     const touchStart2 = new Touch({
       identifier: 302,
@@ -597,8 +600,8 @@ async function runMobileTests() {
     const touchMove2 = new Touch({
       identifier: 302,
       target: document.body,
-      clientX: 500, // dX = -100
-      clientY: 180, // dY = -20
+      clientX: 500, // dX = -100 -> clamped -2200 px/s
+      clientY: 180, // dY = -20  -> -1250 px/s
       screenX: 500,
       screenY: 180,
       pageX: 500,
@@ -611,10 +614,10 @@ async function runMobileTests() {
     }));
 
     const tStateAfterMove = dbg.touchState();
-    const momentumCaptured = tStateAfterMove.lookMomentumX === -100 && tStateAfterMove.lookMomentumY === -20;
+    const momentumCaptured = tStateAfterMove.lookMomentumX === -2200 && tStateAfterMove.lookMomentumY === -1250;
     const yawAtRelease = dbg.yaw();
 
-    // Release finger -> lookId becomes null, momentum remains
+    // Release finger -> lookId becomes null, velocity remains
     window.dispatchEvent(new TouchEvent('touchend', {
       changedTouches: [touchMove2],
       touches: [],
@@ -623,28 +626,36 @@ async function runMobileTests() {
 
     const lookClearedOnRelease = dbg.touchState().lookId === null;
 
-    // Step 5 frames to observe inertia drift
+    // Step 5 frames at 60Hz (0.016s) to observe smooth inertia drift
     for (let f = 0; f < 5; f++) dbg.step(0.016);
     const yawAfterDrift = dbg.yaw();
     const hasDrifted = Math.abs(yawAfterDrift - yawAtRelease) > 0.01;
-    // Since dX was -100 (swipe left), yaw should increase
     const driftedInCorrectDirection = yawAfterDrift > yawAtRelease;
 
-    // Step until momentum is fully degraded by friction
-    for (let f = 0; f < 60; f++) dbg.step(0.016);
+    // Step remaining frames (~1s total) until exponential damping hits 0
+    for (let f = 0; f < 65; f++) dbg.step(0.016);
     const momentumFinal = dbg.touchState();
     const momentumDecayedToZero = momentumFinal.lookMomentumX === 0 && momentumFinal.lookMomentumY === 0;
+    const totalDrift60Hz = dbg.yaw() - yawAtRelease;
+
+    // Compare total drift over same duration at 120Hz (0.008s steps)
+    dbg.setYaw(0);
+    const start120 = new Touch({ identifier: 312, target: document.body, clientX: 600, clientY: 200 });
+    window.dispatchEvent(new TouchEvent('touchstart', { changedTouches: [start120], touches: [start120], cancelable: true }));
+    const move120 = new Touch({ identifier: 312, target: document.body, clientX: 500, clientY: 180 });
+    window.dispatchEvent(new TouchEvent('touchmove', { changedTouches: [move120], touches: [move120], cancelable: true }));
+    const yawAtRelease120 = dbg.yaw();
+    window.dispatchEvent(new TouchEvent('touchend', { changedTouches: [move120], touches: [], cancelable: true }));
+    for (let f = 0; f < 140; f++) dbg.step(0.008);
+    const totalDrift120Hz = dbg.yaw() - yawAtRelease120;
+    const frameRateInvariant = Math.abs(totalDrift60Hz - totalDrift120Hz) < 0.005;
 
     // Part C: Tapping screen stops momentum instantly
     const touchStart3 = new Touch({
       identifier: 303,
       target: document.body,
       clientX: 600,
-      clientY: 200,
-      screenX: 600,
-      screenY: 200,
-      pageX: 600,
-      pageY: 200
+      clientY: 200
     });
     window.dispatchEvent(new TouchEvent('touchstart', {
       changedTouches: [touchStart3],
@@ -655,12 +666,8 @@ async function runMobileTests() {
     const touchMove3 = new Touch({
       identifier: 303,
       target: document.body,
-      clientX: 450, // dX = -150
-      clientY: 200,
-      screenX: 450,
-      screenY: 200,
-      pageX: 450,
-      pageY: 200
+      clientX: 450,
+      clientY: 200
     });
     window.dispatchEvent(new TouchEvent('touchmove', {
       changedTouches: [touchMove3],
@@ -674,21 +681,15 @@ async function runMobileTests() {
       cancelable: true
     }));
 
-    // Step 2 frames - momentum active
     dbg.step(0.016);
     dbg.step(0.016);
-    const momentumActiveBeforeTap = Math.abs(dbg.touchState().lookMomentumX) > 1.0;
+    const momentumActiveBeforeTap = Math.abs(dbg.touchState().lookMomentumX) > 10.0;
 
-    // Now tap the screen in the look zone
     const tapTouch = new Touch({
       identifier: 304,
       target: document.body,
       clientX: 620,
-      clientY: 210,
-      screenX: 620,
-      screenY: 210,
-      pageX: 620,
-      pageY: 210
+      clientY: 210
     });
     window.dispatchEvent(new TouchEvent('touchstart', {
       changedTouches: [tapTouch],
@@ -697,22 +698,32 @@ async function runMobileTests() {
     }));
 
     const momentumStoppedOnTap = dbg.touchState().lookMomentumX === 0 && dbg.touchState().lookMomentumY === 0;
-
     const yawAtTap = dbg.yaw();
-    // Step 5 frames
     for (let f = 0; f < 5; f++) dbg.step(0.016);
-    const yawAfterTapStep = dbg.yaw();
-    const noDriftAfterTap = yawAfterTapStep === yawAtTap;
+    const noDriftAfterTap = dbg.yaw() === yawAtTap;
 
-    // Release tap
     window.dispatchEvent(new TouchEvent('touchend', {
       changedTouches: [tapTouch],
       touches: [],
       cancelable: true
     }));
 
-    // Part D: Desktop mouse look check
+    // Part D: Spike clamp check + pause-before-lift staleness cutoff
+    dbg.setYaw(0);
+    const startSpike = new Touch({ identifier: 305, target: document.body, clientX: 600, clientY: 200 });
+    window.dispatchEvent(new TouchEvent('touchstart', { changedTouches: [startSpike], touches: [startSpike], cancelable: true }));
+    const moveSpike = new Touch({ identifier: 305, target: document.body, clientX: 50, clientY: 200 }); // dX = -550 -> clamped 240
+    window.dispatchEvent(new TouchEvent('touchmove', { changedTouches: [moveSpike], touches: [moveSpike], cancelable: true }));
+    const yawSpikeDelta = Math.abs(dbg.yaw());
+    const spikeClamped = Math.abs(yawSpikeDelta - 240 * baseSens * 2.5) < 0.005;
+    // Wait past STALE_RELEASE_MS (80ms) before releasing -> velocity should zero cleanly
+    await new Promise(r => setTimeout(r, 110));
+    window.dispatchEvent(new TouchEvent('touchend', { changedTouches: [moveSpike], touches: [], cancelable: true }));
+    const staleCutoffZeroed = dbg.touchState().lookMomentumX === 0 && dbg.touchState().lookMomentumY === 0;
+
+    // Part E: Desktop mouse look check
     dbg.setTouchDevice(false);
+    dbg.step(0.016);
     const desktopLookMomentum = dbg.touchState().lookMomentumX === 0 && dbg.touchState().lookMomentumY === 0;
     dbg.setTouchDevice(true);
 
@@ -724,9 +735,12 @@ async function runMobileTests() {
       hasDrifted,
       driftedInCorrectDirection,
       momentumDecayedToZero,
+      frameRateInvariant,
       momentumActiveBeforeTap,
       momentumStoppedOnTap,
       noDriftAfterTap,
+      spikeClamped,
+      staleCutoffZeroed,
       desktopLookMomentum
     };
   });
@@ -734,11 +748,172 @@ async function runMobileTests() {
   console.log('Test 8 results:', test8);
   if (test8.isDefaultSens && test8.dynamicSensAccurate && test8.momentumCaptured &&
       test8.lookClearedOnRelease && test8.hasDrifted && test8.driftedInCorrectDirection &&
-      test8.momentumDecayedToZero && test8.momentumActiveBeforeTap && test8.momentumStoppedOnTap &&
-      test8.noDriftAfterTap && test8.desktopLookMomentum) {
-    console.log('>>> TEST 8 PASSED: Camera inertia drifts smoothly, stops on tap, dynamic sens scales cleanly, desktop unaffected!');
+      test8.momentumDecayedToZero && test8.frameRateInvariant && test8.momentumActiveBeforeTap &&
+      test8.momentumStoppedOnTap && test8.noDriftAfterTap && test8.spikeClamped &&
+      test8.staleCutoffZeroed && test8.desktopLookMomentum) {
+    console.log('>>> TEST 8 PASSED: Smooth velocity inertia is dt-invariant, clamps spikes, cancels when paused, and stops on tap!');
   } else {
     throw new Error(`Test 8 FAILED: ${JSON.stringify(test8)}`);
+  }
+
+  // -------------------------------------------------------------
+  // TEST 9: Throw Button Aim-Drag Steering & Lifecycle Reset
+  // -------------------------------------------------------------
+  console.log('\n--- TEST 9: Throw Aim-Drag Steering & Lifecycle Reset ---');
+  const test9 = await page.evaluate(() => {
+    const dbg = window.__dbg;
+    const btnThrow = document.getElementById('btnThrow');
+    const btnJump = document.getElementById('btnJump');
+    dbg.setPlayerPos(0, 0, 0);
+    dbg.state.player.hp = 100;
+    dbg.state.player.invuln = 999;
+    dbg.state.player.alive = true;
+    dbg.setYaw(0);
+    dbg.state.player.hasDisc = true;
+    dbg.state.player.noDiscTimer = 0;
+
+    // 1. Quick tap within 4px slop throws without moving camera
+    const startTap = new Touch({ identifier: 401, target: btnThrow, clientX: 800, clientY: 500 });
+    btnThrow.dispatchEvent(new TouchEvent('touchstart', { changedTouches: [startTap], touches: [startTap], cancelable: true, bubbles: true }));
+    const moveSlop = new Touch({ identifier: 401, target: btnThrow, clientX: 802, clientY: 501 }); // ~2.2px <= 4px slop
+    window.dispatchEvent(new TouchEvent('touchmove', { changedTouches: [moveSlop], touches: [moveSlop], cancelable: true, bubbles: true }));
+    const yawAfterSlop = dbg.yaw();
+    const quickTapSteady = Math.abs(yawAfterSlop) < 1e-6 && !dbg.touchState().throwDragActive;
+    const discBeforeTap = dbg.discs().length;
+    btnThrow.dispatchEvent(new TouchEvent('touchend', { changedTouches: [moveSlop], touches: [], cancelable: true, bubbles: true }));
+    const quickTapThrew = dbg.discs().length === discBeforeTap + 1;
+
+    // 2. Hold throw + secondary unrelated Jump finger + drag > 4px -> aims & charges cleanly
+    dbg.state.player.hasDisc = true;
+    dbg.state.player.noDiscTimer = 0;
+    dbg.setYaw(0);
+    dbg.state.player.pitch = 0;
+    const startAim = new Touch({ identifier: 402, target: btnThrow, clientX: 800, clientY: 500 });
+    btnThrow.dispatchEvent(new TouchEvent('touchstart', { changedTouches: [startAim], touches: [startAim], cancelable: true, bubbles: true }));
+    const chargingStarted = dbg.state.player.chargingThrow === true && dbg.touchState().throwTouchId === 402;
+    dbg.step(0.3);
+
+    // Secondary unrelated touch on Jump button must NOT end Throw hold
+    const jumpTouch = new Touch({ identifier: 499, target: btnJump, clientX: 740, clientY: 550 });
+    btnJump.dispatchEvent(new TouchEvent('touchstart', { changedTouches: [jumpTouch], touches: [startAim, jumpTouch], cancelable: true, bubbles: true }));
+    btnJump.dispatchEvent(new TouchEvent('touchend', { changedTouches: [jumpTouch], touches: [startAim], cancelable: true, bubbles: true }));
+    const throwHeldAcrossSecondary = dbg.state.player.chargingThrow === true && dbg.touchState().throwTouchId === 402;
+
+    const pitchBeforeThrowDrag = dbg.pitch();
+    const moveAim = new Touch({ identifier: 402, target: btnThrow, clientX: 700, clientY: 460 });
+    btnThrow.dispatchEvent(new TouchEvent('touchmove', { changedTouches: [moveAim], touches: [moveAim], cancelable: true, bubbles: true }));
+    const dragSteeredAim = dbg.yaw() > 0.4 && dbg.pitch() > pitchBeforeThrowDrag && dbg.touchState().throwDragActive === true;
+
+    const discBeforeCharged = dbg.discs().length;
+    const yawAtThrowRelease = dbg.yaw();
+    btnThrow.dispatchEvent(new TouchEvent('touchend', { changedTouches: [moveAim], touches: [], cancelable: true, bubbles: true }));
+    const chargedThrew = dbg.discs().length === discBeforeCharged + 1 && dbg.touchState().throwTouchId === null;
+    for (let f = 0; f < 5; f++) dbg.step(0.016);
+    const zeroPostThrowDrift = dbg.yaw() === yawAtThrowRelease;
+
+    // 3. Pause lifecycle reset clears stuck touches
+    const stuckMove = new Touch({ identifier: 501, target: document.body, clientX: 120, clientY: 300 });
+    const stuckLook = new Touch({ identifier: 502, target: document.body, clientX: 600, clientY: 220 });
+    window.dispatchEvent(new TouchEvent('touchstart', { changedTouches: [stuckMove, stuckLook], touches: [stuckMove, stuckLook], cancelable: true }));
+    dbg.pauseGame();
+    const tPaused = dbg.touchState();
+    const resetOnPause = tPaused.moveTouchId === null && tPaused.lookTouchId === null &&
+      dbg.touchMove().x === 0 && dbg.touchMove().y === 0 && tPaused.lookMomentumX === 0;
+    document.getElementById('resumeBtn')?.click();
+
+    return {
+      quickTapSteady,
+      quickTapThrew,
+      chargingStarted,
+      throwHeldAcrossSecondary,
+      dragSteeredAim,
+      chargedThrew,
+      zeroPostThrowDrift,
+      resetOnPause
+    };
+  });
+
+  console.log('Test 9 results:', test9);
+  if (test9.quickTapSteady && test9.quickTapThrew && test9.chargingStarted &&
+      test9.throwHeldAcrossSecondary && test9.dragSteeredAim && test9.chargedThrew &&
+      test9.zeroPostThrowDrift && test9.resetOnPause) {
+    console.log('>>> TEST 9 PASSED: Throw-hold aim-drag, quick-tap slop protection, multi-touch hold, and pause cleanup verified!');
+  } else {
+    throw new Error(`Test 9 FAILED: ${JSON.stringify(test9)}`);
+  }
+
+  // -------------------------------------------------------------
+  // TEST 10: Touch Camera Settings (Sensitivity, Inertia & Invert Y)
+  // -------------------------------------------------------------
+  console.log('\n--- TEST 10: Touch & Camera Preferences in SettingsModal ---');
+  const test10 = await page.evaluate(async () => {
+    const dbg = window.__dbg;
+    const { settingsManager } = await import('/src/core/settings.js');
+    dbg.pauseGame();
+    document.getElementById('pauseSettingsBtn')?.click();
+
+    const slider = document.getElementById('touchSensSlider');
+    const offBtn = document.querySelector('.inertia-btn[data-inertia="off"]');
+    const lightBtn = document.querySelector('.inertia-btn[data-inertia="light"]');
+    const invertBtn = document.getElementById('toggleInvertYBtn');
+    const controlsPresent = !!(slider && offBtn && lightBtn && invertBtn);
+
+    // Mutate to 150% sens, OFF inertia (1:1), and invertY = true
+    slider.value = '150';
+    slider.oninput({ target: slider });
+    offBtn.click();
+    invertBtn.click();
+
+    const storedAfterEdit = {
+      touchSensitivity: settingsManager.get('touchSensitivity'),
+      touchInertia: settingsManager.get('touchInertia'),
+      invertY: settingsManager.get('invertY'),
+      stateInvertY: dbg.state.invertY
+    };
+
+    document.getElementById('closeSettingsBtn')?.click();
+    document.getElementById('resumeBtn')?.click();
+
+    dbg.setYaw(0);
+    dbg.state.player.pitch = 0;
+    const sTouch = new Touch({ identifier: 601, target: document.body, clientX: 600, clientY: 200 });
+    window.dispatchEvent(new TouchEvent('touchstart', { changedTouches: [sTouch], touches: [sTouch], cancelable: true }));
+    const mTouch = new Touch({ identifier: 601, target: document.body, clientX: 560, clientY: 180 }); // dX=-40, dY=-20
+    window.dispatchEvent(new TouchEvent('touchmove', { changedTouches: [mTouch], touches: [mTouch], cancelable: true }));
+    const yawAt150 = dbg.yaw();
+    const pitchInverted = dbg.pitch();
+    window.dispatchEvent(new TouchEvent('touchend', { changedTouches: [mTouch], touches: [], cancelable: true }));
+    const offInertiaZeroed = dbg.touchState().lookMomentumX === 0 && dbg.touchState().lookMomentumY === 0;
+
+    const expectedYaw150 = 40 * dbg.sens() * 2.5 * 1.5;
+    const sensScaled = Math.abs(yawAt150 - expectedYaw150) < 0.005;
+    // With dY=-20 and invertY=true, pitch decreases (-20 * -1 => subtracting positive) -> pitch < 0
+    const yInvertedApplied = pitchInverted < -0.05;
+
+    // Restore clean defaults
+    settingsManager.set('touchSensitivity', 1.0);
+    settingsManager.set('touchInertia', 'smooth');
+    settingsManager.set('invertY', false);
+
+    return {
+      controlsPresent,
+      storedAfterEdit,
+      offInertiaZeroed,
+      sensScaled,
+      yInvertedApplied
+    };
+  });
+
+  console.log('Test 10 results:', test10);
+  if (test10.controlsPresent &&
+      test10.storedAfterEdit.touchSensitivity === 1.5 &&
+      test10.storedAfterEdit.touchInertia === 'off' &&
+      test10.storedAfterEdit.invertY === true &&
+      test10.storedAfterEdit.stateInvertY === true &&
+      test10.offInertiaZeroed && test10.sensScaled && test10.yInvertedApplied) {
+    console.log('>>> TEST 10 PASSED: Touch sensitivity, inertia presets, and invertY controls persisted and applied!');
+  } else {
+    throw new Error(`Test 10 FAILED: ${JSON.stringify(test10)}`);
   }
 
   console.log('\n======================================================');

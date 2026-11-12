@@ -1,5 +1,5 @@
 import { state } from '../core/state.js';
-import { tryLock, focusGame, setCursor } from '../input/InputManager.js';
+import { tryLock, focusGame, setCursor, resetTouchInputs } from '../input/InputManager.js';
 import { el } from './hud.js';
 import { duelEconomyBridge } from '../modes/DuelEconomyBridge.js';
 import { settingsModal } from './modals/SettingsModal.js';
@@ -111,6 +111,7 @@ export function pauseGame() {
   if (!state.running || state.paused) return;
   state.paused = true;
   state.lastPauseToggle = performance.now();
+  resetTouchInputs();
   syncGameStateRichPresence();
   const pm = document.getElementById('pauseMenu');
   if (pm) {
@@ -162,6 +163,7 @@ if (typeof window !== 'undefined') {
 }
 
 export function showGameOver(customTitle, customSubtitle) {
+  resetTouchInputs();
   const isDuelMode = state.gameMode === 'duel' || state.gameMode === 'duel_ai';
   if (isDuelMode) {
     duelEconomyBridge.processMatchOutcome('defeat', 'ai');

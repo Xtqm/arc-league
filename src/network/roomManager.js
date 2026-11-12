@@ -9,7 +9,7 @@ import { tiles, tileMatIntact, tileEdgeMatIntact, triggerTileWarning, applySecto
 import { getGridIdForMap } from '../ui/arenaSelector.js';
 import { spawnDisc } from '../entities/Disc.js';
 import { initNetwork, getRoomRef, roomSetDoc, roomGetDoc, roomUpdateDoc, roomOnSnapshot } from './firebaseSetup.js';
-import { tryLock, focusGame, setCursor } from '../input/InputManager.js';
+import { tryLock, focusGame, setCursor, resetTouchInputs } from '../input/InputManager.js';
 import { shake } from '../ui/UIManager.js';
 import { updateHUD, message, el, resetHintVisibility, clearArenaNameplates, updateArenaNameplates } from '../ui/hud.js';
 import { requestFullScreen } from '../ui/modals.js';
@@ -1136,6 +1136,7 @@ export function startMultiplayerDuel(role, roomCode, mode = '1v1', options = {})
   state.running = true;
   state.paused = false;
   state.justResumed = true;
+  resetTouchInputs();
   state.gameOverT = 0;
   state.gameOverReason = '';
 
@@ -1525,6 +1526,7 @@ export function teardownMultiplayer({ flushPeerMs = 0 } = {}) {
   state.gameMode = 'swarm';
   state.running = false;
   state.paused = false;
+  resetTouchInputs();
   if (typeof document !== 'undefined' && document.pointerLockElement) {
     document.exitPointerLock();
   }

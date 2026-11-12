@@ -1,5 +1,5 @@
 import { state } from '../core/state.js';
-import { tryLock, focusGame, setCursor } from '../input/InputManager.js';
+import { tryLock, focusGame, setCursor, resetTouchInputs } from '../input/InputManager.js';
 import { resetHintVisibility, clearArenaNameplates } from './hud.js';
 import { requestFullScreen, toggleFullScreen, isFullScreen, bindPauseAndModalEvents } from './modals.js';
 import { showJoinInputModal, onClickCreateRoom, onClickConfirmJoin, copyRoomCode, teardownMultiplayer, startMatchmakingWithWarmup } from '../network/roomManager.js';
@@ -103,6 +103,7 @@ export function showModeSelect() {
   state.armoryModalOpen = false;
   state.paused = false;
   state.running = false;
+  resetTouchInputs();
   updateSteamRichPresence('In Main Menu');
   teardownMultiplayer();
   if (typeof document !== 'undefined' && document.pointerLockElement) {
@@ -131,7 +132,7 @@ export function getMainMenuHtml() {
   <div class="keys mobile-keys" style="display:none">
     <b>DRAG LEFT</b><span>Virtual Analog Stick — Move &amp; strafe</span>
     <b>DRAG RIGHT</b><span>Swipe anywhere to turn &amp; aim camera</span>
-    <b>THROW</b><span>Launch kinetic disc (ricochets &amp; returns)</span>
+    <b>THROW</b><span>Tap to throw, or hold &amp; drag to aim/charge disc</span>
     <b>L / R</b><span>Curve spin — hook disc around obstacles</span>
     <b>SHIELD</b><span>Raise disc shield — deflect incoming attacks</span>
     <b>JUMP</b><span>Tap to air-jump, hold for maximum height</span>

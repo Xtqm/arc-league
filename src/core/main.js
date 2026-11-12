@@ -9,7 +9,7 @@ import { updatePlayer, throwDisc, startChargingThrow, releaseChargingThrow, aimT
 import { updateFoes, spawnDuelBoss, spawnWave, killFoe } from '../entities/Bot.js';
 import { updateDiscs, spawnDisc, applyDamageToTarget } from '../entities/Disc.js';
 import { simulatePath, trajLine, updateThreatPaths, updateTrajectory } from '../physics/trajectory.js';
-import { InputManager, initInput, isLocked, getPlayerCurveIntent, sens, touchMove, updateCurveButtons } from '../input/InputManager.js';
+import { InputManager, initInput, isLocked, getPlayerCurveIntent, sens, touchMove, updateCurveButtons, resetTouchInputs } from '../input/InputManager.js';
 import { pollGamepads, isButtonPressed, isButtonJustPressed, isButtonJustReleased, GAMEPAD_BUTTONS, updateGamepadUINavigation } from '../input/gamepad.js';
 import { initNetwork, initMockNetwork, getRoomRef, roomGetDoc } from '../network/firebaseSetup.js';
 import { onClickCreateRoom, onClickConfirmJoin, copyRoomCode, teardownMultiplayer, startMultiplayerDuel } from '../network/roomManager.js';
@@ -557,7 +557,10 @@ window.__dbg = {
   setTouchDevice: (val) => {
     state.isTouchDevice = !!val;
     if (state.isTouchDevice) document.body.classList.add('touch-device');
-    else document.body.classList.remove('touch-device');
+    else {
+      document.body.classList.remove('touch-device');
+      resetTouchInputs();
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, state.isTouchDevice ? 1.5 : 2));
     checkOrientation();
   },
@@ -567,10 +570,14 @@ window.__dbg = {
   touchState: () => ({
     moveTouchId: state.moveTouchId,
     lookTouchId: state.lookTouchId,
+    throwTouchId: state.throwTouchId,
     moveId: touchState.moveId,
     lookId: touchState.lookId,
+    throwId: touchState.throwId,
     lastLookX: touchState.lastLookX,
     lastLookY: touchState.lastLookY,
+    lastLookMoveTime: touchState.lastLookMoveTime,
+    throwDragActive: touchState.throwDragActive,
     lookMomentumX: touchState.lookMomentumX,
     lookMomentumY: touchState.lookMomentumY,
     touchJumpHeld: state.touchJumpHeld,

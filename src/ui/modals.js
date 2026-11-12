@@ -162,16 +162,24 @@ if (typeof window !== 'undefined') {
 }
 
 export function showGameOver(customTitle, customSubtitle) {
-  if (state.gameMode === 'duel' || state.gameMode === 'duel_ai') {
+  const isDuelMode = state.gameMode === 'duel' || state.gameMode === 'duel_ai';
+  if (isDuelMode) {
     duelEconomyBridge.processMatchOutcome('defeat', 'ai');
   }
   const overlayEl = document.getElementById('overlay');
   if (overlayEl) overlayEl.style.display = 'flex';
-  const title = customTitle || (state.gameMode === 'duel' || state.gameMode === 'duel_ai' ? 'DUEL ELIMINATED' : 'DE-ALLOCATED');
+  const currentTier = Math.max(1, state.duelTier || state.tier || 1);
+  const title = customTitle || (isDuelMode ? 'DUEL ELIMINATED' : 'DE-ALLOCATED');
   const subtitle = customSubtitle || state.gameOverReason || 'YOUR DISC WAS CLAIMED';
-  const stats = (state.gameMode === 'duel' || state.gameMode === 'duel_ai')
-    ? `TIERS CLEARED <b style="color:#fff">${(state.duelTier || state.tier || 1) - 1}</b> &nbsp;·&nbsp; SCORE <b style="color:#fff">${state.score}</b>`
+  const stats = isDuelMode
+    ? `TIERS CLEARED <b style="color:#fff">${currentTier - 1}</b> &nbsp;·&nbsp; SCORE <b style="color:#fff">${state.score}</b>`
     : `CYCLES SURVIVED <b style="color:#fff">${state.wave - 1}</b> &nbsp;·&nbsp; SCORE <b style="color:#fff">${state.score}</b>`;
+  const actionsHtml = isDuelMode
+    ? `<button id="rematchTierBtn" class="btn">REMATCH TIER ${currentTier}</button>
+        <button id="recompileBtn" class="btn">RESTART TIER 1</button>
+        <button id="returnMenuBtn" class="btn" style="border-color:var(--orange);color:#ffb37a">MODE SELECT</button>`
+    : `<button id="recompileBtn" class="btn">RE-COMPILE (${state.gameMode.toUpperCase()})</button>
+        <button id="returnMenuBtn" class="btn" style="border-color:var(--orange);color:#ffb37a">MODE SELECT</button>`;
   if (overlayEl) {
     overlayEl.innerHTML = `<div class="card dead">
       <h1>${title}</h1>
@@ -180,13 +188,11 @@ export function showGameOver(customTitle, customSubtitle) {
         ${stats}
       </div>
       <div class="menu-actions" style="max-width:320px;margin:0 auto">
-        <button id="recompileBtn" class="btn">RE-COMPILE (${state.gameMode.toUpperCase()})</button>
-        <button id="returnMenuBtn" class="btn" style="border-color:var(--orange);color:#ffb37a">MODE SELECT</button>
+        ${actionsHtml}
       </div>
     </div>`;
   }
-  const rc = el('recompileBtn');
-  if (rc) rc.onclick = (e) => {
+  const triggerReset = (preserveTier) => (e) => {
     e.stopPropagation();
     if (state.isTouchDevice) {
       requestFullScreen();
@@ -194,13 +200,17 @@ export function showGameOver(customTitle, customSubtitle) {
     if (state.player.obj) state.player.obj.visible = true;
     if (overlayEl) overlayEl.style.display = 'none';
     if (typeof window !== 'undefined' && window.__tronResetGame) {
-      window.__tronResetGame();
+      window.__tronResetGame(preserveTier ? { preserveTier: true } : undefined);
     }
     state.paused = false;
     state.justResumed = true;
     tryLock();
     focusGame();
   };
+  const rematchBtn = el('rematchTierBtn');
+  if (rematchBtn) rematchBtn.onclick = triggerReset(true);
+  const rc = el('recompileBtn');
+  if (rc) rc.onclick = triggerReset(false);
   const rm = el('returnMenuBtn');
   if (rm) rm.onclick = (e) => {
     e.stopPropagation();

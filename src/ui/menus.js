@@ -185,10 +185,13 @@ export function startSoloSwarm() {
   startMode('swarm');
 }
 
-export function startSoloDuel(mapId = null) {
+function resolveModalArenaMap(mapId = null) {
   const selectElem = typeof document !== 'undefined' ? document.getElementById('arenaSelect') : null;
-  const chosenMap = mapId || (selectElem && selectElem.value) || state.selectedArenaMap || 'arena_grid_01';
-  selectArenaMap(chosenMap);
+  return mapId || (selectElem && selectElem.value) || state.selectedArenaMap || 'arena_grid_01';
+}
+
+export function startSoloDuel(mapId = null) {
+  selectArenaMap(resolveModalArenaMap(mapId));
   startMode('duel_ai');
 }
 
@@ -295,6 +298,7 @@ export function bindMainMenuEvents() {
         requestFullScreen();
       }
       if (hm) hm.style.display = 'none';
+      teardownSectorArena();
       startMatchmakingWithWarmup();
     };
   }
@@ -307,42 +311,34 @@ export function bindMainMenuEvents() {
         requestFullScreen();
       }
       if (hm) hm.style.display = 'none';
-      const selectElem = document.getElementById('arenaSelect');
-      const chosenMap = (selectElem && selectElem.value) ? selectElem.value : (state.selectedArenaMap || 'arena_grid_01');
-      selectArenaMap(chosenMap);
+      selectArenaMap(resolveModalArenaMap());
       startMode('duel_ai');
     };
   }
 
+  const startHostedRoom = (mode) => (e) => {
+    e.stopPropagation(); if (e.cancelable) e.preventDefault();
+    if (state.isTouchDevice) {
+      requestFullScreen();
+    }
+    if (hm) hm.style.display = 'none';
+    const chosenMap = resolveModalArenaMap();
+    selectArenaMap(chosenMap);
+    onClickCreateRoom(e, mode, chosenMap);
+  };
+
   const host1v1Btn = document.getElementById('host1v1Btn');
-  if (host1v1Btn) {
-    host1v1Btn.onclick = (e) => {
-      e.stopPropagation(); if (e.cancelable) e.preventDefault();
-      if (state.isTouchDevice) {
-        requestFullScreen();
-      }
-      if (hm) hm.style.display = 'none';
-      onClickCreateRoom(e, '1v1');
-    };
-  }
+  if (host1v1Btn) host1v1Btn.onclick = startHostedRoom('1v1');
 
   const host2v2Btn = document.getElementById('host2v2Btn');
-  if (host2v2Btn) {
-    host2v2Btn.onclick = (e) => {
-      e.stopPropagation(); if (e.cancelable) e.preventDefault();
-      if (state.isTouchDevice) {
-        requestFullScreen();
-      }
-      if (hm) hm.style.display = 'none';
-      onClickCreateRoom(e, '2v2');
-    };
-  }
+  if (host2v2Btn) host2v2Btn.onclick = startHostedRoom('2v2');
 
   const cancelHostBtn = document.getElementById('cancelHostBtn');
   if (cancelHostBtn) {
     cancelHostBtn.onclick = (e) => {
       e.stopPropagation(); if (e.cancelable) e.preventDefault();
       if (hm) hm.style.display = 'none';
+      teardownSectorArena();
       showModeSelectMenu();
     };
   }

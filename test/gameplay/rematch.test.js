@@ -18,6 +18,7 @@ async function inspectClient(page, name) {
       hasVoteBtn: !!voteBtn,
       voteBtnDisabled: voteBtn ? voteBtn.disabled : null,
       voteBtnText: voteBtn ? voteBtn.textContent : null,
+      voteBtnPressed: voteBtn ? voteBtn.getAttribute('aria-pressed') : null,
       hasVoteLabel: !!voteLabel,
       voteLabelText: voteLabel ? voteLabel.textContent : null,
       hasMenuBtn: !!menuBtn
@@ -100,10 +101,25 @@ async function run() {
   if (!hostState.voteLabelText.includes('1 / 2') || !guestState.voteLabelText.includes('1 / 2')) {
     throw new Error(`Step 2 failed: Vote not synchronized! Host: "${hostState.voteLabelText}", Guest: "${guestState.voteLabelText}"`);
   }
-  if (guestState.voteBtnText !== 'VOTED' || !guestState.voteBtnDisabled) {
-    throw new Error(`Step 2 failed: Guest button not updated to VOTED disabled! Text: ${guestState.voteBtnText}`);
+  if (guestState.voteBtnText !== 'CANCEL VOTE (VOTED)' || guestState.voteBtnDisabled || guestState.voteBtnPressed !== 'true') {
+    throw new Error(`Step 2 failed: Guest toggle button state invalid! ${JSON.stringify(guestState)}`);
   }
   console.log('>>> STEP 2 PASSED: Vote transmitted over network and synchronized to 1 / 2 on both screens!');
+
+  // ------------------------------------------------------------------
+  // STEP 2B: Guest toggles un-vote (1/2 -> 0/2) and re-votes (0/2 -> 1/2)
+  // ------------------------------------------------------------------
+  console.log('\n--- STEP 2B: Guest un-votes and re-votes ---');
+  await guestPage.evaluate(() => document.getElementById('voteRematchBtn')?.click());
+  await hostPage.waitForFunction(() => document.getElementById('rematchVoteLabel')?.textContent?.includes('0 / 2'), { timeout: 5000, polling: 100 });
+  await guestPage.waitForFunction(() => document.getElementById('rematchVoteLabel')?.textContent?.includes('0 / 2'), { timeout: 5000, polling: 100 });
+  const unvotedGuest = await inspectClient(guestPage, 'Guest Unvoted');
+  if (unvotedGuest.voteBtnText !== 'VOTE REMATCH' || unvotedGuest.voteBtnDisabled || unvotedGuest.voteBtnPressed !== 'false') {
+    throw new Error(`Step 2B failed: Guest un-vote UI invalid! ${JSON.stringify(unvotedGuest)}`);
+  }
+  await guestPage.evaluate(() => document.getElementById('voteRematchBtn')?.click());
+  await hostPage.waitForFunction(() => document.getElementById('rematchVoteLabel')?.textContent?.includes('1 / 2'), { timeout: 5000, polling: 100 });
+  console.log('>>> STEP 2B PASSED: Un-vote (1/2 -> 0/2) and re-vote (0/2 -> 1/2) synchronized!');
 
   // ------------------------------------------------------------------
   // STEP 3: Host votes for rematch. Count reaches 2 / 2 -> Auto-restart!
@@ -404,8 +420,176 @@ async function runQuickMatchWebRTCRematchTest() {
   });
 }
 
+async function runStalledHostRematchTimeoutTest() {
+  console.log('\n--- REMATCH TIMEOUT RECOVERY TEST ---');
+  await withBrowserTest(async ({ browser, page: hostPage, baseUrl }) => {
+    const guestPage = await browser.newPage();
+
+    await hostPage.goto(`${baseUrl}/index.html`);
+    await guestPage.goto(`${baseUrl}/index.html`);
+    await hostPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.createRoom, { polling: 100 });
+    await guestPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.joinRoom, { polling: 100 });
+
+    await hostPage.evaluate(async () => { await window.__dbg.createRoom(); });
+    const roomCode = await hostPage.evaluate(() => window.__dbg.currentRoomId());
+    await guestPage.evaluate(async (code) => { await window.__dbg.joinRoom(code); }, roomCode);
+
+    await hostPage.waitForFunction(() => window.__dbg.running() && window.__dbg.mode() === 'duel_multi', { timeout: 15000, polling: 100 });
+    await guestPage.waitForFunction(() => window.__dbg.running() && window.__dbg.mode() === 'duel_multi', { timeout: 15000, polling: 100 });
+
+    // Trigger match end without host responding to rematch
+    await guestPage.evaluate(() => {
+      window.__dbg.state.rematchTimeoutMs = 250;
+      window.__dbg.setPlayerPos(0, -18, -20);
+      window.__dbg.step(0.016);
+    });
+
+    await guestPage.waitForFunction(() => !!document.getElementById('voteRematchBtn'), { timeout: 5000, polling: 100 });
+    await guestPage.evaluate(() => document.getElementById('voteRematchBtn')?.click());
+
+    await guestPage.waitForFunction(() => {
+      const btn = document.getElementById('voteRematchBtn');
+      const label = document.getElementById('rematchVoteLabel');
+      const menuBtn = document.getElementById('multiMenuBtn');
+      return btn?.textContent === 'REMATCH TIMED OUT' &&
+        btn?.disabled === true &&
+        label?.textContent?.includes('UNRESPONSIVE') &&
+        menuBtn && !menuBtn.disabled;
+    }, { timeout: 5000, polling: 50 });
+
+    await guestPage.evaluate(() => document.getElementById('multiMenuBtn')?.click());
+    const afterTimeoutExit = await guestPage.evaluate(() => ({
+      roomId: window.__dbg.currentRoomId(),
+      timedOutFlag: window.__dbg.state.rematchTimedOut
+    }));
+    if (afterTimeoutExit.roomId !== null || afterTimeoutExit.timedOutFlag !== false) {
+      throw new Error(`Rematch timeout exit failed cleanup: ${JSON.stringify(afterTimeoutExit)}`);
+    }
+    console.log('>>> REMATCH TIMEOUT TEST PASSED: Stalled vote timed out cleanly and RETURN TO MENU reset session state!');
+  });
+}
+
+async function runHostedArenaSyncAndTeardownTest() {
+  console.log('\n--- HOSTED MULTIPLAYER ARENA SYNC & TEARDOWN TEST ---');
+  await withBrowserTest(async ({ browser, page: hostPage, baseUrl }) => {
+    const guestPage = await browser.newPage();
+
+    await hostPage.goto(`${baseUrl}/index.html`);
+    await guestPage.goto(`${baseUrl}/index.html`);
+    await hostPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.createRoom, { polling: 100 });
+    await guestPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.joinRoom, { polling: 100 });
+
+    // Host unlocks Grid 02 (Solar Sail) and hosts from #hostModal; Guest does NOT own Grid 02
+    await hostPage.evaluate(async () => {
+      const { defaultStorageManager } = await import('/src/core/storage/StorageManager.js');
+      defaultStorageManager.set('inventory.unlockedMaps', ['arena_grid_01', 'arena_solar_sail']);
+      document.getElementById('hostMatchBtn')?.click();
+      const sel = document.getElementById('arenaSelect');
+      if (sel) {
+        sel.value = 'arena_solar_sail';
+        sel.dispatchEvent(new Event('change'));
+      }
+      document.getElementById('host1v1Btn')?.click();
+    });
+
+    await hostPage.waitForFunction(() => {
+      const id = window.__dbg.currentRoomId();
+      return id && id.length === 4;
+    }, { timeout: 10000, polling: 100 });
+
+    const hostRoom = await hostPage.evaluate(async () => ({
+      code: window.__dbg.currentRoomId(),
+      data: await window.__dbg.getRoomData()
+    }));
+    if (hostRoom.data?.mapId !== 'arena_solar_sail' || hostRoom.data?.gridId !== 'grid_02') {
+      throw new Error(`Hosted room did not store selected arena: ${JSON.stringify(hostRoom)}`);
+    }
+
+    await guestPage.evaluate(async (code) => {
+      const { defaultStorageManager } = await import('/src/core/storage/StorageManager.js');
+      defaultStorageManager.set('inventory.unlockedMaps', ['arena_grid_01']);
+      await window.__dbg.joinRoom(code);
+    }, hostRoom.code);
+
+    await hostPage.waitForFunction(() => window.__dbg.running() && window.__dbg.mode() === 'duel_multi', { timeout: 15000, polling: 100 });
+    await guestPage.waitForFunction(() => window.__dbg.running() && window.__dbg.mode() === 'duel_multi', { timeout: 15000, polling: 100 });
+
+    const inspectArena = async (page) => page.evaluate(async () => {
+      const { sectorHazardBuilder } = await import('/src/arena/hazards/SectorHazardBuilder.js');
+      const { tileMatIntact } = await import('/src/entities/Arena.js');
+      const { defaultStorageManager } = await import('/src/core/storage/StorageManager.js');
+      return {
+        activeGridId: window.__dbg.state.activeGridId,
+        multiplayerMapId: window.__dbg.state.multiplayerMapId,
+        jumpPads: sectorHazardBuilder.jumpPads.length,
+        tileHex: tileMatIntact.color.getHex(),
+        unlockedMaps: defaultStorageManager.get('inventory.unlockedMaps')
+      };
+    });
+
+    const hostR1 = await inspectArena(hostPage);
+    const guestR1 = await inspectArena(guestPage);
+    if (
+      hostR1.activeGridId !== 'grid_02' || hostR1.jumpPads <= 0 || hostR1.tileHex !== 0x1c1005 ||
+      guestR1.activeGridId !== 'grid_02' || guestR1.jumpPads <= 0 || guestR1.tileHex !== 0x1c1005 ||
+      (Array.isArray(guestR1.unlockedMaps) && guestR1.unlockedMaps.includes('arena_solar_sail'))
+    ) {
+      throw new Error(`Round 1 arena mismatch! Host: ${JSON.stringify(hostR1)}, Guest: ${JSON.stringify(guestR1)}`);
+    }
+
+    // Eliminate Guest and vote rematch -> verify Grid 02 persists across Round 2
+    await hostPage.evaluate(() => window.__dbg.finishCountdown());
+    await guestPage.evaluate(() => window.__dbg.finishCountdown());
+    await guestPage.evaluate(() => {
+      window.__dbg.setPlayerPos(0, -18, -20);
+      window.__dbg.step(0.016);
+    });
+    await hostPage.waitForFunction(() => !!document.getElementById('voteRematchBtn'), { timeout: 10000, polling: 100 });
+    await guestPage.waitForFunction(() => !!document.getElementById('voteRematchBtn'), { timeout: 10000, polling: 100 });
+    await guestPage.evaluate(() => document.getElementById('voteRematchBtn')?.click());
+    await hostPage.evaluate(() => document.getElementById('voteRematchBtn')?.click());
+    await guestPage.waitForFunction(() => window.__dbg.running() && window.__dbg.state.multiplayerRoundId === 2, { timeout: 10000, polling: 100 });
+    await hostPage.waitForFunction(() => window.__dbg.running() && window.__dbg.state.multiplayerRoundId === 2, { timeout: 10000, polling: 100 });
+
+    const hostR2 = await inspectArena(hostPage);
+    const guestR2 = await inspectArena(guestPage);
+    if (hostR2.activeGridId !== 'grid_02' || guestR2.activeGridId !== 'grid_02' || guestR2.jumpPads <= 0) {
+      throw new Error(`Round 2 arena lost after rematch! Host: ${JSON.stringify(hostR2)}, Guest: ${JSON.stringify(guestR2)}`);
+    }
+
+    // Returning to menu restores baseline Prime Stadium materials and clears hazards
+    await hostPage.evaluate(() => window.__dbg.teardownMultiplayer());
+    await guestPage.evaluate(() => window.__dbg.teardownMultiplayer());
+    const hostAfterExit = await inspectArena(hostPage);
+    const guestAfterExit = await inspectArena(guestPage);
+    if (
+      hostAfterExit.activeGridId !== null || hostAfterExit.jumpPads !== 0 || hostAfterExit.tileHex !== 0x07202c ||
+      guestAfterExit.activeGridId !== null || guestAfterExit.jumpPads !== 0 || guestAfterExit.tileHex !== 0x07202c
+    ) {
+      throw new Error(`Teardown did not restore default arena! Host: ${JSON.stringify(hostAfterExit)}, Guest: ${JSON.stringify(guestAfterExit)}`);
+    }
+
+    // Previewing Grid 02 then starting Quick Match must also revert to baseline arena
+    await hostPage.evaluate(async () => {
+      const { startMatchmakingWithWarmup } = await import('/src/network/roomManager.js');
+      const { matchmakingQueue } = await import('/src/network/matchmakingQueue.js');
+      window.__tronSelectArenaMap('arena_solar_sail');
+      startMatchmakingWithWarmup();
+      matchmakingQueue.cancelQueue();
+    });
+    const quickMatchArena = await inspectArena(hostPage);
+    if (quickMatchArena.activeGridId !== null || quickMatchArena.jumpPads !== 0 || quickMatchArena.tileHex !== 0x07202c) {
+      throw new Error(`Quick Match did not isolate default arena: ${JSON.stringify(quickMatchArena)}`);
+    }
+
+    console.log('>>> HOSTED ARENA SYNC & TEARDOWN TEST PASSED: Grid 02 synced to non-owning guest across rematch and cleanly restored defaults!');
+  });
+}
+
 run()
   .then(() => runQuickMatchWebRTCRematchTest())
+  .then(() => runStalledHostRematchTimeoutTest())
+  .then(() => runHostedArenaSyncAndTeardownTest())
   .catch(err => {
     console.error(err);
     process.exit(1);

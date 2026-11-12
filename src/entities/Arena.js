@@ -262,6 +262,16 @@ export function applySectorArena(gridId) {
 export function teardownSectorArena() {
   state.activeGridId = null;
   sectorHazardBuilder.teardown(scene);
+  wallMat.color.setHex(0x04141c);
+  glowMat.color.setHex(config.CYAN);
+  tileMatIntact.color.setHex(0x07202c);
+  tileMatIntact.roughness = 0.28;
+  tileMatIntact.metalness = 0.8;
+  tileEdgeMatIntact.color.setHex(0x187588);
+  for (const tile of tiles.values()) {
+    tile.warningColor = config.CYAN;
+  }
+  rebuildArenaTiles();
 }
 
 if (typeof window !== 'undefined') {

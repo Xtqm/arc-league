@@ -494,17 +494,26 @@ export function resetRound(spawnX = 0, spawnZ = 14, yaw = Math.PI) {
   }
 }
 
-export function resetGame() {
+export function resetGame(options = {}) {
+  const preserveTier = !!(options && options.preserveTier);
   swarmEconomyBridge.resetStreak();
-  state.score = 0;
+  if (!preserveTier) {
+    state.score = 0;
+  }
   state.gameOverT = 0;
   state.running = true;
   state.spawnTimer = 0;
   state.gameOverReason = '';
 
   if (state.gameMode === 'duel' || state.gameMode === 'duel_ai') {
-    state.tier = 1;
-    state.duelTier = 1;
+    if (preserveTier) {
+      const targetTier = Math.max(1, state.tier || state.duelTier || 1);
+      state.tier = targetTier;
+      state.duelTier = targetTier;
+    } else {
+      state.tier = 1;
+      state.duelTier = 1;
+    }
     resetRound(0, 14, Math.PI);
     state.onCountdownEnd = () => {
       if (typeof window !== 'undefined' && window.__tronSpawnDuelBoss) {

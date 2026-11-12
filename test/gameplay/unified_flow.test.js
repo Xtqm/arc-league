@@ -258,6 +258,76 @@ async function runUnifiedFlowTests() {
   }
 
   // =============================================================
+  // TEST 5C: Solo AI Duel Defeat -> Rematch Tier 2 vs Restart Tier 1
+  // =============================================================
+  console.log('\n--- TEST 5C: Solo AI Duel Defeat -> Rematch Tier 2 vs Restart Tier 1 ---');
+  await page.evaluate(() => {
+    window.__dbg.setPlayerPos(0, 14, -20);
+    window.__dbg.step(0.016);
+  });
+
+  await page.waitForFunction(() => {
+    const ov = document.getElementById('overlay');
+    return ov && ov.style.display === 'flex' && !!document.getElementById('rematchTierBtn');
+  }, { timeout: 5000, polling: 100 });
+
+  const defeatModal = await page.evaluate(() => ({
+    title: document.getElementById('overlay')?.querySelector('h1')?.textContent?.trim(),
+    rematchText: document.getElementById('rematchTierBtn')?.textContent?.trim(),
+    restartText: document.getElementById('recompileBtn')?.textContent?.trim(),
+    menuText: document.getElementById('returnMenuBtn')?.textContent?.trim()
+  }));
+  if (
+    defeatModal.title !== 'DUEL ELIMINATED' ||
+    defeatModal.rematchText !== 'REMATCH TIER 2' ||
+    defeatModal.restartText !== 'RESTART TIER 1' ||
+    defeatModal.menuText !== 'MODE SELECT'
+  ) {
+    throw new Error(`Test 5C FAILED (defeat modal): ${JSON.stringify(defeatModal)}`);
+  }
+
+  await page.evaluate(() => document.getElementById('rematchTierBtn')?.click());
+  await page.evaluate(() => {
+    while (window.__dbg.countdownTimer() > 0) {
+      window.__dbg.step(0.1);
+    }
+  });
+  const afterTierRematch = await page.evaluate(() => ({
+    tier: window.__dbg.tier(),
+    bossHp: window.__dbg.duelBoss()?.hp || 0,
+    overlayDisplay: document.getElementById('overlay')?.style.display
+  }));
+  if (afterTierRematch.tier !== 2 || afterTierRematch.bossHp !== 350 || afterTierRematch.overlayDisplay !== 'none') {
+    throw new Error(`Test 5C FAILED (rematch tier 2): ${JSON.stringify(afterTierRematch)}`);
+  }
+
+  // Trigger defeat again and test RESTART TIER 1 (#recompileBtn)
+  await page.evaluate(() => {
+    window.__dbg.setPlayerPos(0, 14, -20);
+    window.__dbg.step(0.016);
+  });
+  await page.waitForFunction(() => {
+    const ov = document.getElementById('overlay');
+    return ov && ov.style.display === 'flex' && !!document.getElementById('recompileBtn');
+  }, { timeout: 5000, polling: 100 });
+
+  await page.evaluate(() => document.getElementById('recompileBtn')?.click());
+  await page.evaluate(() => {
+    while (window.__dbg.countdownTimer() > 0) {
+      window.__dbg.step(0.1);
+    }
+  });
+  const afterTier1Restart = await page.evaluate(() => ({
+    tier: window.__dbg.tier(),
+    bossHp: window.__dbg.duelBoss()?.hp || 0,
+    score: window.__dbg.score()
+  }));
+  if (afterTier1Restart.tier !== 1 || afterTier1Restart.bossHp !== 250 || afterTier1Restart.score !== 0) {
+    throw new Error(`Test 5C FAILED (restart tier 1): ${JSON.stringify(afterTier1Restart)}`);
+  }
+  console.log('>>> TEST 5C PASSED: REMATCH TIER 2 preserved Tier 2 (350 HP) and RESTART TIER 1 reset to Tier 1 (250 HP)!');
+
+  // =============================================================
   // TEST 6: Swarm Mode Wave Clear -> Reset, Countdown, Next Wave
   // =============================================================
   console.log('\n--- TEST 6: Swarm Mode Wave Clear -> Reset, Countdown, Next Wave ---');

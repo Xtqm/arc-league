@@ -36,7 +36,7 @@ async function run() {
     await guestPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.joinRoom, { polling: 100 });
 
     await hostPage.evaluate(async () => {
-    await window.__dbg.createRoom();
+    await window.__dbg.createRoom({ bestOf: 1 });
   });
   const roomCode = await hostPage.evaluate(() => window.__dbg.currentRoomId());
   console.log('Room created:', roomCode);
@@ -265,6 +265,11 @@ async function runQuickMatchWebRTCRematchTest() {
           db: window.__dbg.state.db,
           roomId: window.__dbg.currentRoomId(),
           roundId: window.__dbg.state.multiplayerRoundId,
+          bestOf: window.__dbg.state.seriesBestOf,
+          seriesRound: window.__dbg.state.seriesRound,
+          seriesScores: window.__dbg.state.seriesScores,
+          seriesHudDisplay: document.getElementById('seriesHudWrap')?.style.display,
+          seriesScoreNum: document.querySelector('#seriesHudWrap .series-score-num')?.textContent,
           bits: duelEconomyBridge.economy.getBits(),
           xp: duelEconomyBridge.economy.getXP(),
           level: duelEconomyBridge.economy.getLevel()
@@ -273,18 +278,32 @@ async function runQuickMatchWebRTCRematchTest() {
       guestPage.evaluate(() => ({
         db: window.__dbg.state.db,
         roomId: window.__dbg.currentRoomId(),
-        roundId: window.__dbg.state.multiplayerRoundId
+        roundId: window.__dbg.state.multiplayerRoundId,
+        bestOf: window.__dbg.state.seriesBestOf,
+        seriesRound: window.__dbg.state.seriesRound
       }))
     ]);
 
     if (initialCheck[0].db !== null || initialCheck[1].db !== null) {
       throw new Error(`Expected state.db === null in Quick Match, got ${JSON.stringify(initialCheck)}`);
     }
-    if (!String(initialCheck[0].roomId).startsWith('MATCH_') || initialCheck[0].roundId !== 1) {
-      throw new Error(`Unexpected Quick Match init state: ${JSON.stringify(initialCheck[0])}`);
+    if (
+      !String(initialCheck[0].roomId).startsWith('MATCH_') ||
+      initialCheck[0].roundId !== 1 ||
+      initialCheck[0].bestOf !== 3 ||
+      initialCheck[1].bestOf !== 3 ||
+      initialCheck[0].seriesRound !== 1 ||
+      initialCheck[0].seriesHudDisplay !== 'flex' ||
+      initialCheck[0].seriesScoreNum !== '0 - 0'
+    ) {
+      throw new Error(`Unexpected Quick Match BO3 init state: ${JSON.stringify(initialCheck)}`);
     }
     const startBits = initialCheck[0].bits;
-    console.log('>>> QUICK MATCH HANDSHAKE PASSED: Both peers connected over WebRTC with db === null!');
+    console.log('>>> QUICK MATCH HANDSHAKE PASSED: Both peers connected over WebRTC (BO3 default, db === null)!');
+
+    // Use 900ms intermission for fast yet polling-safe sub-round verification
+    await hostPage.evaluate(() => { window.__dbg.state.seriesIntermissionMs = 900; });
+    await guestPage.evaluate(() => { window.__dbg.state.seriesIntermissionMs = 900; });
 
     // Finish countdown & verify warm-up AI callback was cleared
     await hostPage.evaluate(() => window.__dbg.finishCountdown());
@@ -317,22 +336,107 @@ async function runQuickMatchWebRTCRematchTest() {
           role: window.__dbg.state.playerRole,
           names: window.__dbg.state.multiplayerNames,
           mp: Object.keys(window.__dbg.state.multiPlayers || {}),
-          html: document.getElementById('arenaNameplates')?.innerHTML,
-          p1State: window.__dbg.state.multiPlayers?.p1 ? {
-            alive: window.__dbg.state.multiPlayers.p1.alive,
-            hp: window.__dbg.state.multiPlayers.p1.hp,
-            name: window.__dbg.state.multiPlayers.p1.name,
-            pos: window.__dbg.state.multiPlayers.p1.pos,
-            hasParent: !!window.__dbg.state.multiPlayers.p1.obj?.parent,
-            vis: window.__dbg.state.multiPlayers.p1.obj?.visible
-          } : null
+          html: document.getElementById('arenaNameplates')?.innerHTML
         }))
       ]);
       throw new Error(`QuickMatch nameplate timeout: ${err.message} | diag=${JSON.stringify(diag)}`);
     }
     console.log('>>> QUICK MATCH CALLSIGNS VERIFIED: WebRTC peers exchanged QM_HOST / QM_GUEST without DB writes!');
 
-    // Round 1 End: Eliminate Guest over WebRTC only
+    // Series 1, Round 1: Host wins -> brief intermission, NO Bits/XP payout, NO Rematch overlay
+    await guestPage.evaluate(() => {
+      window.__dbg.setPlayerPos(0, -18, -20);
+      window.__dbg.step(0.016);
+    });
+
+    await hostPage.waitForFunction(() => {
+      const box = document.getElementById('seriesIntermission');
+      const ov = document.getElementById('overlay');
+      return box?.style.display === 'block' &&
+        box.querySelector('.si-title')?.textContent?.includes('ROUND 1 WON') &&
+        ov?.style.display === 'none';
+    }, { timeout: 10000, polling: 50 });
+    await guestPage.waitForFunction(() => {
+      const box = document.getElementById('seriesIntermission');
+      const ov = document.getElementById('overlay');
+      return box?.style.display === 'block' &&
+        box.querySelector('.si-title')?.textContent?.includes('ROUND 1 LOST') &&
+        ov?.style.display === 'none';
+    }, { timeout: 10000, polling: 50 });
+
+    const midSeriesEcon = await hostPage.evaluate(async () => {
+      const { duelEconomyBridge } = await import('/src/modes/DuelEconomyBridge.js');
+      return duelEconomyBridge.economy.getAuditLog().filter(e => e.source === 'duel_multiplayer_victory').length;
+    });
+    if (midSeriesEcon !== 0) {
+      throw new Error(`Bits/XP awarded prematurely on sub-round 1 win! count=${midSeriesEcon}`);
+    }
+
+    // Wait for automatic Host -> Guest reset into Round 2 (1 - 0)
+    await Promise.all([
+      hostPage.waitForFunction(() => (
+        window.__dbg.running() &&
+        window.__dbg.state.seriesRound === 2 &&
+        window.__dbg.state.seriesScores?.t1 === 1 &&
+        window.__dbg.state.seriesScores?.t2 === 0 &&
+        document.getElementById('seriesIntermission')?.style.display === 'none' &&
+        window.__dbg.hp() === 100 &&
+        window.__dbg.countdownTimer() > 0
+      ), { timeout: 10000, polling: 50 }),
+      guestPage.waitForFunction(() => (
+        window.__dbg.running() &&
+        window.__dbg.state.seriesRound === 2 &&
+        window.__dbg.state.seriesScores?.t1 === 1 &&
+        window.__dbg.state.seriesScores?.t2 === 0 &&
+        document.getElementById('seriesIntermission')?.style.display === 'none' &&
+        window.__dbg.hp() === 100 &&
+        window.__dbg.countdownTimer() > 0
+      ), { timeout: 10000, polling: 50 })
+    ]);
+    console.log('>>> SERIES 1 ROUND 1 -> ROUND 2 AUTO-ADVANCE PASSED: Score 1 - 0, zero premature payout!');
+
+    // Series 1, Round 2: Guest wins comeback (1 - 1) -> auto-advance to Round 3
+    await hostPage.evaluate(() => window.__dbg.finishCountdown());
+    await guestPage.evaluate(() => window.__dbg.finishCountdown());
+    await hostPage.evaluate(() => {
+      window.__dbg.setPlayerPos(0, -18, -20);
+      window.__dbg.step(0.016);
+    });
+
+    await hostPage.waitForFunction(() => {
+      const box = document.getElementById('seriesIntermission');
+      return box?.style.display === 'block' && box.querySelector('.si-title')?.textContent?.includes('ROUND 2 LOST');
+    }, { timeout: 10000, polling: 50 });
+    await guestPage.waitForFunction(() => {
+      const box = document.getElementById('seriesIntermission');
+      return box?.style.display === 'block' && box.querySelector('.si-title')?.textContent?.includes('ROUND 2 WON');
+    }, { timeout: 10000, polling: 50 });
+
+    await Promise.all([
+      hostPage.waitForFunction(() => (
+        window.__dbg.running() &&
+        window.__dbg.state.seriesRound === 3 &&
+        window.__dbg.state.seriesScores?.t1 === 1 &&
+        window.__dbg.state.seriesScores?.t2 === 1 &&
+        document.getElementById('seriesIntermission')?.style.display === 'none' &&
+        window.__dbg.hp() === 100 &&
+        window.__dbg.countdownTimer() > 0
+      ), { timeout: 10000, polling: 50 }),
+      guestPage.waitForFunction(() => (
+        window.__dbg.running() &&
+        window.__dbg.state.seriesRound === 3 &&
+        window.__dbg.state.seriesScores?.t1 === 1 &&
+        window.__dbg.state.seriesScores?.t2 === 1 &&
+        document.getElementById('seriesIntermission')?.style.display === 'none' &&
+        window.__dbg.hp() === 100 &&
+        window.__dbg.countdownTimer() > 0
+      ), { timeout: 10000, polling: 50 })
+    ]);
+    console.log('>>> SERIES 1 ROUND 2 -> ROUND 3 COMEBACK TIE PASSED: Score 1 - 1!');
+
+    // Series 1, Round 3: Host clinches 2 - 1 -> Final Series VICTORY/DEREZZED + single Bits/XP payout
+    await hostPage.evaluate(() => window.__dbg.finishCountdown());
+    await guestPage.evaluate(() => window.__dbg.finishCountdown());
     await guestPage.evaluate(() => {
       window.__dbg.setPlayerPos(0, -18, -20);
       window.__dbg.step(0.016);
@@ -347,13 +451,23 @@ async function runQuickMatchWebRTCRematchTest() {
       return ov && ov.style.display === 'flex' && ov.querySelector('h1')?.textContent === 'DEREZZED';
     }, { timeout: 10000, polling: 100 });
 
-    const qmPostMatchNames = await Promise.all([
-      hostPage.evaluate(() => document.getElementById('postMatchMatchup')?.textContent || ''),
-      guestPage.evaluate(() => document.getElementById('postMatchMatchup')?.textContent || '')
+    const qmPostMatchInfo = await Promise.all([
+      hostPage.evaluate(() => ({
+        matchup: document.getElementById('postMatchMatchup')?.textContent || '',
+        seriesScore: document.getElementById('postMatchSeriesScore')?.textContent || ''
+      })),
+      guestPage.evaluate(() => ({
+        matchup: document.getElementById('postMatchMatchup')?.textContent || '',
+        seriesScore: document.getElementById('postMatchSeriesScore')?.textContent || ''
+      }))
     ]);
-    if (!qmPostMatchNames[0].includes('QM_HOST') || !qmPostMatchNames[0].includes('QM_GUEST') ||
-        !qmPostMatchNames[1].includes('QM_HOST') || !qmPostMatchNames[1].includes('QM_GUEST')) {
-      throw new Error(`Quick Match post-match overlay missing callsigns: ${JSON.stringify(qmPostMatchNames)}`);
+    if (
+      !qmPostMatchInfo[0].matchup.includes('QM_HOST') || !qmPostMatchInfo[0].matchup.includes('QM_GUEST') ||
+      !qmPostMatchInfo[1].matchup.includes('QM_HOST') || !qmPostMatchInfo[1].matchup.includes('QM_GUEST') ||
+      !qmPostMatchInfo[0].seriesScore.includes('2 - 1') || !qmPostMatchInfo[0].seriesScore.includes('BEST OF 3') ||
+      !qmPostMatchInfo[1].seriesScore.includes('1 - 2') || !qmPostMatchInfo[1].seriesScore.includes('BEST OF 3')
+    ) {
+      throw new Error(`Quick Match post-match overlay missing callsigns or series score: ${JSON.stringify(qmPostMatchInfo)}`);
     }
 
     const r1Econ = await hostPage.evaluate(async () => {
@@ -375,11 +489,11 @@ async function runQuickMatchWebRTCRematchTest() {
       r1BitEntries[0].amount !== 100 ||
       r1BitEntries[0].balanceAfter - startBits !== 100
     ) {
-      throw new Error(`Expected single Round 1 victory payout (+100 Bits + 300 XP), got ${JSON.stringify(r1Econ)}`);
+      throw new Error(`Expected single Series 1 victory payout (+100 Bits + 300 XP), got ${JSON.stringify(r1Econ)}`);
     }
-    console.log('>>> QUICK MATCH ROUND 1 PASSED: WebRTC match-end & single Round 1 payout verified!');
+    console.log('>>> QUICK MATCH SERIES 1 (2 - 1) PASSED: WebRTC clinch & single Bits/XP payout verified!');
 
-    // Vote Rematch 1/2 -> 2/2 over WebRTC
+    // Vote Rematch 1/2 -> 2/2 over WebRTC -> Series 2 resets to 0 - 0 while preserving BO3
     await guestPage.evaluate(() => document.getElementById('voteRematchBtn')?.click());
     await hostPage.waitForFunction(() => {
       return document.getElementById('rematchVoteLabel')?.textContent?.includes('1 / 2');
@@ -397,16 +511,43 @@ async function runQuickMatchWebRTCRematchTest() {
 
     const r2Init = await hostPage.evaluate(() => ({
       roundId: window.__dbg.state.multiplayerRoundId,
+      bestOf: window.__dbg.state.seriesBestOf,
+      seriesRound: window.__dbg.state.seriesRound,
+      seriesScores: window.__dbg.state.seriesScores,
+      scoreNum: document.querySelector('#seriesHudWrap .series-score-num')?.textContent,
       countdown: window.__dbg.countdownTimer(),
       payoutFlag: window.__dbg.state.multiplayerPayoutProcessed,
       onCountdownEnd: window.__dbg.state.onCountdownEnd
     }));
-    if (r2Init.roundId !== 2 || r2Init.countdown <= 0 || r2Init.payoutFlag !== false || r2Init.onCountdownEnd !== null) {
-      throw new Error(`Round 2 state reset invalid: ${JSON.stringify(r2Init)}`);
+    if (
+      r2Init.roundId !== 2 ||
+      r2Init.bestOf !== 3 ||
+      r2Init.seriesRound !== 1 ||
+      r2Init.seriesScores?.t1 !== 0 ||
+      r2Init.seriesScores?.t2 !== 0 ||
+      r2Init.scoreNum !== '0 - 0' ||
+      r2Init.countdown <= 0 ||
+      r2Init.payoutFlag !== false ||
+      r2Init.onCountdownEnd !== null
+    ) {
+      throw new Error(`Series 2 state reset invalid: ${JSON.stringify(r2Init)}`);
     }
-    console.log('>>> QUICK MATCH REMATCH START PASSED: Round 2 started over WebRTC with clean countdown & payout reset!');
+    console.log('>>> QUICK MATCH REMATCH START PASSED: Series 2 started at 0 - 0 (BO3) with clean countdown & payout reset!');
 
-    // Round 2 End -> verify Round 2 payout (+300 XP again)
+    // Series 2 Round 1 (Guest eliminated -> 1 - 0 auto-advance)
+    await hostPage.evaluate(() => { window.__dbg.state.seriesIntermissionMs = 900; });
+    await hostPage.evaluate(() => window.__dbg.finishCountdown());
+    await guestPage.evaluate(() => window.__dbg.finishCountdown());
+    await guestPage.evaluate(() => {
+      window.__dbg.setPlayerPos(0, -18, -20);
+      window.__dbg.step(0.016);
+    });
+    await Promise.all([
+      hostPage.waitForFunction(() => window.__dbg.running() && window.__dbg.state.seriesRound === 2 && window.__dbg.countdownTimer() > 0, { timeout: 10000, polling: 50 }),
+      guestPage.waitForFunction(() => window.__dbg.running() && window.__dbg.state.seriesRound === 2 && window.__dbg.countdownTimer() > 0, { timeout: 10000, polling: 50 })
+    ]);
+
+    // Series 2 Round 2 (Host clinches 2 - 0) -> verify 2x single payout across Series 1 + Series 2
     await hostPage.evaluate(() => window.__dbg.finishCountdown());
     await guestPage.evaluate(() => window.__dbg.finishCountdown());
     await guestPage.evaluate(() => {
@@ -423,13 +564,13 @@ async function runQuickMatchWebRTCRematchTest() {
       return ov && ov.style.display === 'flex' && ov.querySelector('h1')?.textContent === 'DEREZZED';
     }, { timeout: 10000, polling: 100 });
 
-    const qmR2PostMatchNames = await Promise.all([
-      hostPage.evaluate(() => document.getElementById('postMatchMatchup')?.textContent || ''),
-      guestPage.evaluate(() => document.getElementById('postMatchMatchup')?.textContent || '')
-    ]);
-    if (!qmR2PostMatchNames[0].includes('QM_HOST') || !qmR2PostMatchNames[0].includes('QM_GUEST') ||
-        !qmR2PostMatchNames[1].includes('QM_HOST') || !qmR2PostMatchNames[1].includes('QM_GUEST')) {
-      throw new Error(`Quick Match post-match overlay missing callsigns: ${JSON.stringify(qmR2PostMatchNames)}`);
+    const qmR2PostMatch = await hostPage.evaluate(() => ({
+      matchup: document.getElementById('postMatchMatchup')?.textContent || '',
+      seriesScore: document.getElementById('postMatchSeriesScore')?.textContent || ''
+    }));
+    if (!qmR2PostMatch.matchup.includes('QM_HOST') || !qmR2PostMatch.matchup.includes('QM_GUEST') ||
+        !qmR2PostMatch.seriesScore.includes('2 - 0')) {
+      throw new Error(`Quick Match Series 2 overlay invalid: ${JSON.stringify(qmR2PostMatch)}`);
     }
 
     const r2Econ = await hostPage.evaluate(async () => {
@@ -494,7 +635,7 @@ async function runStalledHostRematchTimeoutTest() {
     await hostPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.createRoom, { polling: 100 });
     await guestPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.joinRoom, { polling: 100 });
 
-    await hostPage.evaluate(async () => { await window.__dbg.createRoom(); });
+    await hostPage.evaluate(async () => { await window.__dbg.createRoom({ bestOf: 1 }); });
     const roomCode = await hostPage.evaluate(() => window.__dbg.currentRoomId());
     await guestPage.evaluate(async (code) => { await window.__dbg.joinRoom(code); }, roomCode);
 
@@ -575,6 +716,7 @@ async function runHostedArenaSyncAndTeardownTest() {
         sel.value = 'arena_solar_sail';
         sel.dispatchEvent(new Event('change'));
       }
+      document.querySelector('#seriesFormatSelect .series-opt-btn[data-best-of="1"]')?.click();
       document.getElementById('host1v1Btn')?.click();
     });
 
@@ -694,10 +836,123 @@ async function runHostedArenaSyncAndTeardownTest() {
   });
 }
 
+async function runHostedSeriesAndMidSeriesQuitTest() {
+  await withBrowserTest(async ({ browser, page: hostPage, baseUrl }) => {
+    console.log('\n=== TEST 5: HOSTED BO3 SERIES & MID-SERIES PEER DEPARTURE ===');
+    const guestPage = await browser.newPage();
+    await hostPage.goto(`${baseUrl}/index.html`);
+    await guestPage.goto(`${baseUrl}/index.html`);
+    await hostPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.createRoom, { polling: 100 });
+    await guestPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.joinRoom, { polling: 100 });
+
+    // Host clicks HOST ARCFIELD -> leaves default BO3 active -> clicks 1V1 ONLINE
+    const hostModalCheck = await hostPage.evaluate(() => {
+      document.getElementById('hostMatchBtn')?.click();
+      const hotBtn = document.querySelector('#seriesFormatSelect .series-opt-btn.hot');
+      const hotVal = hotBtn?.getAttribute('data-best-of') || null;
+      document.getElementById('host1v1Btn')?.click();
+      return { hotVal };
+    });
+    if (hostModalCheck.hotVal !== '3') {
+      throw new Error(`Expected #hostModal default active format BO3, got ${JSON.stringify(hostModalCheck)}`);
+    }
+
+    await hostPage.waitForFunction(() => {
+      const id = window.__dbg.currentRoomId();
+      return id && id.length === 4;
+    }, { timeout: 10000, polling: 100 });
+
+    const roomCode = await hostPage.evaluate(() => window.__dbg.currentRoomId());
+    const initRoomDoc = await hostPage.evaluate(async () => await window.__dbg.getRoomData());
+    if (initRoomDoc?.bestOf !== 3) {
+      throw new Error(`Expected hosted room doc bestOf === 3, got ${JSON.stringify(initRoomDoc)}`);
+    }
+
+    await guestPage.evaluate(async (code) => { await window.__dbg.joinRoom(code); }, roomCode);
+    await Promise.all([
+      hostPage.waitForFunction(() => window.__dbg.running() && window.__dbg.mode() === 'duel_multi' && window.__dbg.state.multiplayerRoundId === 1, { timeout: 15000, polling: 100 }),
+      guestPage.waitForFunction(() => window.__dbg.running() && window.__dbg.mode() === 'duel_multi' && window.__dbg.state.multiplayerRoundId === 1, { timeout: 15000, polling: 100 })
+    ]);
+
+    const bo3Check = await Promise.all([
+      hostPage.evaluate(() => ({ bestOf: window.__dbg.state.seriesBestOf, round: window.__dbg.state.seriesRound })),
+      guestPage.evaluate(() => ({ bestOf: window.__dbg.state.seriesBestOf, round: window.__dbg.state.seriesRound }))
+    ]);
+    if (bo3Check[0].bestOf !== 3 || bo3Check[1].bestOf !== 3 || bo3Check[0].round !== 1) {
+      throw new Error(`Hosted BO3 handshake mismatch: ${JSON.stringify(bo3Check)}`);
+    }
+
+    await hostPage.evaluate(() => { window.__dbg.state.seriesIntermissionMs = 900; });
+    await guestPage.evaluate(() => { window.__dbg.state.seriesIntermissionMs = 900; });
+
+    // Round 1: Host wins -> auto-advance to Round 2 (1 - 0) with Firestore room doc synced
+    await hostPage.evaluate(() => window.__dbg.finishCountdown());
+    await guestPage.evaluate(() => window.__dbg.finishCountdown());
+    await guestPage.evaluate(() => {
+      window.__dbg.setPlayerPos(0, -18, -20);
+      window.__dbg.step(0.016);
+    });
+
+    await Promise.all([
+      hostPage.waitForFunction(() => (
+        window.__dbg.running() &&
+        window.__dbg.state.seriesRound === 2 &&
+        window.__dbg.state.seriesScores?.t1 === 1 &&
+        document.getElementById('seriesIntermission')?.style.display === 'none'
+      ), { timeout: 10000, polling: 50 }),
+      guestPage.waitForFunction(() => (
+        window.__dbg.running() &&
+        window.__dbg.state.seriesRound === 2 &&
+        window.__dbg.state.seriesScores?.t1 === 1 &&
+        document.getElementById('seriesIntermission')?.style.display === 'none'
+      ), { timeout: 10000, polling: 50 })
+    ]);
+
+    const r2HudScores = await Promise.all([
+      hostPage.evaluate(() => document.querySelector('#seriesHudWrap .series-score-num')?.textContent),
+      guestPage.evaluate(() => document.querySelector('#seriesHudWrap .series-score-num')?.textContent)
+    ]);
+    if (r2HudScores[0] !== '1 - 0' || r2HudScores[1] !== '0 - 1') {
+      throw new Error(`Expected hosted BO3 HUD score [1 - 0, 0 - 1], got ${JSON.stringify(r2HudScores)}`);
+    }
+    console.log('>>> HOSTED BO3 ROUND 1 -> ROUND 2 PASSED: Both clients synced at seriesRound=2 (1 - 0 / 0 - 1)!');
+
+    // Round 2: Host eliminated -> during intermission Guest exits -> Host cancels timer & wins immediately
+    await hostPage.evaluate(() => window.__dbg.finishCountdown());
+    await guestPage.evaluate(() => window.__dbg.finishCountdown());
+    await hostPage.evaluate(() => {
+      window.__dbg.setPlayerPos(0, -18, -20);
+      window.__dbg.step(0.016);
+    });
+
+    await hostPage.waitForFunction(() => (
+      document.getElementById('seriesIntermission')?.style.display === 'block' &&
+      window.__dbg.state.seriesIntermissionTimer !== null
+    ), { timeout: 10000, polling: 50 });
+
+    await guestPage.evaluate(() => window.__tronLeaveMultiplayerAndReturnToMenu());
+
+    await hostPage.waitForFunction(() => {
+      const ov = document.getElementById('overlay');
+      const btn = document.getElementById('voteRematchBtn');
+      const si = document.getElementById('seriesIntermission');
+      return ov?.style.display === 'flex' &&
+        ov.querySelector('h1')?.textContent === 'VICTORY' &&
+        btn?.textContent === 'OPPONENT LEFT' &&
+        btn?.disabled === true &&
+        si?.style.display === 'none' &&
+        window.__dbg.state.seriesIntermissionTimer === null;
+    }, { timeout: 10000, polling: 50 });
+
+    console.log('>>> HOSTED MID-SERIES PEER DEPARTURE PASSED: Intermission timer canceled and Host awarded OPPONENT LEFT victory!');
+  });
+}
+
 run()
   .then(() => runQuickMatchWebRTCRematchTest())
   .then(() => runStalledHostRematchTimeoutTest())
   .then(() => runHostedArenaSyncAndTeardownTest())
+  .then(() => runHostedSeriesAndMidSeriesQuitTest())
   .catch(err => {
     console.error(err);
     process.exit(1);

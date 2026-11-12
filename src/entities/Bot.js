@@ -211,7 +211,6 @@ export function killFoe(f) {
       message('OPPONENT DEREZZED');
       return;
     }
-    message('VICTORY — OPPONENT DEREZZED');
     const myTeam = (state.playerRole === 'p1' || state.playerRole === 'p3') ? 1 : 2;
     reportMultiplayerMatchEnd({
       winner: state.gameMode === 'duel_multi' ? state.playerRole : null,

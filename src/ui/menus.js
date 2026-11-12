@@ -1,6 +1,6 @@
 import { state } from '../core/state.js';
 import { tryLock, focusGame, setCursor, resetTouchInputs } from '../input/InputManager.js';
-import { resetHintVisibility, clearArenaNameplates } from './hud.js';
+import { resetHintVisibility, clearArenaNameplates, clearSeriesIntermission, updateHUD } from './hud.js';
 import { requestFullScreen, toggleFullScreen, isFullScreen, bindPauseAndModalEvents } from './modals.js';
 import { showJoinInputModal, onClickCreateRoom, onClickConfirmJoin, copyRoomCode, teardownMultiplayer, startMatchmakingWithWarmup } from '../network/roomManager.js';
 import { updateIdentityHeader, showAuthTerminal } from './authTerminal.js';
@@ -174,6 +174,8 @@ export function showModeSelectMenu() {
   state.armoryModalOpen = false;
   state.achievementsModalOpen = false;
   clearArenaNameplates();
+  clearSeriesIntermission();
+  updateHUD();
   resetHintVisibility(0);
   const overlay = document.getElementById('overlay');
   if (!overlay) return;
@@ -229,6 +231,10 @@ export function bindMainMenuEvents() {
       const card = hm.querySelector('.card');
       if (card) card.scrollTop = 0;
       updateArenaSelectControls(hm);
+      const selectedBestOf = Number(state.selectedSeriesBestOf) || 3;
+      hm.querySelectorAll('.series-opt-btn').forEach(btn => {
+        btn.classList.toggle('hot', Number(btn.getAttribute('data-best-of')) === selectedBestOf);
+      });
     }
   };
   const openJoinModal = (e) => {
@@ -313,6 +319,18 @@ export function bindMainMenuEvents() {
     };
   }
 
+  if (hm) {
+    const seriesBtns = hm.querySelectorAll('.series-opt-btn');
+    seriesBtns.forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const chosen = Number(btn.getAttribute('data-best-of')) || 3;
+        state.selectedSeriesBestOf = chosen;
+        seriesBtns.forEach(b => b.classList.toggle('hot', b === btn));
+      };
+    });
+  }
+
   const startHostedRoom = (mode) => (e) => {
     e.stopPropagation(); if (e.cancelable) e.preventDefault();
     if (state.isTouchDevice) {
@@ -321,7 +339,7 @@ export function bindMainMenuEvents() {
     if (hm) hm.style.display = 'none';
     const chosenMap = resolveModalArenaMap();
     selectArenaMap(chosenMap);
-    onClickCreateRoom(e, mode, chosenMap);
+    onClickCreateRoom(e, mode, chosenMap, state.selectedSeriesBestOf || 3);
   };
 
   const host1v1Btn = document.getElementById('host1v1Btn');

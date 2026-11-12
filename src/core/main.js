@@ -600,7 +600,7 @@ window.__dbg = {
   checkOrientation: () => checkOrientation(),
   particleBurstCount: (n = 22) => state.isTouchDevice ? Math.max(1, Math.round(n * 0.5)) : n,
   initNetwork: () => initNetwork(),
-  createRoom: () => onClickCreateRoom(),
+  createRoom: (opts = {}) => onClickCreateRoom(null, opts?.mode || '1v1', opts?.mapId ?? null, opts?.bestOf ?? null),
   joinRoom: (code) => {
     const inp = document.getElementById('joinRoomInput');
     if (inp) inp.value = code;

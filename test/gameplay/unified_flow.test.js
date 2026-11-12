@@ -199,10 +199,11 @@ async function runUnifiedFlowTests() {
       scoreVisible,
       nameplatesHidden: !nameplatesDisplay || nameplatesDisplay === 'none',
       hintInitialVisible,
-      hintAutoHidden
+      hintAutoHidden,
+      seriesHudHidden: document.getElementById('seriesHudWrap')?.style.display === 'none'
     };
   });
-  if (!singlePlayerHudCheck.scoreVisible || !singlePlayerHudCheck.nameplatesHidden || !singlePlayerHudCheck.hintInitialVisible || !singlePlayerHudCheck.hintAutoHidden) {
+  if (!singlePlayerHudCheck.scoreVisible || !singlePlayerHudCheck.nameplatesHidden || !singlePlayerHudCheck.hintInitialVisible || !singlePlayerHudCheck.hintAutoHidden || !singlePlayerHudCheck.seriesHudHidden) {
     throw new Error(`Test 4B FAILED (single-player HUD / hint auto-hide): ${JSON.stringify(singlePlayerHudCheck)}`);
   }
   console.log('>>> TEST 4B PASSED: Single-player preserves score, omits online nameplates, and auto-hides control hint!');
@@ -405,6 +406,9 @@ async function runUnifiedFlowTests() {
     test6b.msg.includes('CYCLE 2')
   ) {
     console.log('>>> TEST 6 PASSED: Swarm wave 1 clear incremented to Cycle 2, healed player, restored tiles, moved to spawn, and started 3s countdown!');
+    if (await page.evaluate(() => document.getElementById('seriesHudWrap')?.style.display !== 'none')) {
+      throw new Error('Test 6 FAILED: #seriesHudWrap visible in Swarm mode');
+    }
   } else {
     throw new Error(`Test 6 FAILED: ${JSON.stringify(test6b)}`);
   }
@@ -442,6 +446,45 @@ async function runUnifiedFlowTests() {
   console.log('Test 7 results:', test7);
   if (test7.hostModalHidden && test7.roomModalVisible && test7.waitingVisible) {
     console.log('>>> TEST 7 PASSED: Selecting 1v1 Online successfully transitioned from Host Modal to Waiting for Challenger screen!');
+
+    // Verify default BO3 room creation, then BO5 selection persistence on #hostModal -> #host1v1Btn
+    await page.waitForFunction(() => {
+      const id = window.__dbg.currentRoomId();
+      return id && id.length === 4;
+    }, { timeout: 10000, polling: 50 });
+    const defaultRoomData = await page.evaluate(async () => await window.__dbg.getRoomData());
+    if (defaultRoomData?.bestOf !== 3) {
+      throw new Error(`Test 7B FAILED (expected default room bestOf=3): ${JSON.stringify(defaultRoomData)}`);
+    }
+
+    const bo5Select = await page.evaluate(() => {
+      window.__dbg.teardownMultiplayer();
+      window.__dbg.showModeSelect();
+      document.getElementById('hostMatchBtn')?.click();
+      const sel = document.getElementById('seriesFormatSelect');
+      const defaultHot = sel?.querySelector('.series-opt-btn.hot')?.getAttribute('data-best-of') || null;
+      sel?.querySelector('.series-opt-btn[data-best-of="5"]')?.click();
+      const selectedHot = sel?.querySelector('.series-opt-btn.hot')?.getAttribute('data-best-of') || null;
+      const selectedState = window.__dbg.state.selectedSeriesBestOf;
+      document.getElementById('host1v1Btn')?.click();
+      return { hasSelect: !!sel, defaultHot, selectedHot, selectedState };
+    });
+    await page.waitForFunction(() => {
+      const id = window.__dbg.currentRoomId();
+      return id && id.length === 4;
+    }, { timeout: 10000, polling: 50 });
+    const bo5RoomData = await page.evaluate(async () => await window.__dbg.getRoomData());
+    if (
+      !bo5Select.hasSelect ||
+      bo5Select.defaultHot !== '3' ||
+      bo5Select.selectedHot !== '5' ||
+      bo5Select.selectedState !== 5 ||
+      bo5RoomData?.bestOf !== 5
+    ) {
+      throw new Error(`Test 7B FAILED (BO5 host modal selection): ${JSON.stringify({ bo5Select, bo5RoomData })}`);
+    }
+    await page.evaluate(() => window.__dbg.teardownMultiplayer());
+    console.log('>>> TEST 7B PASSED: #hostModal defaults to BO3 and BO5 selection persists bestOf: 5 on room creation!');
   } else {
     throw new Error(`Test 7 FAILED: ${JSON.stringify(test7)}`);
   }

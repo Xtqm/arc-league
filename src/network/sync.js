@@ -9,6 +9,9 @@ import { getRoomRef, roomUpdateDoc } from './firebaseSetup.js';
  */
 export function handleIncomingFastPacket(data) {
   if (!data || !data.role) return;
+  if (state.multiplayerMatchFinished || state.seriesRoundFinished) return;
+  if (data.mr && state.multiplayerRoundId && data.mr !== state.multiplayerRoundId) return;
+  if (data.sr && state.seriesRound && data.sr !== state.seriesRound) return;
   const oppRole = data.role;
   const opp = state.multiPlayers[oppRole];
   if (!opp) return;
@@ -34,7 +37,7 @@ export function handleIncomingFastPacket(data) {
  */
 export function syncNetworkState(dt) {
   if (state.gameMode !== 'duel_multi' && state.gameMode !== 'duos_multi') return;
-  if (!state.currentRoomId || !state.playerRole || state.multiplayerMatchFinished) return;
+  if (!state.currentRoomId || !state.playerRole || state.multiplayerMatchFinished || state.seriesRoundFinished) return;
 
   state.netSyncTimer -= dt;
   if (state.netSyncTimer > 0) return;
@@ -60,6 +63,8 @@ export function syncNetworkState(dt) {
   if (isWebRTC) {
     state.webrtcPeer.sendFast({
       role: state.playerRole,
+      mr: state.multiplayerRoundId || 1,
+      sr: state.seriesRound || 1,
       state: myState
     });
     return;

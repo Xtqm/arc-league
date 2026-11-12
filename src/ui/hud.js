@@ -44,6 +44,7 @@ export function updateHUD() {
   const bbw = el('bossBarWrap');
   const bbl = el('bossBarLabel');
   const bb = el('bossbar');
+  const sw = el('seriesHudWrap');
 
   if (state.gameMode === 'duel' || state.gameMode === 'duel_ai') {
     if (trHeader) trHeader.style.marginBottom = '4px';
@@ -61,6 +62,7 @@ export function updateHUD() {
     if (bbw) bbw.style.display = 'block';
     if (bbl) bbl.textContent = 'RIVAL SHIELD';
     if (bb && bb.firstElementChild) bb.firstElementChild.style.width = hpPct + '%';
+    if (sw) sw.style.display = 'none';
   } else if (state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi') {
     if (trHeader) trHeader.style.marginBottom = '0';
     if (rl) rl.style.display = 'none';
@@ -75,6 +77,24 @@ export function updateHUD() {
     const maxHp = (state.gameMode === 'duos_multi' ? 200 : 100);
     const pct = Math.max(0, Math.min(100, (oppHp / maxHp) * 100));
     if (bb && bb.firstElementChild) bb.firstElementChild.style.width = pct + '%';
+    if (sw) {
+      const bestOf = Number(state.seriesBestOf) || 1;
+      if (bestOf > 1) {
+        const myTeam = (state.playerRole === 'p2' || state.playerRole === 'p4') ? 2 : 1;
+        const foeTeam = myTeam === 1 ? 2 : 1;
+        const winsNeeded = Math.ceil(bestOf / 2);
+        const scores = state.seriesScores || { t1: 0, t2: 0 };
+        const myWins = Number(scores[`t${myTeam}`]) || 0;
+        const foeWins = Number(scores[`t${foeTeam}`]) || 0;
+        const renderPips = (count, cls) => Array.from({ length: winsNeeded }, (_, i) =>
+          `<span class="series-pip ${cls}${i < count ? ' won' : ''}"></span>`
+        ).join('');
+        sw.style.display = 'flex';
+        sw.innerHTML = `<span class="series-pips">${renderPips(myWins, 'you')}</span><span class="series-score-num">${myWins} - ${foeWins}</span><span class="series-pips">${renderPips(foeWins, 'foe')}</span>`;
+      } else {
+        sw.style.display = 'none';
+      }
+    }
   } else {
     if (trHeader) trHeader.style.marginBottom = '4px';
     if (rl) {
@@ -87,10 +107,39 @@ export function updateHUD() {
       sl.innerHTML = `HOSTILES <span id="foes">${state.foes.length}</span>`;
     }
     if (bbw) bbw.style.display = 'none';
+    if (sw) sw.style.display = 'none';
   }
 
   const sc = el('score');
   if (sc) sc.textContent = state.score;
+}
+
+export function showSeriesIntermission({ round = 1, won = false, scores = null, bestOf = 3 } = {}) {
+  if (typeof document === 'undefined') return;
+  const box = el('seriesIntermission');
+  if (!box) return;
+  const myTeam = (state.playerRole === 'p2' || state.playerRole === 'p4') ? 2 : 1;
+  const foeTeam = myTeam === 1 ? 2 : 1;
+  const s = scores || state.seriesScores || { t1: 0, t2: 0 };
+  const myWins = Number(s[`t${myTeam}`]) || 0;
+  const foeWins = Number(s[`t${foeTeam}`]) || 0;
+  const winsNeeded = Math.ceil((Number(bestOf) || 3) / 2);
+  box.className = won ? '' : 'lost';
+  box.innerHTML = `
+    <div class="si-title">ROUND ${round} ${won ? 'WON' : 'LOST'}</div>
+    <div class="si-score"><span style="color:var(--cyan)">${myWins}</span> <span style="opacity:.5">-</span> <span style="color:#d896ff">${foeWins}</span></div>
+    <div class="si-sub">FIRST TO ${winsNeeded} WINS · NEXT ROUND INCOMING</div>
+  `;
+  box.style.display = 'block';
+}
+
+export function clearSeriesIntermission() {
+  if (typeof document === 'undefined') return;
+  const box = el('seriesIntermission');
+  if (box) {
+    box.style.display = 'none';
+    box.innerHTML = '';
+  }
 }
 
 export function resetHintVisibility(duration = 4.5) {

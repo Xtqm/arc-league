@@ -228,6 +228,96 @@
 
   /* Boss health bar */
   #bossbar > i { background:var(--orange); box-shadow:0 0 12px var(--orange); }
+  #seriesHudWrap {
+    display: none;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: #bfefff;
+  }
+  .series-pips {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .series-pip {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.35);
+    background: rgba(0, 12, 18, 0.7);
+    display: inline-block;
+  }
+  .series-pip.you.won {
+    background: var(--cyan);
+    border-color: #fff;
+    box-shadow: 0 0 7px var(--cyan);
+  }
+  .series-pip.foe.won {
+    background: #c74dff;
+    border-color: #f3d2ff;
+    box-shadow: 0 0 7px #b026ff;
+  }
+  .series-score-num {
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    color: #fff;
+  }
+  body.touch-device #seriesHudWrap {
+    font-size: 8px;
+    gap: 4px;
+    margin-top: 3px;
+  }
+  body.touch-device .series-pip {
+    width: 6px;
+    height: 6px;
+  }
+  #seriesIntermission {
+    position: absolute;
+    left: 50%;
+    top: 34%;
+    transform: translate(-50%, -50%);
+    z-index: 120;
+    pointer-events: none;
+    display: none;
+    text-align: center;
+    padding: 12px 24px;
+    border: 1px solid rgba(79,242,255,0.55);
+    border-radius: 8px;
+    background: rgba(1, 16, 26, 0.86);
+    box-shadow: 0 0 28px rgba(79,242,255,0.28);
+    text-transform: uppercase;
+  }
+  #seriesIntermission.lost {
+    border-color: rgba(255, 123, 26, 0.65);
+    box-shadow: 0 0 28px rgba(255, 123, 26, 0.28);
+  }
+  #seriesIntermission .si-title {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 5px;
+    color: #fff;
+    text-shadow: 0 0 16px var(--cyan);
+  }
+  #seriesIntermission.lost .si-title {
+    color: #ffcf9f;
+    text-shadow: 0 0 16px var(--orange);
+  }
+  #seriesIntermission .si-score {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 6px;
+    margin: 4px 0;
+  }
+  #seriesIntermission .si-sub {
+    font-size: 10px;
+    letter-spacing: 3px;
+    opacity: 0.85;
+    color: #bfefff;
+  }
 
   /* Mode selection buttons on Main Menu */
   .mode-select {
@@ -357,6 +447,14 @@
     background:rgba(79,242,255,.22); color:#fff;
     box-shadow:0 0 22px rgba(79,242,255,.6), inset 0 0 12px rgba(79,242,255,.25);
     transform:translateY(-2px);
+  }
+  .btn.hot {
+    background:rgba(79,242,255,.24); color:#fff; border-color:#fff;
+    box-shadow:0 0 18px rgba(79,242,255,.65), inset 0 0 10px rgba(79,242,255,.35);
+  }
+  .btn.purple.hot {
+    background:rgba(176,38,255,.32); color:#fff; border-color:#e9c2ff;
+    box-shadow:0 0 20px rgba(176,38,255,.75), inset 0 0 12px rgba(176,38,255,.4);
   }
   .gamepad-focus, :focus-visible.gamepad-focus {
     outline: 2px solid var(--cyan) !important;
@@ -2472,6 +2570,7 @@
       <div id="bossBarLabel" style="font-size:10px;letter-spacing:2px;color:var(--orange);margin-bottom:3px">RIVAL SHIELD</div>
       <div class="bar" id="bossbar"><i style="width:100%"></i></div>
     </div>
+    <div id="seriesHudWrap" style="display:none;margin-top:5px"></div>
   </div>
   <div id="crosshair">
     <svg id="chargeArc" class="charge-arc" viewBox="0 0 44 44" style="position:absolute;left:-5px;top:-5px;width:44px;height:44px;pointer-events:none;transform:rotate(-90deg);display:none;">
@@ -2488,6 +2587,7 @@
   <div class="panel" id="keymon" style="display:none;left:18px;bottom:18px;font-size:11px;line-height:1.7"></div>
   <div id="lockstate">Cursor not captured — click the arena to lock · move mouse off-centre to turn · open preview in a new tab for full mouse lock</div>
   <div id="msg"></div>
+  <div id="seriesIntermission" aria-live="polite"></div>
   <div id="countdownText"></div>
   <div id="campaignObjectiveHeader" style="display:none;"></div>
   <div id="floatingIndicators"></div>
@@ -2562,6 +2662,15 @@
       </div>
       <button id="quickMatchBtn" class="mode-btn multi-btn" style="width:100%;border-color:#00ffff;color:#00ffff;box-shadow:0 0 10px rgba(0,255,255,0.3);margin-bottom:8px;">[ QUICK MATCH // WARM-UP QUEUE ]</button>
       <button id="practiceBtn" class="mode-btn duel-btn" style="width:100%;">PRACTICE (SOLO AI)</button>
+      <div id="seriesSelectContainer" style="text-align:left;width:100%;margin-top:4px;">
+        <div style="display:block;font-size:10px;letter-spacing:2px;color:#d896ff;margin-bottom:6px;">ONLINE SERIES LENGTH (1v1 / 2v2)</div>
+        <div id="seriesFormatSelect" style="display:flex;gap:8px;">
+          <button type="button" class="btn purple series-opt-btn" data-best-of="1" style="flex:1;padding:6px 0;font-size:11px;letter-spacing:2px;">BO1</button>
+          <button type="button" class="btn purple series-opt-btn hot" data-best-of="3" style="flex:1;padding:6px 0;font-size:11px;letter-spacing:2px;">BO3</button>
+          <button type="button" class="btn purple series-opt-btn" data-best-of="5" style="flex:1;padding:6px 0;font-size:11px;letter-spacing:2px;">BO5</button>
+          <button type="button" class="btn purple series-opt-btn" data-best-of="7" style="flex:1;padding:6px 0;font-size:11px;letter-spacing:2px;">BO7</button>
+        </div>
+      </div>
       <button id="host1v1Btn" class="mode-btn multi-btn" style="width:100%;">1v1 DUEL (ONLINE)</button>
       <button id="host2v2Btn" class="mode-btn multi-btn" style="width:100%;">2v2 DUOS (ONLINE)</button>
       <button id="cancelHostBtn" class="btn" style="margin-top:8px;border-color:var(--orange);color:#ffb37a;width:100%;">RETURN TO MENU</button>

@@ -404,7 +404,7 @@ export function aimDir() {
 export function damagePlayer(amount, from) {
   if (state.countdownTimer > 0) return;
   if (!state.player.alive) return;
-  if (state.multiplayerMatchFinished) return;
+  if (state.multiplayerMatchFinished || state.seriesRoundFinished) return;
   if (state.player.invuln > 0) return;
   state.player.invuln = 0.25;
   state.player.hp -= amount;

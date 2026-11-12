@@ -28,7 +28,7 @@ async function runMultiplayerTests() {
     if (auth._saveState) auth._saveState.handle = 'FLYNN_GUEST';
   });
   const hostRoomData = await hostPage.evaluate(async () => {
-    await window.__dbg.createRoom();
+    await window.__dbg.createRoom({ bestOf: 1 });
     const code = window.__dbg.currentRoomId();
     const rcd = document.getElementById('roomCodeDisplay');
     const hwb = document.getElementById('hostWaitBlock');
@@ -136,6 +136,7 @@ async function runMultiplayerTests() {
         roundHidden: document.getElementById('roundLabel')?.style.display === 'none',
         scoreHidden: document.getElementById('scoreRow')?.style.display === 'none',
         subHidden: document.getElementById('subLabel')?.style.display === 'none',
+        seriesHidden: document.getElementById('seriesHudWrap')?.style.display === 'none',
         bossVisible: document.getElementById('bossBarWrap')?.style.display === 'block',
         pauseVisible: window.getComputedStyle(document.getElementById('pauseBtn')).display !== 'none'
       };
@@ -161,6 +162,7 @@ async function runMultiplayerTests() {
   const onlineHudMinimal = hudAndNameplateCheck[0].roundHidden &&
     hudAndNameplateCheck[0].scoreHidden &&
     hudAndNameplateCheck[0].subHidden &&
+    hudAndNameplateCheck[0].seriesHidden &&
     hudAndNameplateCheck[0].bossVisible &&
     hudAndNameplateCheck[0].pauseVisible;
   if (!hostSeesGuestPlate || !guestSeesHostPlate || !onlineHudMinimal) {
@@ -472,6 +474,114 @@ async function runMultiplayerTests() {
     throw new Error(`Test 10 FAILED (2v2 rosters/nameplates): ${JSON.stringify(duosCheck)}`);
   }
   console.log('>>> TEST 10 PASSED: 2v2 teammate/foe nameplates, team rosters, and callsign resolution verified!');
+
+  // -------------------------------------------------------------
+  // TEST 11: Best-of-N Series HUD Strip, Intermission & 2v2 Post-Match Score
+  // -------------------------------------------------------------
+  console.log('\n--- TEST 11: Best-of-N HUD Strip, Intermission & 2v2 Post-Match Series Score ---');
+  const seriesUiCheck = await hostPage.evaluate(async () => {
+    const rm = await import('/src/network/roomManager.js');
+    const hud = await import('/src/ui/hud.js');
+
+    // BO1 hides #seriesHudWrap
+    rm.startMultiplayerDuel('p1', 'SER1', '1v1', { roundId: 1, bestOf: 1 });
+    hud.updateHUD();
+    const bo1Hidden = document.getElementById('seriesHudWrap')?.style.display === 'none';
+    window.__dbg.teardownMultiplayer();
+
+    // 2v2 BO3 shows compact win pips right beneath #bossBarWrap
+    rm.startMultiplayerDuel('p1', 'SER3', '2v2', {
+      roundId: 1,
+      bestOf: 3,
+      seriesRound: 1,
+      seriesScores: { t1: 0, t2: 0 }
+    });
+    rm.applyPlayerName('p2', 'Rinzler');
+    rm.applyPlayerName('p3', 'Beck');
+    rm.applyPlayerName('p4', 'Clu');
+    hud.updateHUD();
+
+    const trChildren = Array.from(document.getElementById('tr')?.children || []).map(el => el.id);
+    const seriesWrap = document.getElementById('seriesHudWrap');
+    const initHud = {
+      display: seriesWrap?.style.display,
+      cyanPips: seriesWrap?.querySelectorAll('.series-pip.you').length || 0,
+      purplePips: seriesWrap?.querySelectorAll('.series-pip.foe').length || 0,
+      scoreText: seriesWrap?.querySelector('.series-score-num')?.textContent || '',
+      roundHidden: document.getElementById('roundLabel')?.style.display === 'none',
+      scoreHidden: document.getElementById('scoreRow')?.style.display === 'none',
+      subHidden: document.getElementById('subLabel')?.style.display === 'none',
+      underBoss: trChildren.indexOf('seriesHudWrap') === trChildren.indexOf('bossBarWrap') + 1
+    };
+
+    // Sub-round intermission banner displays without triggering rematch/leave overlay
+    window.__dbg.state.seriesScores = { t1: 1, t2: 0 };
+    hud.showSeriesIntermission({ round: 1, won: true, scores: { t1: 1, t2: 0 }, bestOf: 3 });
+    const intermissionEl = document.getElementById('seriesIntermission');
+    const intermissionState = {
+      display: intermissionEl?.style.display,
+      title: intermissionEl?.querySelector('.si-title')?.textContent?.trim() || '',
+      score: intermissionEl?.querySelector('.si-score')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      overlayHidden: document.getElementById('overlay')?.style.display === 'none' && !document.getElementById('voteRematchBtn')
+    };
+
+    // Clinch pips & 2v2 post-match series summary
+    window.__dbg.state.seriesScores = { t1: 2, t2: 1 };
+    window.__dbg.state.seriesRound = 3;
+    hud.clearSeriesIntermission();
+    const intermissionCleared = intermissionEl?.style.display === 'none';
+    hud.updateHUD();
+
+    const clinchHud = {
+      cyanActive: seriesWrap?.querySelectorAll('.series-pip.you.won').length || 0,
+      purpleActive: seriesWrap?.querySelectorAll('.series-pip.foe.won').length || 0,
+      scoreText: seriesWrap?.querySelector('.series-score-num')?.textContent || ''
+    };
+
+    rm.showMultiplayerVictory();
+    const postMatchSeries = document.getElementById('postMatchSeriesScore')?.textContent || '';
+    const postMatchMatchup = document.getElementById('postMatchMatchup')?.textContent || '';
+
+    window.__dbg.teardownMultiplayer();
+    window.__dbg.showModeSelect();
+
+    return {
+      bo1Hidden,
+      initHud,
+      intermissionState,
+      intermissionCleared,
+      clinchHud,
+      postMatchSeries,
+      postMatchMatchup
+    };
+  });
+
+  if (
+    !seriesUiCheck.bo1Hidden ||
+    seriesUiCheck.initHud.display !== 'flex' ||
+    seriesUiCheck.initHud.cyanPips !== 2 ||
+    seriesUiCheck.initHud.purplePips !== 2 ||
+    seriesUiCheck.initHud.scoreText !== '0 - 0' ||
+    !seriesUiCheck.initHud.roundHidden ||
+    !seriesUiCheck.initHud.scoreHidden ||
+    !seriesUiCheck.initHud.subHidden ||
+    !seriesUiCheck.initHud.underBoss ||
+    seriesUiCheck.intermissionState.display !== 'block' ||
+    seriesUiCheck.intermissionState.title !== 'ROUND 1 WON' ||
+    seriesUiCheck.intermissionState.score !== '1 - 0' ||
+    !seriesUiCheck.intermissionState.overlayHidden ||
+    !seriesUiCheck.intermissionCleared ||
+    seriesUiCheck.clinchHud.cyanActive !== 2 ||
+    seriesUiCheck.clinchHud.purpleActive !== 1 ||
+    seriesUiCheck.clinchHud.scoreText !== '2 - 1' ||
+    !seriesUiCheck.postMatchSeries.includes('2 - 1') ||
+    !seriesUiCheck.postMatchSeries.includes('BEST OF 3') ||
+    !seriesUiCheck.postMatchMatchup.includes('QUORRA & BECK') ||
+    !seriesUiCheck.postMatchMatchup.includes('RINZLER & CLU')
+  ) {
+    throw new Error(`Test 11 FAILED (series UI/2v2): ${JSON.stringify(seriesUiCheck)}`);
+  }
+  console.log('>>> TEST 11 PASSED: Best-of-N HUD pips, sub-round intermission, and 2v2 series summary verified!');
 
   console.log('\n========================================================');
   console.log('ALL 1v1 MULTIPLAYER DUEL ACCEPTANCE CRITERIA VERIFIED!');

@@ -1184,7 +1184,6 @@ export async function onClickCreateRoom(e, mode = '1v1', mapId = null, bestOf = 
     resetMultiplayerSessionTracking(0, { bestOf: resolvedBestOf, seriesRound: 1, seriesScores: { t1: 0, t2: 0 } });
     const myName = getLocalCallsign();
     state.multiplayerNames = { p1: myName, p2: null, p3: null, p4: null };
-    state.currentRoomId = code;
     state.playerRole = 'p1';
     state.roomFallenTiles = [];
     state.multiplayerMapId = resolvedMapId;
@@ -1225,6 +1224,7 @@ export async function onClickCreateRoom(e, mode = '1v1', mapId = null, bestOf = 
       rematchVotes: { p1: false, p2: false, p3: false, p4: false }
     });
 
+    state.currentRoomId = code;
     showHostWaitingModal(code, mode);
 
     if (state.roomUnsubscribe) { state.roomUnsubscribe(); state.roomUnsubscribe = null; }

@@ -17,7 +17,15 @@ contextBridge.exposeInMainWorld('electronDesktop', {
   // Steamworks methods
   steamGetStatus: () => ipcRenderer.invoke('steam:get-status'),
   steamUnlockAchievement: (achievementId) => ipcRenderer.invoke('steam:unlock-achievement', achievementId),
-  steamSetRichPresence: (key, value) => ipcRenderer.invoke('steam:set-rich-presence', key, value)
+  steamSetRichPresence: (key, value) => ipcRenderer.invoke('steam:set-rich-presence', key, value),
+  // Desktop auto-update methods (electron-updater lifecycle, production builds only)
+  onUpdateAvailable: (callback) => {
+    ipcRenderer.on('desktop:update-available', (_event, info) => callback(info));
+  },
+  onUpdateDownloaded: (callback) => {
+    ipcRenderer.on('desktop:update-downloaded', (_event, info) => callback(info));
+  },
+  installUpdate: () => ipcRenderer.send('desktop:install-update')
 });
 
 // Suppress unintended drag & drop on window

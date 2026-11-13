@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const steam = require('./steam.cjs');
+const { autoUpdater } = require('electron-updater');
 
 // Configure Steam Overlay hooks before app ready
 steam.enableSteamOverlay();
@@ -196,8 +197,88 @@ ipcMain.handle('steam:set-rich-presence', async (_event, key, value) => {
   return steam.setRichPresence(key, value);
 });
 
+// Desktop auto-update lifecycle (electron-updater / GitHub Releases)
+let updateStatusWired = false;
+let updateDownloaded = false;
+
+function sendToRenderer(channel, payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, payload);
+  }
+}
+
+function wireAutoUpdaterEvents() {
+  if (updateStatusWired) return;
+  updateStatusWired = true;
+
+  autoUpdater.autoDownload = true;          // Download in background, never force UI
+  autoUpdater.autoInstallOnAppQuit = true;  // Stage and replace on normal game exit
+  autoUpdater.logger = console;
+
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[AutoUpdater] Checking GitHub Releases for a new version...');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    console.log('[AutoUpdater] Update available:', info.version);
+    sendToRenderer('desktop:update-available', { version: info.version });
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    console.log('[AutoUpdater] No update available (current version:', info.version + ')');
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    updateDownloaded = true;
+    console.log('[AutoUpdater] Update downloaded and verified:', info.version);
+    sendToRenderer('desktop:update-downloaded', { version: info.version });
+  });
+
+  autoUpdater.on('error', (err) => {
+    // Log gracefully: dropped connections or rate limits must never crash the game
+    console.error('[AutoUpdater] Update error (non-fatal):', err && (err.stack || err.message || err));
+  });
+}
+
+function initAutoUpdater() {
+  // Remote update checks are only allowed in packaged production builds.
+  if (!app.isPackaged) {
+    console.log('[AutoUpdater] Bypassed: unpackaged development build.');
+    return;
+  }
+  if ((process.env.ELECTRON_TEST_MODE || '').trim() === '1') {
+    console.log('[AutoUpdater] Bypassed: ELECTRON_TEST_MODE=1.');
+    return;
+  }
+
+  wireAutoUpdaterEvents();
+  autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+    console.error('[AutoUpdater] Initial update check failed (non-fatal):', err && (err.message || err));
+  });
+}
+
+ipcMain.on('desktop:install-update', () => {
+  if (!updateDownloaded) {
+    console.warn('[AutoUpdater] Ignored install request: no update downloaded yet.');
+    return;
+  }
+  try {
+    // Silent install, relaunch after: seamless restart without installer wizard UI.
+    setImmediate(() => {
+      try {
+        autoUpdater.quitAndInstall(true, true);
+      } catch (err) {
+        console.error('[AutoUpdater] Failed to install staged update:', err);
+      }
+    });
+  } catch (err) {
+    console.error('[AutoUpdater] Failed to install staged update:', err);
+  }
+});
+
 app.whenReady().then(() => {
   steam.initSteam();
+  initAutoUpdater();
   createWindow();
 
   if ((process.env.ELECTRON_TEST_MODE || '').trim() === '1') {

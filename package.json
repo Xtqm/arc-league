@@ -14,15 +14,17 @@
     "test:graphics": "node test/runner.js graphics",
     "test:campaign": "node test/runner.js campaign",
     "test:achievements": "node test/runner.js achievements",
+    "test:desktop": "node test/runner.js desktop",
     "test:network": "node test/runner.js network",
     "test:gameplay": "node test/runner.js gameplay",
     "desktop:dev": "electron .",
-    "desktop:build": "electron-builder --win",
-    "desktop:build:all": "electron-builder -mwl",
+    "desktop:build": "node desktop/clean-dist.cjs && electron-builder --win",
+    "desktop:build:all": "node desktop/clean-dist.cjs && electron-builder -mwl",
     "desktop:steam": "node desktop/build-steam.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
+    "electron-updater": "^6.8.11",
     "puppeteer": "^23.11.1",
     "steamworks.js": "^0.4.0"
   },

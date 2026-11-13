@@ -5,6 +5,11 @@
   "directories": {
     "output": "dist"
   },
+  "publish": {
+    "provider": "github",
+    "owner": "Xtqm",
+    "repo": "disc-battle"
+  },
   "files": [
     "index.html",
     "desktop/**/*",
@@ -23,7 +28,8 @@
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
-    "createStartMenuShortcut": true
+    "createStartMenuShortcut": true,
+    "artifactName": "${productName} Setup ${version}.${ext}"
   },
   "linux": {
     "target": [

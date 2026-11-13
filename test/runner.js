@@ -57,6 +57,9 @@ const TEST_DOMAINS = {
     'ui/achievement_toast.test.js',
     'ui/achievements_modal.test.js'
   ],
+  desktop: [
+    'ui/update_notification.test.js'
+  ],
   gameplay: [
     'gameplay/gamepad.test.js',
     'gameplay/mouse_camera_input.test.js',

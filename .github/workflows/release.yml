@@ -41,7 +41,7 @@ jobs:
         run: npm ci
 
       - name: Package desktop distribution binary
-        run: npx electron-builder ${{ matrix.build_flag }}
+        run: npx electron-builder ${{ matrix.build_flag }} --publish never
 
       - name: Compute SHA-256 checksum (Windows)
         if: runner.os == 'Windows'
@@ -70,6 +70,8 @@ jobs:
           path: |
             ${{ matrix.artifact_glob }}
             dist/*.sha256
+            dist/*.blockmap
+            dist/latest*.yml
           if-no-files-found: error
 
   publish-release:
@@ -88,9 +90,18 @@ jobs:
       - name: Consolidate distribution packages and checksums
         run: |
           mkdir -p dist-release
-          find release-artifacts -type f \( -name "*.exe" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.sha256" \) -exec cp {} dist-release/ \;
+          find release-artifacts -type f \( -name "*.exe" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.sha256" -o -name "*.blockmap" -o -name "*.yml" \) -exec cp {} dist-release/ \;
           cd dist-release
-          cat *.sha256 > SHA256SUMS.txt
+          # electron-updater resolves release assets by the safe artifact names
+          # embedded in latest*.yml (spaces sanitized to dashes). Align asset
+          # names so the updater's download URLs resolve.
+          for f in *; do
+            safe=$(echo "$f" | tr ' ' '-')
+            if [ "$f" != "$safe" ]; then mv -v "$f" "$safe"; fi
+          done
+          # Regenerate checksums from the sanitized (uploaded) file names
+          rm -f *.sha256 SHA256SUMS.txt
+          sha256sum *.exe *.AppImage *.dmg 2>/dev/null > SHA256SUMS.txt
           ls -la
 
       - name: Create GitHub Release Draft
@@ -104,6 +115,8 @@ jobs:
             dist-release/*.exe
             dist-release/*.AppImage
             dist-release/*.dmg
+            dist-release/*.blockmap
+            dist-release/*.yml
             dist-release/SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

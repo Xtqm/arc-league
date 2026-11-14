@@ -6,12 +6,17 @@ import { wallMat, glowMat, tileMatIntact, tileEdgeMatIntact } from '../graphics/
 export { tileMatIntact, tileEdgeMatIntact };
 import { burst } from '../graphics/particles.js';
 import { playWarningSound, playTileDropSound } from '../audio/sfx.js';
-import { shake } from '../ui/UIManager.js';
 import { sectorHazardBuilder } from '../arena/hazards/SectorHazardBuilder.js';
 export { sectorHazardBuilder };
 
-// Map: key `${ix}_${iz}` -> { mesh, slabMesh, edgeMesh, state, timer, origY, ix, iz, center, regenTimer, warningColor }
+function shake(v) {
+  state.shakeAmt = Math.min((state.shakeAmt || 0) + v, 0.8);
+}
+
+// Map: key `${ix}_${iz}` -> { tileIndex, mesh, slabMesh, edgeMesh, state, timer, origY, ix, iz, center, regenTimer, warningColor, delegate }
 export const tiles = new Map();
+
+export const TOTAL_TILES = config.TILE_N * config.TILE_N; // 576
 
 export const tileGeo = new THREE.BoxGeometry(config.TILE_W - 0.08, 0.35, config.TILE_W - 0.08);
 export const tileEdgeGeo = new THREE.EdgesGeometry(tileGeo);
@@ -19,33 +24,204 @@ export const tileEdgeGeo = new THREE.EdgesGeometry(tileGeo);
 export const tileGroup = new THREE.Group();
 scene.add(tileGroup);
 
+// 1. Instanced Meshes for Floor Slabs and Edge Lines
+export const instancedSlabs = new THREE.InstancedMesh(tileGeo, tileMatIntact, TOTAL_TILES);
+instancedSlabs.receiveShadow = true;
+instancedSlabs.frustumCulled = false;
+
+export const instancedEdges = new THREE.InstancedMesh(tileEdgeGeo, tileEdgeMatIntact, TOTAL_TILES);
+instancedEdges.isMesh = false;
+instancedEdges.isLine = true;
+instancedEdges.isLineSegments = true;
+instancedEdges.frustumCulled = false;
+
+tileGroup.add(instancedSlabs, instancedEdges);
+
+// Precomputed instance matrices for identity placement & zero-scale hiding
+const _hiddenMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
+export const defaultTileMatrices = [];
+for (let i = 0; i < TOTAL_TILES; i++) {
+  const ix = Math.floor(i / config.TILE_N);
+  const iz = i % config.TILE_N;
+  const cx = -config.ARENA + (ix + 0.5) * config.TILE_W;
+  const cz = -config.ARENA + (iz + 0.5) * config.TILE_W;
+  const mat = new THREE.Matrix4();
+  mat.setPosition(cx, -0.175, cz);
+  defaultTileMatrices.push(mat);
+}
+
+export function hideInstance(tileIndex) {
+  if (tileIndex < 0 || tileIndex >= TOTAL_TILES) return;
+  instancedSlabs.setMatrixAt(tileIndex, _hiddenMatrix);
+  instancedEdges.setMatrixAt(tileIndex, _hiddenMatrix);
+  instancedSlabs.instanceMatrix.needsUpdate = true;
+  instancedEdges.instanceMatrix.needsUpdate = true;
+}
+
+export function showInstance(tileIndex) {
+  if (tileIndex < 0 || tileIndex >= TOTAL_TILES) return;
+  const mat = defaultTileMatrices[tileIndex];
+  instancedSlabs.setMatrixAt(tileIndex, mat);
+  instancedEdges.setMatrixAt(tileIndex, mat);
+  instancedSlabs.instanceMatrix.needsUpdate = true;
+  instancedEdges.instanceMatrix.needsUpdate = true;
+}
+
+// 2. Dynamic Warning Delegate Pool (32 reusable meshes)
+export const DELEGATE_POOL_SIZE = 32;
+export const delegatePool = [];
+
+function createDelegateItem() {
+  const group = new THREE.Group();
+  group.visible = false;
+
+  const warningSlabMat = new THREE.MeshStandardMaterial({
+    color: 0x07202c,
+    roughness: 0.28,
+    metalness: 0.8,
+    emissive: config.CYAN,
+    emissiveIntensity: 1.0,
+    transparent: true
+  });
+  warningSlabMat.dispose = () => {};
+
+  const warningEdgeMat = new THREE.LineBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 1.0
+  });
+  warningEdgeMat.dispose = () => {};
+
+  const slabMesh = new THREE.Mesh(tileGeo, warningSlabMat);
+  slabMesh.position.y = -0.175;
+  slabMesh.receiveShadow = true;
+
+  const edgeMesh = new THREE.LineSegments(tileEdgeGeo, warningEdgeMat);
+  edgeMesh.position.y = -0.175;
+
+  group.add(slabMesh, edgeMesh);
+  tileGroup.add(group);
+
+  return {
+    group,
+    slabMesh,
+    edgeMesh,
+    warningSlabMat,
+    warningEdgeMat,
+    inUse: false,
+    tile: null
+  };
+}
+
+export function initDelegatePool() {
+  if (delegatePool.length === 0) {
+    for (let i = 0; i < DELEGATE_POOL_SIZE; i++) {
+      delegatePool.push(createDelegateItem());
+    }
+  } else {
+    for (const d of delegatePool) {
+      d.inUse = false;
+      d.tile = null;
+      d.group.visible = false;
+      if (!tileGroup.children.includes(d.group)) {
+        tileGroup.add(d.group);
+      }
+    }
+  }
+}
+
+export function claimDelegate(tile) {
+  if (tile.delegate) return tile.delegate;
+  let delegate = delegatePool.find(d => !d.inUse);
+  if (!delegate) {
+    delegate = createDelegateItem();
+    delegatePool.push(delegate);
+  }
+  delegate.inUse = true;
+  delegate.tile = tile;
+  delegate.group.position.set(tile.center.x, (tile.mesh && tile.mesh.position) ? tile.mesh.position.y : tile.origY, tile.center.z);
+  delegate.group.visible = tile.mesh ? (tile.mesh.visible !== false) : true;
+
+  // Initialize delegate materials with active theme colors and emissive warning
+  delegate.warningSlabMat.color.copy(tileMatIntact.color);
+  delegate.warningSlabMat.roughness = tileMatIntact.roughness;
+  delegate.warningSlabMat.metalness = tileMatIntact.metalness;
+  delegate.warningSlabMat.emissive.setHex(tile.warningColor || config.CYAN);
+  delegate.warningSlabMat.emissiveIntensity = 1.0;
+  delegate.warningEdgeMat.color.setHex(0xffffff);
+  delegate.warningEdgeMat.opacity = 1.0;
+
+  delegate.slabMesh.material = delegate.warningSlabMat;
+  delegate.edgeMesh.material = delegate.warningEdgeMat;
+
+  tile.delegate = delegate;
+  tile.mesh = delegate.group;
+  tile.slabMesh = delegate.slabMesh;
+  tile.edgeMesh = delegate.edgeMesh;
+
+  hideInstance(tile.tileIndex);
+  return delegate;
+}
+
+export function releaseDelegate(tile) {
+  if (!tile.delegate) return;
+  const delegate = tile.delegate;
+  delegate.group.visible = false;
+  delegate.inUse = false;
+  delegate.tile = null;
+  tile.delegate = null;
+
+  tile.mesh = tile._dummyMesh;
+  tile.slabMesh = tile._dummySlab;
+  tile.edgeMesh = tile._dummyEdge;
+  tile._dummyMesh.position.set(tile.center.x, tile.origY, tile.center.z);
+  tile._dummyMesh.visible = true;
+
+  showInstance(tile.tileIndex);
+}
+
 export function initTiles() {
   tiles.clear();
   while (tileGroup.children.length > 0) {
     tileGroup.remove(tileGroup.children[0]);
   }
+  tileGroup.add(instancedSlabs, instancedEdges);
+  initDelegatePool();
+
   for (let ix = 0; ix < config.TILE_N; ix++) {
     for (let iz = 0; iz < config.TILE_N; iz++) {
+      const tileIndex = ix * config.TILE_N + iz;
       const cx = -config.ARENA + (ix + 0.5) * config.TILE_W;
       const cz = -config.ARENA + (iz + 0.5) * config.TILE_W;
-      const mesh = new THREE.Group();
-      mesh.position.set(cx, 0, cz);
 
-      const slabMesh = new THREE.Mesh(tileGeo, tileMatIntact);
-      slabMesh.position.y = -0.175;
-      slabMesh.receiveShadow = true;
+      // Populate instanced matrix
+      instancedSlabs.setMatrixAt(tileIndex, defaultTileMatrices[tileIndex]);
+      instancedEdges.setMatrixAt(tileIndex, defaultTileMatrices[tileIndex]);
 
-      const edgeMesh = new THREE.LineSegments(tileEdgeGeo, tileEdgeMatIntact);
-      edgeMesh.position.y = -0.175;
+      // Standalone dummy group for property access when intact
+      const dummyMesh = new THREE.Group();
+      dummyMesh.position.set(cx, 0, cz);
 
-      mesh.add(slabMesh, edgeMesh);
-      tileGroup.add(mesh);
+      const dummySlab = new THREE.Mesh(tileGeo, tileMatIntact);
+      dummySlab.position.y = -0.175;
+      dummySlab.receiveShadow = true;
 
-      tiles.set(`${ix}_${iz}`, {
-        mesh,
-        slabMesh,
-        edgeMesh,
-        state: config.TILE_INTACT,
+      const dummyEdge = new THREE.LineSegments(tileEdgeGeo, tileEdgeMatIntact);
+      dummyEdge.position.y = -0.175;
+
+      dummyMesh.add(dummySlab, dummyEdge);
+
+      let _state = config.TILE_INTACT;
+
+      const tile = {
+        tileIndex,
+        _dummyMesh: dummyMesh,
+        _dummySlab: dummySlab,
+        _dummyEdge: dummyEdge,
+        mesh: dummyMesh,
+        slabMesh: dummySlab,
+        edgeMesh: dummyEdge,
+        delegate: null,
         timer: 0,
         origY: 0,
         ix,
@@ -53,9 +229,33 @@ export function initTiles() {
         center: new THREE.Vector3(cx, 0, cz),
         regenTimer: 0,
         warningColor: config.CYAN
+      };
+
+      Object.defineProperty(tile, 'state', {
+        get() {
+          return _state;
+        },
+        set(val) {
+          _state = val;
+          if (val === config.TILE_INTACT) {
+            if (tile.delegate) {
+              releaseDelegate(tile);
+            } else {
+              showInstance(tileIndex);
+            }
+          } else {
+            hideInstance(tileIndex);
+          }
+        },
+        enumerable: true,
+        configurable: true
       });
+
+      tiles.set(`${ix}_${iz}`, tile);
     }
   }
+  instancedSlabs.instanceMatrix.needsUpdate = true;
+  instancedEdges.instanceMatrix.needsUpdate = true;
 }
 initTiles();
 
@@ -136,22 +336,10 @@ for (const [x, z] of pillarSpots) {
 
 export function triggerTileWarning(tile, color = config.CYAN) {
   if (!tile || tile.state !== config.TILE_INTACT) return;
+  tile.warningColor = color;
+  claimDelegate(tile);
   tile.state = config.TILE_WARNING;
   tile.timer = config.TILE_WARN_DURATION;
-  tile.warningColor = color;
-  tile.slabMesh.material = new THREE.MeshStandardMaterial({
-    color: 0x07202c,
-    roughness: .28,
-    metalness: .8,
-    emissive: color,
-    emissiveIntensity: 1.0,
-    transparent: true
-  });
-  tile.edgeMesh.material = new THREE.LineBasicMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 1.0
-  });
   playWarningSound();
 }
 
@@ -172,6 +360,10 @@ export function spawnTileDeRezSparks(cx, cz) {
 export function updateTiles(dt) {
   for (const tile of tiles.values()) {
     if (tile.state === config.TILE_INTACT) continue;
+
+    if (!tile.delegate) {
+      claimDelegate(tile);
+    }
 
     if (tile.state === config.TILE_WARNING) {
       tile.timer -= dt;
@@ -221,12 +413,6 @@ export function updateTiles(dt) {
         tile.state = config.TILE_INTACT;
         tile.timer = 0;
         tile.regenTimer = 0;
-        if (tile.slabMesh.material !== tileMatIntact) {
-          tile.slabMesh.material.dispose();
-          tile.edgeMesh.material.dispose();
-          tile.slabMesh.material = tileMatIntact;
-          tile.edgeMesh.material = tileEdgeMatIntact;
-        }
         burst(new THREE.Vector3(tile.center.x, 0.1, tile.center.z), config.CYAN, 16, 6);
       }
     }
@@ -241,13 +427,12 @@ export function rebuildArenaTiles() {
     tile.regenTimer = 0;
     tile.mesh.position.y = tile.origY;
     tile.mesh.visible = true;
-    if (tile.slabMesh.material !== tileMatIntact) {
-      tile.slabMesh.material.dispose();
-      tile.edgeMesh.material.dispose();
-      tile.slabMesh.material = tileMatIntact;
-      tile.edgeMesh.material = tileEdgeMatIntact;
+    if (tile.delegate) {
+      releaseDelegate(tile);
     }
   }
+  instancedSlabs.instanceMatrix.needsUpdate = true;
+  instancedEdges.instanceMatrix.needsUpdate = true;
   if (state.activeGridId) {
     applySectorArena(state.activeGridId);
   }
@@ -255,6 +440,24 @@ export function rebuildArenaTiles() {
 
 export function applySectorArena(gridId) {
   state.activeGridId = gridId;
+  const theme = sectorHazardBuilder.getTheme(gridId);
+  if (theme) {
+    tileMatIntact.color.setHex(theme.floorColor);
+    tileMatIntact.roughness = theme.roughness;
+    tileMatIntact.metalness = theme.metalness;
+    tileEdgeMatIntact.color.setHex(theme.edgeColor);
+    tileMatIntact.needsUpdate = true;
+    tileEdgeMatIntact.needsUpdate = true;
+
+    for (const d of delegatePool) {
+      if (!d.inUse) {
+        d.warningSlabMat.color.setHex(theme.floorColor);
+        d.warningSlabMat.roughness = theme.roughness;
+        d.warningSlabMat.metalness = theme.metalness;
+        d.warningEdgeMat.color.setHex(theme.edgeColor);
+      }
+    }
+  }
   sectorHazardBuilder.applySectorTheme(gridId, tiles, walls);
   sectorHazardBuilder.buildSectorHazards(gridId, scene, tiles);
 }
@@ -268,6 +471,16 @@ export function teardownSectorArena() {
   tileMatIntact.roughness = 0.28;
   tileMatIntact.metalness = 0.8;
   tileEdgeMatIntact.color.setHex(0x187588);
+  tileMatIntact.needsUpdate = true;
+  tileEdgeMatIntact.needsUpdate = true;
+
+  for (const d of delegatePool) {
+    d.warningSlabMat.color.setHex(0x07202c);
+    d.warningSlabMat.roughness = 0.28;
+    d.warningSlabMat.metalness = 0.8;
+    d.warningEdgeMat.color.setHex(0x187588);
+  }
+
   for (const tile of tiles.values()) {
     tile.warningColor = config.CYAN;
   }

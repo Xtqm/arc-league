@@ -320,6 +320,8 @@ if (typeof document !== 'undefined') {
 // Debug hooks for headless puppeteer test harness
 window.__dbg = {
   THREE,
+  renderer,
+  renderCalls: () => renderer ? renderer.info.render.calls : 0,
   spawnDisc: (p, v, owner, color, curve, charge) => spawnDisc(p, v, owner, color, curve, charge),
   updateCrosshair: (aim = { dist: 10 }, traj = null) => updateCrosshair(aim, traj),
   state,

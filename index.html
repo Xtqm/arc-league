@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2712%27 fill=%27none%27 stroke=%27%234ff2ff%27 stroke-width=%273%27/%3E%3C/svg%3E" />
+<link rel="icon" type="image/png" sizes="32x32" href="assets/branding/arc_league_icon_monogram.png" />
+<link rel="apple-touch-icon" sizes="180x180" href="assets/branding/arc_league_icon_monogram.png" />
 <title>ARC LEAGUE</title>
 <style>
   :root { --cyan:#4ff2ff; --orange:#ff7b1a; --star-gold:#ffd700; }
@@ -176,7 +177,10 @@
     transition: opacity 0.3s ease;
   }
   #overlay { position:fixed; inset:0; z-index:10; display:flex; align-items:center; justify-content:center;
-    background:radial-gradient(circle at 50% 50%, rgba(0,30,40,.9), rgba(0,0,0,.97)); cursor:default;
+    background: radial-gradient(circle at 50% 50%, rgba(0,20,30,.82), rgba(0,5,10,.96)),
+                url('assets/branding/arc_league_key_art_capsule.png') center/cover no-repeat;
+    background-color: #00050a;
+    cursor:default;
     touch-action: pan-y; overscroll-behavior: contain; }
   h1 { margin:0 0 6px; font-size:54px; letter-spacing:18px; text-shadow:0 0 30px var(--cyan); }
   h2 { margin:0 0 26px; font-size:13px; letter-spacing:8px; font-weight:400; color:#9fe9f2; }
@@ -284,10 +288,11 @@
     pointer-events: none;
     display: none;
     text-align: center;
-    padding: 12px 24px;
+    padding: 16px 28px;
     border: 1px solid rgba(79,242,255,0.55);
     border-radius: 8px;
-    background: rgba(1, 16, 26, 0.86);
+    background: radial-gradient(circle at center, rgba(0, 5, 10, 0.72) 0%, rgba(0, 5, 10, 0.92) 100%),
+                url('assets/branding/arc_league_key_art_capsule.png') center/cover no-repeat;
     box-shadow: 0 0 28px rgba(79,242,255,0.28);
     text-transform: uppercase;
   }
@@ -317,6 +322,65 @@
     letter-spacing: 3px;
     opacity: 0.85;
     color: #bfefff;
+  }
+
+  /* Arc League Branding Integration */
+  .brand-title-img {
+    max-width: 280px;
+    width: 80%;
+    height: auto;
+    filter: drop-shadow(0 0 16px rgba(79, 242, 255, 0.65));
+    display: block;
+    margin: 0 auto 12px;
+    transition: transform 0.2s ease;
+  }
+  .league-crest-img {
+    width: 72px;
+    height: 72px;
+    filter: drop-shadow(0 0 14px rgba(79, 242, 255, 0.5));
+    display: block;
+    margin: 0 auto 12px;
+    transition: transform 0.2s ease;
+  }
+  @media (max-width: 600px) {
+    .brand-title-img {
+      max-width: 220px;
+      width: 75%;
+    }
+    .league-crest-img {
+      width: 58px;
+      height: 58px;
+      margin-bottom: 8px;
+    }
+  }
+  #matchLoadingOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 150;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at center, rgba(0, 5, 10, 0.7) 0%, rgba(0, 5, 10, 0.88) 100%),
+                url('assets/branding/arc_league_key_art_capsule.png') center/cover no-repeat;
+    background-color: #00050a;
+    transition: opacity 0.3s ease;
+  }
+  #matchLoadingOverlay .loading-telemetry {
+    text-align: center;
+    color: #fff;
+    text-transform: uppercase;
+  }
+  #matchLoadingOverlay .loading-title {
+    font-size: 24px;
+    letter-spacing: 6px;
+    text-shadow: 0 0 16px var(--cyan);
+    margin-bottom: 8px;
+  }
+  #matchLoadingOverlay .loading-status {
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--cyan);
+    opacity: 0.85;
   }
 
   /* Mode selection buttons on Main Menu */
@@ -2588,6 +2652,12 @@
   <div id="lockstate">Cursor not captured — click the arena to lock · move mouse off-centre to turn · open preview in a new tab for full mouse lock</div>
   <div id="msg"></div>
   <div id="seriesIntermission" aria-live="polite"></div>
+  <div id="matchLoadingOverlay" class="match-loading-overlay" style="display:none;">
+    <div class="loading-telemetry">
+      <div class="loading-title">INITIALIZING SIMULATION</div>
+      <div class="loading-status">CALIBRATING GRID SECTOR // LOADING CONSTRUCT</div>
+    </div>
+  </div>
   <div id="countdownText"></div>
   <div id="campaignObjectiveHeader" style="display:none;"></div>
   <div id="floatingIndicators"></div>
@@ -2635,6 +2705,9 @@
 <div id="pauseModal" style="display:contents;">
 <div id="pauseMenu" class="modal" style="display:none;">
   <div class="card">
+    <div class="pause-brand-header" style="margin-bottom:8px;">
+      <img src="assets/branding/arc_league_title_logo.png" alt="ARC LEAGUE" class="brand-title-img" />
+    </div>
     <h1>SYSTEM PAUSED</h1>
     <h2>GRID SIMULATION SUSPENDED</h2>
     <div class="menu-actions">
@@ -2650,6 +2723,9 @@
 
 <div id="hostModal" class="modal-overlay" style="display:none;">
   <div class="card">
+    <div class="host-brand-header" style="margin-bottom:8px;">
+      <img src="assets/branding/arc_league_championship_crest.png" alt="Arc League Championship Crest" class="league-crest-img" />
+    </div>
     <h1>HOST MATCH</h1>
     <h2>SELECT COMBAT MODE</h2>
     <div class="menu-actions" style="max-width:340px;margin:20px auto 0;gap:12px;">

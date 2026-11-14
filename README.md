@@ -1,5 +1,15 @@
 # ARC LEAGUE ⚡
 
+<p align="center">
+  <img src="assets/branding/arc_league_title_logo.png" alt="ARC LEAGUE" width="620" />
+</p>
+
+<p align="center">
+  <img src="assets/branding/arc_league_icon_monogram.png" alt="Arc League Monogram" width="72" height="72" />
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="assets/branding/arc_league_championship_crest.png" alt="Arc League Championship Crest" width="72" height="72" />
+</p>
+
 > **A high-velocity, cyberpunk athletic disc-combat sport set within the Sub-Strata.**  
 > Built with Three.js, WebGL, Web Audio, and WebRTC.
 
@@ -10,6 +20,10 @@
 ---
 
 ## 🎮 Overview
+
+<p align="center">
+  <img src="assets/branding/arc_league_key_art_capsule.png" alt="Arc League Key Art - Pure Construct" width="720" style="border-radius: 8px;" />
+</p>
 
 **Arc League** is a competitive 3D sports-combat arena game where digitized athletes compete in the **Arcfield**, launching high-velocity **Kinetic Discs** governed by realistic aerodynamics, Magnus curve deflection, and ricochet physics. 
 

@@ -15,10 +15,12 @@
     "desktop/**/*",
     "src/**/*",
     "assets/**/*",
+    "assets/branding/**/*",
     "vendor/**/*",
     "package.json"
   ],
   "win": {
+    "icon": "desktop/icon.ico",
     "target": [
       "portable",
       "nsis"

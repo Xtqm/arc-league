@@ -34,6 +34,10 @@ let mainWindow = null;
 function createWindow() {
   Menu.setApplicationMenu(null); // Remove default OS application menu bar
 
+  const iconPath = process.platform === 'win32'
+    ? path.join(__dirname, 'icon.ico')
+    : path.join(__dirname, 'icon.png');
+
   mainWindow = new BrowserWindow({
     width: 1920,
     height: 1080,
@@ -41,6 +45,7 @@ function createWindow() {
     autoHideMenuBar: true,
     backgroundColor: '#000000',
     title: 'ARC LEAGUE',
+    icon: iconPath,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

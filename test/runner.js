@@ -37,7 +37,9 @@ const TEST_DOMAINS = {
   ],
   graphics: [
     'graphics/humanoid_rig.test.js',
-    'graphics/cinematic_pipeline.test.js'
+    'graphics/cinematic_pipeline.test.js',
+    'graphics/settings_modal_interaction.test.js',
+    'graphics/render_scale_benchmark.test.js'
   ],
   network: [
     'network/webrtc_peer.test.js',

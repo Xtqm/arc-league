@@ -22,8 +22,8 @@ import {
   updateSparks,
   clearAllEffects
 } from '../../src/graphics/particles.js';
-import { settingsManager } from '../../src/core/settings.js';
-import { scene, setBloomEnabled, composer } from '../../src/graphics/scene.js';
+import { settingsManager, GRAPHICS_PRESETS } from '../../src/core/settings.js';
+import { scene, setBloomEnabled, setShadowQuality, composer, camera, key, onResize } from '../../src/graphics/scene.js';
 
 console.log('--- Running Cinematic Rendering Pipeline Test Suite ---');
 
@@ -64,9 +64,56 @@ const mockRenderer = {
 const fallbackComposer = new CinematicComposer(mockRenderer, { enabled: false });
 fallbackComposer.render(new THREE.Scene(), new THREE.PerspectiveCamera());
 assert.strictEqual(directRenderCalls, 1, 'Disabled/unsupported composer must delegate directly to renderer.render');
+
+// Quality controls
+fallbackComposer.setQuality('half');
+assert.strictEqual(fallbackComposer.bloomQuality, 'half');
+assert.strictEqual(fallbackComposer.enabled, true);
+fallbackComposer.setQuality('off');
+assert.strictEqual(fallbackComposer.bloomQuality, 'off');
+assert.strictEqual(fallbackComposer.enabled, false);
 fallbackComposer.dispose();
 
-console.log('✓ Group 2: CinematicComposer direct fallback & controls verified.');
+// WebGL Mock Composer for Bloom Capture Downsampling & Scaling
+const mockGlRenderer = {
+  getContext: () => ({ getExtension: () => ({}) }),
+  getSize: () => ({ x: 1920, y: 1080 }),
+  getPixelRatio: () => 1,
+  render: () => {}
+};
+const mockComposer = new CinematicComposer(mockGlRenderer, {
+  bloomQuality: 'full',
+  renderScale: 1.0
+});
+assert.strictEqual(mockComposer.isSupported, true);
+
+// 1. Full-res Bloom: Base mip is half screen dimensions (w/2, h/2)
+mockComposer.setSize(1920, 1080, 1.0, 1.0);
+assert.strictEqual(mockComposer.sceneTarget.width, 1920);
+assert.strictEqual(mockComposer.sceneTarget.height, 1080);
+assert.strictEqual(mockComposer.mipTargets[0].width, 960);
+assert.strictEqual(mockComposer.mipTargets[0].height, 540);
+
+// 2. Half-res Bloom: Initial capture pass downsamples by 50% extra (w/4, h/4) -> 75% fill-rate reduction
+mockComposer.setQuality('half');
+assert.strictEqual(mockComposer.bloomQuality, 'half');
+assert.strictEqual(mockComposer.mipTargets[0].width, 480, 'Half-res bloom mip0 must be 1/4 screen width');
+assert.strictEqual(mockComposer.mipTargets[0].height, 270, 'Half-res bloom mip0 must be 1/4 screen height');
+const fullPixels = 960 * 540;
+const halfPixels = 480 * 270;
+assert.strictEqual(halfPixels / fullPixels, 0.25, 'Half-resolution bloom capture must consume exactly 25% of full-resolution fill rate');
+
+// 3. Render Scaling with Half-res Bloom: sceneTarget and mips scale proportionally
+mockComposer.setSize(1920, 1080, 1.0, 0.75);
+assert.strictEqual(mockComposer.sceneTarget.width, 1440, 'Scene target must scale to 75% (1440px)');
+assert.strictEqual(mockComposer.sceneTarget.height, 810, 'Scene target must scale to 75% (810px)');
+assert.strictEqual(mockComposer.mipTargets[0].width, 360, 'Half bloom mip0 at 75% render scale must be 360px');
+assert.strictEqual(mockComposer.mipTargets[0].height, 202, 'Half bloom mip0 at 75% render scale must be 202px');
+
+mockComposer.dispose();
+assert.strictEqual(mockComposer.isDisposed, true);
+
+console.log('✓ Group 2: CinematicComposer direct fallback, half-resolution downsampling & render scaling verified.');
 
 // =========================================================================
 // Group 3: Continuous RibbonTrail Geometry, Fade & GPU Disposal
@@ -141,7 +188,7 @@ assert.strictEqual(discTrail.isDisposed, true);
 console.log('✓ Group 4: Hover dash streaks & fade pool lifecycle verified.');
 
 // =========================================================================
-// Group 5: Runtime Settings Enforcement (Bloom & Particles)
+// Group 5: Runtime Settings Enforcement (Bloom, Presets, Shadows & Render Scaling)
 // =========================================================================
 console.log('\n[Group 5] Testing Settings Runtime Enforcement...');
 
@@ -161,7 +208,92 @@ assert.strictEqual(sparks.length, 0);
 settingsManager.set('bloom', true);
 settingsManager.set('particles', true);
 
-console.log('✓ Group 5: Runtime settings enforcement verified.');
+// 1. Viewport aspect ratio decoupling with renderScale
+global.innerWidth = 2560;
+global.innerHeight = 1440;
+settingsManager.set('renderScale', 0.75);
+onResize();
+const expectedAspect = 2560 / 1440;
+assert.ok(Math.abs(camera.aspect - expectedAspect) < 1e-4, 'Camera aspect ratio must match viewport dimensions (2560/1440) regardless of renderScale');
+
+settingsManager.set('renderScale', 0.50);
+onResize();
+assert.ok(Math.abs(camera.aspect - expectedAspect) < 1e-4, 'Camera aspect ratio must remain identical at 50% render scale');
+
+// 2. Preset profiles application & emissions
+let presetChangeEmitted = null;
+const unsubPreset = settingsManager.onChange((k, v) => {
+  if (k === 'graphicsPreset') presetChangeEmitted = v;
+});
+
+// Ultra Preset
+settingsManager.applyPreset('ultra');
+assert.strictEqual(settingsManager.get('graphicsPreset'), 'ultra');
+assert.strictEqual(settingsManager.get('renderScale'), 1.0);
+assert.strictEqual(settingsManager.get('bloomQuality'), 'full');
+assert.strictEqual(settingsManager.get('bloom'), true);
+assert.strictEqual(settingsManager.get('shadows'), 2048);
+assert.strictEqual(settingsManager.get('particleBudget'), 1.0);
+assert.strictEqual(presetChangeEmitted, 'ultra');
+
+// High Preset (Default)
+settingsManager.applyPreset('high');
+assert.strictEqual(settingsManager.get('graphicsPreset'), 'high');
+assert.strictEqual(settingsManager.get('renderScale'), 1.0);
+assert.strictEqual(settingsManager.get('bloomQuality'), 'full');
+assert.strictEqual(settingsManager.get('shadows'), 1024);
+
+// Medium Preset
+settingsManager.applyPreset('medium');
+assert.strictEqual(settingsManager.get('graphicsPreset'), 'medium');
+assert.strictEqual(settingsManager.get('renderScale'), 0.85);
+assert.strictEqual(settingsManager.get('bloomQuality'), 'half');
+assert.strictEqual(settingsManager.get('shadows'), 512);
+assert.strictEqual(settingsManager.get('particleBudget'), 0.75);
+
+// Low Preset
+settingsManager.applyPreset('low');
+assert.strictEqual(settingsManager.get('graphicsPreset'), 'low');
+assert.strictEqual(settingsManager.get('renderScale'), 0.70);
+assert.strictEqual(settingsManager.get('bloomQuality'), 'half');
+assert.strictEqual(settingsManager.get('shadows'), 0);
+assert.strictEqual(settingsManager.get('particleBudget'), 0.50);
+
+// Competitive Preset
+settingsManager.applyPreset('competitive');
+assert.strictEqual(settingsManager.get('graphicsPreset'), 'competitive');
+assert.strictEqual(settingsManager.get('renderScale'), 0.75);
+assert.strictEqual(settingsManager.get('bloomQuality'), 'off');
+assert.strictEqual(settingsManager.get('bloom'), false);
+assert.strictEqual(settingsManager.get('shadows'), 0);
+assert.strictEqual(settingsManager.get('fpsCap'), 0);
+assert.strictEqual(settingsManager.get('particleBudget'), 0.25);
+
+// Custom override resets preset label to 'custom'
+settingsManager.set('renderScale', 0.90);
+assert.strictEqual(settingsManager.get('graphicsPreset'), 'custom');
+assert.strictEqual(settingsManager.get('renderScale'), 0.90);
+
+unsubPreset();
+
+// 3. Dynamic shadow map toggling & resolution adjustments
+setShadowQuality(0);
+assert.strictEqual(key.castShadow, false, 'Shadows at 0 must disable light shadow casting');
+
+setShadowQuality(512);
+assert.strictEqual(key.castShadow, true, 'Shadows at 512 must enable shadow casting');
+assert.strictEqual(key.shadow.mapSize.x, 512);
+assert.strictEqual(key.shadow.mapSize.y, 512);
+
+setShadowQuality(2048);
+assert.strictEqual(key.castShadow, true);
+assert.strictEqual(key.shadow.mapSize.x, 2048);
+assert.strictEqual(key.shadow.mapSize.y, 2048);
+
+// Restore clean defaults
+settingsManager.applyPreset('high');
+
+console.log('✓ Group 5: Runtime settings enforcement, aspect ratio decoupling, presets & shadow adjustment verified.');
 
 // =========================================================================
 // Group 6: Fixed-Capacity Ring-Buffer Particle Pool & Slot Recycling

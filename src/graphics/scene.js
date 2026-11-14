@@ -10,14 +10,25 @@ import { cosmeticMaterialEngine } from '../armory/CosmeticMaterialEngine.js';
 export const renderer = typeof document !== 'undefined' ? new THREE.WebGLRenderer({ antialias: true }) : null;
 export let composer = null;
 if (renderer) {
-  renderer.setPixelRatio(Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, state.isTouchDevice ? 1.5 : 2));
-  renderer.setSize(typeof innerWidth !== 'undefined' ? innerWidth : 800, typeof innerHeight !== 'undefined' ? innerHeight : 600);
+  const scale = THREE.MathUtils.clamp(Number(settingsManager.get('renderScale', 1.0)), 0.5, 1.0);
+  const pr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, state.isTouchDevice ? 1.5 : 2);
+  const w = typeof innerWidth !== 'undefined' ? innerWidth : 800;
+  const h = typeof innerHeight !== 'undefined' ? innerHeight : 600;
+  renderer.setPixelRatio(pr);
+  renderer.setSize(Math.floor(w * scale), Math.floor(h * scale), false);
+  if (renderer.domElement && renderer.domElement.style) {
+    renderer.domElement.style.width = `${w}px`;
+    renderer.domElement.style.height = `${h}px`;
+  }
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  composer = new CinematicComposer(renderer, { enabled: settingsManager.get('bloom', true) });
+  composer = new CinematicComposer(renderer, {
+    enabled: settingsManager.get('bloom', true),
+    bloomQuality: settingsManager.get('bloomQuality', 'full')
+  });
 
   if (typeof document !== 'undefined' && document.body && !renderer.domElement.parentElement) {
     document.body.appendChild(renderer.domElement);
@@ -30,6 +41,24 @@ export function setBloomEnabled(enabled) {
   }
 }
 
+export function setShadowQuality(value) {
+  const enabled = value !== false && value !== 0 && value !== 'off';
+  if (renderer && renderer.shadowMap) {
+    renderer.shadowMap.enabled = enabled;
+  }
+  if (key) {
+    key.castShadow = enabled;
+    if (enabled) {
+      const res = (typeof value === 'number' && value > 0) ? value : 1024;
+      key.shadow.mapSize.set(res, res);
+      if (key.shadow.map) {
+        key.shadow.map.dispose();
+        key.shadow.map = null;
+      }
+    }
+  }
+}
+
 export function renderScene() {
   if (composer) {
     composer.render(scene, camera);
@@ -38,11 +67,28 @@ export function renderScene() {
   }
 }
 
-settingsManager.onChange((key, value, all) => {
-  if (key === 'bloom') {
-    setBloomEnabled(value);
-  } else if (key === '*' && all) {
-    setBloomEnabled(all.bloom !== false);
+settingsManager.onChange((keyName, value, all) => {
+  if (keyName === 'bloom' || keyName === 'bloomQuality') {
+    const q = settingsManager.get('bloomQuality', 'full');
+    const enabled = settingsManager.get('bloom', true) && q !== 'off';
+    setBloomEnabled(enabled);
+    if (composer && typeof composer.setQuality === 'function') {
+      composer.setQuality(q);
+    }
+  } else if (keyName === 'renderScale') {
+    onResize();
+  } else if (keyName === 'shadows') {
+    setShadowQuality(value);
+  } else if (keyName === '*' && all) {
+    const q = all.bloomQuality || (all.bloom === false ? 'off' : 'full');
+    setBloomEnabled(all.bloom !== false && q !== 'off');
+    if (composer && typeof composer.setQuality === 'function') {
+      composer.setQuality(q);
+    }
+    if (all.shadows !== undefined) {
+      setShadowQuality(all.shadows);
+    }
+    onResize();
   }
 });
 
@@ -107,11 +153,16 @@ export function onResize() {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   if (renderer) {
-    renderer.setSize(innerWidth, innerHeight);
-    const pr = Math.min(window.devicePixelRatio, state.isTouchDevice ? 1.5 : 2);
+    const scale = THREE.MathUtils.clamp(Number(settingsManager.get('renderScale', 1.0)), 0.5, 1.0);
+    const pr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, state.isTouchDevice ? 1.5 : 2);
     renderer.setPixelRatio(pr);
+    renderer.setSize(Math.floor(innerWidth * scale), Math.floor(innerHeight * scale), false);
+    if (renderer.domElement && renderer.domElement.style) {
+      renderer.domElement.style.width = `${innerWidth}px`;
+      renderer.domElement.style.height = `${innerHeight}px`;
+    }
     if (composer) {
-      composer.setSize(innerWidth, innerHeight, pr);
+      composer.setSize(innerWidth, innerHeight, pr, scale);
     }
   }
   if (typeof window !== 'undefined' && window.__tronCheckOrientation) {
@@ -186,6 +237,9 @@ export function initGraphics() {
   if (renderer && renderer.domElement && typeof document !== 'undefined' && document.body && !renderer.domElement.parentElement) {
     document.body.appendChild(renderer.domElement);
   }
+  if (renderer && typeof innerWidth !== 'undefined' && typeof innerHeight !== 'undefined') {
+    onResize();
+  }
   if (renderer && !scene.environment) {
     const envHandle = createProceduralEnvironment(renderer);
     if (envHandle) {
@@ -193,7 +247,11 @@ export function initGraphics() {
       scene.userData.envHandle = envHandle;
     }
   }
-  setBloomEnabled(settingsManager.get('bloom', true));
+  setBloomEnabled(settingsManager.get('bloom', true) && settingsManager.get('bloomQuality', 'full') !== 'off');
+  if (composer && typeof composer.setQuality === 'function') {
+    composer.setQuality(settingsManager.get('bloomQuality', 'full'));
+  }
+  setShadowQuality(settingsManager.get('shadows', 1024));
   if (!state.player.obj) {
     state.player.obj = makeProgram(config.CYAN, { archetype: 'player' });
     scene.add(state.player.obj);

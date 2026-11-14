@@ -215,6 +215,7 @@ export function setTerminalHubTab(tabName) {
       if (settingsModal) {
         settingsModal._customContainer = hubConfigView;
         settingsModal._inHub = true;
+        settingsModal._onHubClose = () => setTerminalHubTab('ident');
         settingsModal.show();
       }
     }

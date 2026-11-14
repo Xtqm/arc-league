@@ -90,6 +90,8 @@ export class CinematicComposer {
    * @param {THREE.WebGLRenderer|null} renderer
    * @param {object} [options]
    * @param {boolean} [options.enabled=true]
+   * @param {string} [options.bloomQuality='full'] 'full' | 'half' | 'off'
+   * @param {number} [options.renderScale=1.0]
    * @param {number} [options.threshold=0.92]
    * @param {number} [options.knee=0.35]
    * @param {number} [options.strength=0.52]
@@ -97,7 +99,9 @@ export class CinematicComposer {
    */
   constructor(renderer, options = {}) {
     this.renderer = renderer || null;
-    this.enabled = options.enabled !== false;
+    this.bloomQuality = options.bloomQuality || options.quality || 'full';
+    this.enabled = options.enabled !== false && this.bloomQuality !== 'off';
+    this.renderScale = typeof options.renderScale === 'number' ? options.renderScale : 1.0;
     this.threshold = typeof options.threshold === 'number' ? options.threshold : 0.92;
     this.knee = typeof options.knee === 'number' ? options.knee : 0.35;
     this.strength = typeof options.strength === 'number' ? options.strength : 0.52;
@@ -141,8 +145,9 @@ export class CinematicComposer {
         this.renderer.getSize(size);
       }
       this.pixelRatio = typeof this.renderer.getPixelRatio === 'function' ? this.renderer.getPixelRatio() : 1;
-      const w = Math.max(1, Math.floor((size.x || 800) * this.pixelRatio));
-      const h = Math.max(1, Math.floor((size.y || 600) * this.pixelRatio));
+      const scale = THREE.MathUtils.clamp(this.renderScale || 1.0, 0.5, 1.0);
+      const w = Math.max(1, Math.floor((size.x || 800) * this.pixelRatio * scale));
+      const h = Math.max(1, Math.floor((size.y || 600) * this.pixelRatio * scale));
       this.width = w;
       this.height = h;
 
@@ -156,8 +161,9 @@ export class CinematicComposer {
       this.sceneTarget = new THREE.WebGLRenderTarget(w, h, rtOpts);
 
       this.mipTargets = [];
-      let mw = w;
-      let mh = h;
+      const isHalf = this.bloomQuality === 'half';
+      let mw = isHalf ? Math.max(1, Math.floor(w / 2)) : w;
+      let mh = isHalf ? Math.max(1, Math.floor(h / 2)) : h;
       for (let i = 0; i < this.mipCount; i++) {
         mw = Math.max(1, Math.floor(mw / 2));
         mh = Math.max(1, Math.floor(mh / 2));
@@ -247,6 +253,43 @@ export class CinematicComposer {
    */
   setEnabled(enabled) {
     this.enabled = !!enabled;
+    if (this.enabled && this.bloomQuality === 'off') {
+      this.bloomQuality = 'full';
+    }
+  }
+
+  /**
+   * Updates bloom quality preset ('full' | 'half' | 'off').
+   * Half-quality downsamples the bloom capture pass by 50% prior to blur pyramid execution.
+   * @param {string} quality
+   */
+  setQuality(quality) {
+    const q = String(quality || '').toLowerCase();
+    if (q === 'off') {
+      this.bloomQuality = 'off';
+      this.setEnabled(false);
+      return;
+    }
+    if (q === 'half' || q === 'full') {
+      const prevQuality = this.bloomQuality;
+      this.bloomQuality = q;
+      this.setEnabled(true);
+      if (prevQuality !== q) {
+        this._updateMipTargets();
+      }
+    }
+  }
+
+  _updateMipTargets() {
+    if (this.isDisposed || !this.isSupported) return;
+    const isHalf = this.bloomQuality === 'half';
+    let mw = isHalf ? Math.max(1, Math.floor(this.width / 2)) : this.width;
+    let mh = isHalf ? Math.max(1, Math.floor(this.height / 2)) : this.height;
+    for (let i = 0; i < this.mipTargets.length; i++) {
+      mw = Math.max(1, Math.floor(mw / 2));
+      mh = Math.max(1, Math.floor(mh / 2));
+      this.mipTargets[i].setSize(mw, mh);
+    }
   }
 
   /**
@@ -254,12 +297,16 @@ export class CinematicComposer {
    * @param {number} width Logical CSS width
    * @param {number} height Logical CSS height
    * @param {number} [pixelRatio=1]
+   * @param {number} [renderScale=1.0]
    */
-  setSize(width, height, pixelRatio = 1) {
+  setSize(width, height, pixelRatio = 1, renderScale = 1.0) {
     if (this.isDisposed || !this.isSupported) return;
     const pr = Math.max(0.5, pixelRatio || 1);
-    const w = Math.max(1, Math.floor((width || 1) * pr));
-    const h = Math.max(1, Math.floor((height || 1) * pr));
+    const scale = THREE.MathUtils.clamp(Number(renderScale || 1.0), 0.5, 1.0);
+    const w = Math.max(1, Math.floor((width || 1) * pr * scale));
+    const h = Math.max(1, Math.floor((height || 1) * pr * scale));
+    this.renderScale = scale;
+
     if (w === this.width && h === this.height && pr === this.pixelRatio) return;
 
     this.width = w;
@@ -269,13 +316,7 @@ export class CinematicComposer {
     if (this.sceneTarget) {
       this.sceneTarget.setSize(w, h);
     }
-    let mw = w;
-    let mh = h;
-    for (let i = 0; i < this.mipTargets.length; i++) {
-      mw = Math.max(1, Math.floor(mw / 2));
-      mh = Math.max(1, Math.floor(mh / 2));
-      this.mipTargets[i].setSize(mw, mh);
-    }
+    this._updateMipTargets();
   }
 
   /**

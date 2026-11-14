@@ -16,6 +16,7 @@ export class SettingsModal {
     this._customContainer = null;
     this._inHub = false;
     this._onClose = null;
+    this._onHubClose = null;
 
     if (typeof window !== 'undefined') {
       window.__tronCloseSettings = () => this.hide();
@@ -66,7 +67,9 @@ export class SettingsModal {
   hide(options = {}) {
     const el = this.container;
     if (el && el.style) el.style.display = 'none';
-    if (!this._inHub && !options.skipCloseCallback && typeof this._onClose === 'function') {
+    if (this._inHub && typeof this._onHubClose === 'function') {
+      this._onHubClose();
+    } else if (!this._inHub && !options.skipCloseCallback && typeof this._onClose === 'function') {
       this._onClose();
     }
   }
@@ -81,6 +84,9 @@ export class SettingsModal {
     const currentDisplay = this.settings.get('displayMode', isFullScreen() ? 'fullscreen' : 'windowed');
     const currentMute = this.settings.get('muteOnBlur', true);
     const currentBloom = this.settings.get('bloom', true);
+    const currentBloomQuality = this.settings.get('bloomQuality', currentBloom ? 'full' : 'off');
+    const currentRenderScalePct = Math.round(Number(this.settings.get('renderScale', 1.0)) * 100);
+    const currentPreset = String(this.settings.get('graphicsPreset', 'high')).toLowerCase();
     const currentParticles = this.settings.get('particles', true);
     const currentTouchSens = Math.round(Number(this.settings.get('touchSensitivity', 1.0)) * 100);
     const currentInertia = String(this.settings.get('touchInertia', 'smooth')).toLowerCase();
@@ -139,13 +145,37 @@ export class SettingsModal {
           </div>
         </div>
 
-        <!-- Section: Graphics -->
+        <!-- Section: Visual Quality -->
         <div style="margin-bottom:22px;">
           <div style="font-size:12px; letter-spacing:2px; font-weight:bold; margin-bottom:10px; color:#fff; text-transform:uppercase;">Visual Quality</div>
 
-          <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; margin-bottom:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; margin-bottom:12px;">
+            <span>GRAPHICS PRESET</span>
+            <div style="display:flex; gap:4px; flex-wrap:wrap;">
+              <button class="btn preset-btn ${currentPreset === 'ultra' ? 'hot' : ''}" data-preset="ultra" style="padding:4px 7px; font-size:10px; cursor:pointer;">ULTRA</button>
+              <button class="btn preset-btn ${currentPreset === 'high' ? 'hot' : ''}" data-preset="high" style="padding:4px 7px; font-size:10px; cursor:pointer;">HIGH</button>
+              <button class="btn preset-btn ${currentPreset === 'medium' ? 'hot' : ''}" data-preset="medium" style="padding:4px 7px; font-size:10px; cursor:pointer;">MED</button>
+              <button class="btn preset-btn ${currentPreset === 'low' ? 'hot' : ''}" data-preset="low" style="padding:4px 7px; font-size:10px; cursor:pointer;">LOW</button>
+              <button class="btn preset-btn ${currentPreset === 'competitive' ? 'hot' : ''}" data-preset="competitive" style="padding:4px 7px; font-size:10px; cursor:pointer;">COMP</button>
+            </div>
+          </div>
+
+          <div style="margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+              <span>3D RENDER SCALE</span>
+              <span id="renderScaleReadout">${currentRenderScalePct}%</span>
+            </div>
+            <input id="renderScaleSlider" type="range" min="50" max="100" step="5" value="${currentRenderScalePct}" style="width:100%; accent-color:var(--cyan); cursor:pointer;">
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; margin-bottom:10px;">
             <span>NEON GLOW / BLOOM</span>
-            <button id="toggleBloomBtn" class="btn" style="padding:4px 12px; font-size:11px; cursor:pointer;">${currentBloom ? 'ACTIVE' : 'OFF'}</button>
+            <div style="display:flex; gap:6px;">
+              <button class="btn bloom-btn ${currentBloomQuality === 'full' ? 'hot' : ''}" data-bloom="full" style="padding:4px 8px; font-size:10px; cursor:pointer;">FULL</button>
+              <button class="btn bloom-btn ${currentBloomQuality === 'half' ? 'hot' : ''}" data-bloom="half" style="padding:4px 8px; font-size:10px; cursor:pointer;">HALF</button>
+              <button class="btn bloom-btn ${currentBloomQuality === 'off' ? 'hot' : ''}" data-bloom="off" style="padding:4px 8px; font-size:10px; cursor:pointer;">OFF</button>
+              <button id="toggleBloomBtn" class="btn" style="display:none;"></button>
+            </div>
           </div>
 
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px;">
@@ -258,22 +288,78 @@ export class SettingsModal {
       };
     });
 
-    // Graphics Toggles
-    const bloomBtn = el.querySelector('#toggleBloomBtn');
-    if (bloomBtn) {
-      bloomBtn.onclick = () => {
-        const next = !this.settings.get('bloom', true);
-        this.settings.set('bloom', next);
-        bloomBtn.textContent = next ? 'ACTIVE' : 'OFF';
+    // Graphics & Presets
+    const presetButtons = el.querySelectorAll('.preset-btn');
+    const bloomButtons = el.querySelectorAll('.bloom-btn');
+    const scaleSlider = el.querySelector('#renderScaleSlider');
+    const scaleReadout = el.querySelector('#renderScaleReadout');
+    const particlesBtn = el.querySelector('#toggleParticlesBtn');
+
+    const updateUIFromSettings = () => {
+      const activePreset = this.settings.get('graphicsPreset', 'high');
+      presetButtons.forEach((b) => {
+        b.classList.toggle('hot', b.getAttribute('data-preset') === activePreset);
+      });
+      const rs = Math.round(Number(this.settings.get('renderScale', 1.0)) * 100);
+      if (scaleSlider) scaleSlider.value = rs;
+      if (scaleReadout) scaleReadout.textContent = `${rs}%`;
+
+      const bq = this.settings.get('bloomQuality', this.settings.get('bloom', true) ? 'full' : 'off');
+      bloomButtons.forEach((b) => {
+        b.classList.toggle('hot', b.getAttribute('data-bloom') === bq);
+      });
+
+      const fps = Number(this.settings.get('fpsCap', 60));
+      fpsButtons.forEach((b) => {
+        b.classList.toggle('hot', Number(b.getAttribute('data-fps')) === fps);
+      });
+
+      if (particlesBtn) {
+        particlesBtn.textContent = this.settings.get('particles', true) ? 'HIGH' : 'LOW';
+      }
+    };
+
+    presetButtons.forEach((btn) => {
+      btn.onclick = () => {
+        const preset = btn.getAttribute('data-preset');
+        this.settings.applyPreset(preset);
+        updateUIFromSettings();
+      };
+    });
+
+    if (scaleSlider) {
+      scaleSlider.oninput = (e) => {
+        const val = Number(e.target.value);
+        if (scaleReadout) scaleReadout.textContent = `${val}%`;
+        this.settings.set('renderScale', val / 100);
+        presetButtons.forEach((b) => b.classList.remove('hot'));
       };
     }
 
-    const particlesBtn = el.querySelector('#toggleParticlesBtn');
+    bloomButtons.forEach((btn) => {
+      btn.onclick = () => {
+        const quality = btn.getAttribute('data-bloom');
+        this.settings.set('bloomQuality', quality);
+        updateUIFromSettings();
+      };
+    });
+
+    const bloomBtn = el.querySelector('#toggleBloomBtn');
+    if (bloomBtn) {
+      bloomBtn.onclick = () => {
+        const currentQ = this.settings.get('bloomQuality', 'full');
+        const next = currentQ === 'off' ? 'full' : 'off';
+        this.settings.set('bloomQuality', next);
+        updateUIFromSettings();
+      };
+    }
+
     if (particlesBtn) {
       particlesBtn.onclick = () => {
         const next = !this.settings.get('particles', true);
         this.settings.set('particles', next);
         particlesBtn.textContent = next ? 'HIGH' : 'LOW';
+        presetButtons.forEach((b) => b.classList.remove('hot'));
       };
     }
 

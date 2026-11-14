@@ -235,12 +235,33 @@ assert.strictEqual(tab2External, true, 'Cross-tab mutation must flag isExternal:
 assert.strictEqual(tab2.get('player.handle'), 'CROSS_TAB_CHAMPION');
 console.log('✓ Multi-tab mutation synchronization verified without recursive cascades');
 
+// Test Group 7: Settings Persistence (renderScale & bloomQuality)
+console.log('\n[Group 7] Testing Settings Persistence (renderScale & bloomQuality)...');
+const settingsStoreKey = 'tron_test_settings_store';
+const settingsStore = new StorageManager({ storageKey: settingsStoreKey });
+settingsStore.load();
+
+settingsStore.set('settings.renderScale', 0.75, { immediate: true });
+settingsStore.set('settings.bloomQuality', 'half', { immediate: true });
+
+assert.strictEqual(settingsStore.get('settings.renderScale'), 0.75, 'renderScale must persist to storage');
+assert.strictEqual(settingsStore.get('settings.bloomQuality'), 'half', 'bloomQuality must persist to storage');
+
+// Re-read from a fresh StorageManager instance on same storageKey
+const reloadedStore = new StorageManager({ storageKey: settingsStoreKey });
+const loadedState = reloadedStore.load();
+assert.strictEqual(reloadedStore.get('settings.renderScale'), 0.75, 'renderScale must be preserved across reload');
+assert.strictEqual(reloadedStore.get('settings.bloomQuality'), 'half', 'bloomQuality must be preserved across reload');
+console.log('✓ renderScale and bloomQuality storage persistence verified cleanly');
+
 // Clean up test instances
 testManager.destroy();
 corruptManager.destroy();
 migManager.destroy();
 tab1.destroy();
 tab2.destroy();
+settingsStore.destroy();
+reloadedStore.destroy();
 
 console.log('\n======================================================');
 console.log('ALL STORAGE MANAGER TESTS PASSED CLEANLY (100% SUCCESS)');

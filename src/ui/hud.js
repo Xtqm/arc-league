@@ -8,6 +8,63 @@ export const el = id => (typeof document !== 'undefined' ? document.getElementBy
 export const msgEl = el('msg');
 const _projVec = new THREE.Vector3();
 
+const _domCache = Object.create(null);
+
+export function getCachedElement(id) {
+  if (typeof document === 'undefined') return null;
+  let element = _domCache[id];
+  if (!element || !element.isConnected) {
+    element = document.getElementById(id);
+    if (element) _domCache[id] = element;
+  }
+  return element;
+}
+
+export function getCachedFill(parentId, fillKey) {
+  if (typeof document === 'undefined') return null;
+  let fill = _domCache[fillKey];
+  if (!fill || !fill.isConnected) {
+    const parent = getCachedElement(parentId);
+    fill = parent ? parent.firstElementChild : null;
+    if (fill) _domCache[fillKey] = fill;
+  }
+  return fill;
+}
+
+let _lastPlayerHp = -1;
+let _lastPlayerHasDisc = null;
+let _lastPlayerEnergy = -1;
+let _lastScore = null;
+let _lastTrMargin = null;
+let _lastRoundLabelHtml = null;
+let _lastRoundLabelDisplay = null;
+let _lastSubLabelHtml = null;
+let _lastSubLabelDisplay = null;
+let _lastScoreRowDisplay = null;
+let _lastBbwDisplay = null;
+let _lastBblText = null;
+let _lastRivalHpPct = -1;
+let _lastSwHtml = null;
+let _lastSwDisplay = null;
+
+export function resetHUDDirtyState() {
+  _lastPlayerHp = -1;
+  _lastPlayerHasDisc = null;
+  _lastPlayerEnergy = -1;
+  _lastScore = null;
+  _lastTrMargin = null;
+  _lastRoundLabelHtml = null;
+  _lastRoundLabelDisplay = null;
+  _lastSubLabelHtml = null;
+  _lastSubLabelDisplay = null;
+  _lastScoreRowDisplay = null;
+  _lastBbwDisplay = null;
+  _lastBblText = null;
+  _lastRivalHpPct = -1;
+  _lastSwHtml = null;
+  _lastSwDisplay = null;
+}
+
 export function message(t) {
   const msg = msgEl || el('msg');
   if (!msg) return;
@@ -30,53 +87,129 @@ export function message(t) {
 }
 
 export function updateHUD() {
-  const hpb = el('hpbar');
-  if (hpb && hpb.firstElementChild) hpb.firstElementChild.style.width = state.player.hp + '%';
-  const db = el('discbar');
-  if (db && db.firstElementChild) db.firstElementChild.style.width = (state.player.hasDisc ? 100 : 0) + '%';
-  const eb = el('energybar');
-  if (eb && eb.firstElementChild) eb.firstElementChild.style.width = state.player.energy + '%';
+  if (typeof document === 'undefined') return;
 
-  const rl = el('roundLabel');
-  const sl = el('subLabel');
-  const sr = el('scoreRow');
-  const trHeader = el('trHeaderRow');
-  const bbw = el('bossBarWrap');
-  const bbl = el('bossBarLabel');
-  const bb = el('bossbar');
-  const sw = el('seriesHudWrap');
+  if (state.player.hp !== _lastPlayerHp) {
+    const hpbFill = getCachedFill('hpbar', 'hpbFill');
+    if (hpbFill) {
+      hpbFill.style.width = state.player.hp + '%';
+      _lastPlayerHp = state.player.hp;
+    }
+  }
+
+  if (state.player.hasDisc !== _lastPlayerHasDisc) {
+    const dbFill = getCachedFill('discbar', 'dbFill');
+    if (dbFill) {
+      dbFill.style.width = (state.player.hasDisc ? 100 : 0) + '%';
+      _lastPlayerHasDisc = state.player.hasDisc;
+    }
+  }
+
+  if (state.player.energy !== _lastPlayerEnergy) {
+    const ebFill = getCachedFill('energybar', 'ebFill');
+    if (ebFill) {
+      ebFill.style.width = state.player.energy + '%';
+      _lastPlayerEnergy = state.player.energy;
+    }
+  }
+
+  const rl = getCachedElement('roundLabel');
+  const sl = getCachedElement('subLabel');
+  const sr = getCachedElement('scoreRow');
+  const trHeader = getCachedElement('trHeaderRow');
+  const bbw = getCachedElement('bossBarWrap');
+  const bbl = getCachedElement('bossBarLabel');
+  const bbFill = getCachedFill('bossbar', 'bbFill');
+  const sw = getCachedElement('seriesHudWrap');
 
   if (state.gameMode === 'duel' || state.gameMode === 'duel_ai') {
-    if (trHeader) trHeader.style.marginBottom = '4px';
-    if (rl) {
-      rl.style.display = '';
-      rl.innerHTML = `TIER: <span id="wave" class="big">${state.tier || state.duelTier || 1}</span>`;
+    if (trHeader && _lastTrMargin !== '4px') {
+      trHeader.style.marginBottom = '4px';
+      _lastTrMargin = '4px';
     }
-    if (sr) sr.style.display = '';
+    const tierVal = state.tier || state.duelTier || 1;
+    const rlHtml = `TIER: <span id="wave" class="big">${tierVal}</span>`;
+    if (rl) {
+      if (_lastRoundLabelDisplay !== '') {
+        rl.style.display = '';
+        _lastRoundLabelDisplay = '';
+      }
+      if (_lastRoundLabelHtml !== rlHtml) {
+        rl.innerHTML = rlHtml;
+        _lastRoundLabelHtml = rlHtml;
+      }
+    }
+    if (sr && _lastScoreRowDisplay !== '') {
+      sr.style.display = '';
+      _lastScoreRowDisplay = '';
+    }
+
     const boss = state.foes[0];
     const hpPct = boss ? Math.max(0, Math.round((boss.hp / boss.maxHp) * 100)) : 0;
+    const slHtml = `RIVAL INTEGRITY <span id="rivalHp">${hpPct}%</span>`;
     if (sl) {
-      sl.style.display = '';
-      sl.innerHTML = `RIVAL INTEGRITY <span id="rivalHp">${hpPct}%</span>`;
+      if (_lastSubLabelDisplay !== '') {
+        sl.style.display = '';
+        _lastSubLabelDisplay = '';
+      }
+      if (_lastSubLabelHtml !== slHtml) {
+        sl.innerHTML = slHtml;
+        _lastSubLabelHtml = slHtml;
+      }
     }
-    if (bbw) bbw.style.display = 'block';
-    if (bbl) bbl.textContent = 'RIVAL SHIELD';
-    if (bb && bb.firstElementChild) bb.firstElementChild.style.width = hpPct + '%';
-    if (sw) sw.style.display = 'none';
+    if (bbw && _lastBbwDisplay !== 'block') {
+      bbw.style.display = 'block';
+      _lastBbwDisplay = 'block';
+    }
+    if (bbl && _lastBblText !== 'RIVAL SHIELD') {
+      bbl.textContent = 'RIVAL SHIELD';
+      _lastBblText = 'RIVAL SHIELD';
+    }
+    if (bbFill && _lastRivalHpPct !== hpPct) {
+      bbFill.style.width = hpPct + '%';
+      _lastRivalHpPct = hpPct;
+    }
+    if (sw && _lastSwDisplay !== 'none') {
+      sw.style.display = 'none';
+      _lastSwDisplay = 'none';
+    }
   } else if (state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi') {
-    if (trHeader) trHeader.style.marginBottom = '0';
-    if (rl) rl.style.display = 'none';
-    if (sr) sr.style.display = 'none';
-    if (sl) sl.style.display = 'none';
+    if (trHeader && _lastTrMargin !== '0') {
+      trHeader.style.marginBottom = '0';
+      _lastTrMargin = '0';
+    }
+    if (rl && _lastRoundLabelDisplay !== 'none') {
+      rl.style.display = 'none';
+      _lastRoundLabelDisplay = 'none';
+    }
+    if (sr && _lastScoreRowDisplay !== 'none') {
+      sr.style.display = 'none';
+      _lastScoreRowDisplay = 'none';
+    }
+    if (sl && _lastSubLabelDisplay !== 'none') {
+      sl.style.display = 'none';
+      _lastSubLabelDisplay = 'none';
+    }
+
     let oppHp = 0;
     for (const f of state.foes) {
       if (f.alive) oppHp += Math.max(0, Math.ceil(f.hp));
     }
-    if (bbw) bbw.style.display = 'block';
-    if (bbl) bbl.textContent = state.gameMode === 'duos_multi' ? 'RIVALS' : 'RIVAL';
+    if (bbw && _lastBbwDisplay !== 'block') {
+      bbw.style.display = 'block';
+      _lastBbwDisplay = 'block';
+    }
+    const bblText = state.gameMode === 'duos_multi' ? 'RIVALS' : 'RIVAL';
+    if (bbl && _lastBblText !== bblText) {
+      bbl.textContent = bblText;
+      _lastBblText = bblText;
+    }
     const maxHp = (state.gameMode === 'duos_multi' ? 200 : 100);
     const pct = Math.max(0, Math.min(100, (oppHp / maxHp) * 100));
-    if (bb && bb.firstElementChild) bb.firstElementChild.style.width = pct + '%';
+    if (bbFill && _lastRivalHpPct !== pct) {
+      bbFill.style.width = pct + '%';
+      _lastRivalHpPct = pct;
+    }
     if (sw) {
       const bestOf = Number(state.seriesBestOf) || 1;
       if (bestOf > 1) {
@@ -89,29 +222,68 @@ export function updateHUD() {
         const renderPips = (count, cls) => Array.from({ length: winsNeeded }, (_, i) =>
           `<span class="series-pip ${cls}${i < count ? ' won' : ''}"></span>`
         ).join('');
-        sw.style.display = 'flex';
-        sw.innerHTML = `<span class="series-pips">${renderPips(myWins, 'you')}</span><span class="series-score-num">${myWins} - ${foeWins}</span><span class="series-pips">${renderPips(foeWins, 'foe')}</span>`;
+        const swHtml = `<span class="series-pips">${renderPips(myWins, 'you')}</span><span class="series-score-num">${myWins} - ${foeWins}</span><span class="series-pips">${renderPips(foeWins, 'foe')}</span>`;
+        if (_lastSwDisplay !== 'flex') {
+          sw.style.display = 'flex';
+          _lastSwDisplay = 'flex';
+        }
+        if (_lastSwHtml !== swHtml) {
+          sw.innerHTML = swHtml;
+          _lastSwHtml = swHtml;
+        }
       } else {
-        sw.style.display = 'none';
+        if (_lastSwDisplay !== 'none') {
+          sw.style.display = 'none';
+          _lastSwDisplay = 'none';
+        }
       }
     }
   } else {
-    if (trHeader) trHeader.style.marginBottom = '4px';
+    if (trHeader && _lastTrMargin !== '4px') {
+      trHeader.style.marginBottom = '4px';
+      _lastTrMargin = '4px';
+    }
+    const waveHtml = `CYCLE <span id="wave" class="big">${state.wave}</span>`;
     if (rl) {
-      rl.style.display = '';
-      rl.innerHTML = `CYCLE <span id="wave" class="big">${state.wave}</span>`;
+      if (_lastRoundLabelDisplay !== '') {
+        rl.style.display = '';
+        _lastRoundLabelDisplay = '';
+      }
+      if (_lastRoundLabelHtml !== waveHtml) {
+        rl.innerHTML = waveHtml;
+        _lastRoundLabelHtml = waveHtml;
+      }
     }
-    if (sr) sr.style.display = '';
+    if (sr && _lastScoreRowDisplay !== '') {
+      sr.style.display = '';
+      _lastScoreRowDisplay = '';
+    }
+    const foesHtml = `HOSTILES <span id="foes">${state.foes.length}</span>`;
     if (sl) {
-      sl.style.display = '';
-      sl.innerHTML = `HOSTILES <span id="foes">${state.foes.length}</span>`;
+      if (_lastSubLabelDisplay !== '') {
+        sl.style.display = '';
+        _lastSubLabelDisplay = '';
+      }
+      if (_lastSubLabelHtml !== foesHtml) {
+        sl.innerHTML = foesHtml;
+        _lastSubLabelHtml = foesHtml;
+      }
     }
-    if (bbw) bbw.style.display = 'none';
-    if (sw) sw.style.display = 'none';
+    if (bbw && _lastBbwDisplay !== 'none') {
+      bbw.style.display = 'none';
+      _lastBbwDisplay = 'none';
+    }
+    if (sw && _lastSwDisplay !== 'none') {
+      sw.style.display = 'none';
+      _lastSwDisplay = 'none';
+    }
   }
 
-  const sc = el('score');
-  if (sc) sc.textContent = state.score;
+  const sc = getCachedElement('score');
+  if (sc && _lastScore !== state.score) {
+    sc.textContent = state.score;
+    _lastScore = state.score;
+  }
 }
 
 export function showSeriesIntermission({ round = 1, won = false, scores = null, bestOf = 3 } = {}) {
@@ -145,8 +317,8 @@ export function clearSeriesIntermission() {
 export function resetHintVisibility(duration = 4.5) {
   state.hintTimer = duration;
   if (typeof document === 'undefined') return;
-  const h = document.getElementById('hint');
-  const mh = document.getElementById('mobileHint');
+  const h = getCachedElement('hint');
+  const mh = getCachedElement('mobileHint');
   if (h) {
     h.style.display = '';
     h.style.opacity = '';
@@ -162,8 +334,8 @@ export function updateControlHintTimer(dt) {
   if (state.hintTimer === undefined || state.hintTimer <= 0) return;
 
   state.hintTimer = Math.max(0, state.hintTimer - dt);
-  const h = document.getElementById('hint');
-  const mh = document.getElementById('mobileHint');
+  const h = getCachedElement('hint');
+  const mh = getCachedElement('mobileHint');
 
   if (state.hintTimer <= 0) {
     if (h) {
@@ -183,7 +355,7 @@ export function updateControlHintTimer(dt) {
 
 export function clearArenaNameplates() {
   if (typeof document === 'undefined') return;
-  const container = document.getElementById('arenaNameplates');
+  const container = getCachedElement('arenaNameplates');
   if (container) {
     container.innerHTML = '';
     container.style.display = 'none';
@@ -192,7 +364,7 @@ export function clearArenaNameplates() {
 
 export function updateArenaNameplates() {
   if (typeof document === 'undefined') return;
-  const container = document.getElementById('arenaNameplates');
+  const container = getCachedElement('arenaNameplates');
   if (!container) return;
 
   const isOnline = state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi';
@@ -272,7 +444,7 @@ export function updateArenaNameplates() {
 }
 
 export function updateCrosshair(aim, traj) {
-  const ch = document.getElementById('crosshair');
+  const ch = getCachedElement('crosshair');
   if (ch) {
     const onFoe = !!aim.foe || !!(traj && traj.willHit);
     ch.classList.toggle('hot', onFoe);
@@ -285,7 +457,7 @@ export function updateCrosshair(aim, traj) {
 
     const charge = state.player.throwCharge || 0;
     const isCharging = state.player.chargingThrow && charge > 0;
-    const arcSvg = document.getElementById('chargeArc');
+    const arcSvg = getCachedElement('chargeArc');
     if (arcSvg) {
       if (isCharging) {
         arcSvg.style.display = 'block';
@@ -310,13 +482,18 @@ export function updateCrosshair(aim, traj) {
     }
     ch.classList.toggle('guard-crush-ready', charge >= 0.85);
 
-    const range = document.getElementById('range');
-    if (range) range.textContent = aim.dist < 300 ? Math.round(aim.dist) + 'M' : '';
+    const range = getCachedElement('range');
+    if (range) {
+      const rangeText = aim.dist < 300 ? Math.round(aim.dist) + 'M' : '';
+      if (range.textContent !== rangeText) {
+        range.textContent = rangeText;
+      }
+    }
   }
 }
 
 export function updateKeyMonitor() {
-  const km = document.getElementById('keymon');
+  const km = getCachedElement('keymon');
   if (km && km.style.display === 'block') {
     const on = k => state.keys[k] ? 'style="color:#fff;text-shadow:0 0 8px #fff"' : 'style="opacity:.3"';
     km.innerHTML = `<b ${on('KeyW')}>W</b> <b ${on('KeyA')}>A</b> <b ${on('KeyS')}>S</b> <b ${on('KeyD')}>D</b>
@@ -328,17 +505,17 @@ export function updateKeyMonitor() {
 }
 
 export function updateLockStateBanner() {
-  const lb = document.getElementById('lockstate');
+  const lb = getCachedElement('lockstate');
   if (lb) lb.style.display = (state.isTouchDevice || isLocked()) ? 'none' : 'block';
 }
 
 export function updateOfflineBanner(isOnline, pendingCount = 0) {
   if (typeof document === 'undefined') return;
-  const banner = document.getElementById('offlineSyncBanner');
+  const banner = getCachedElement('offlineSyncBanner');
   if (!banner) return;
   if (!isOnline) {
     banner.style.display = 'flex';
-    const textEl = document.getElementById('offlineBannerText');
+    const textEl = getCachedElement('offlineBannerText');
     if (textEl) {
       textEl.textContent = pendingCount > 0
         ? `[GRID OFFLINE] ${pendingCount} MUTATIONS QUEUED // PROGRESS SAFEGUARDED`

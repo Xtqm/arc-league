@@ -8,7 +8,7 @@
   "publish": {
     "provider": "github",
     "owner": "Xtqm",
-    "repo": "disc-battle"
+    "repo": "arc-league"
   },
   "files": [
     "index.html",

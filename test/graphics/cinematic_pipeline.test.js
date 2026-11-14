@@ -13,6 +13,9 @@ import {
   sparks,
   fadingRibbons,
   hoverStreaks,
+  particleMesh,
+  burst,
+  getActiveParticleCount,
   isParticlesEnabled,
   trackFadingRibbon,
   emitHoverDashStreak,
@@ -159,6 +162,51 @@ settingsManager.set('bloom', true);
 settingsManager.set('particles', true);
 
 console.log('✓ Group 5: Runtime settings enforcement verified.');
+
+// =========================================================================
+// Group 6: Fixed-Capacity Ring-Buffer Particle Pool & Slot Recycling
+// =========================================================================
+console.log('\n[Group 6] Testing Fixed-Capacity Particle Pool & Slot Recycling...');
+
+clearAllEffects();
+assert.strictEqual(getActiveParticleCount(), 0, 'Initial active particle count must be 0');
+assert.strictEqual(particleMesh.visible, false, 'Initial particle mesh must be hidden');
+
+// Emit burst of 22 particles
+burst(new THREE.Vector3(0, 1.7, 0), 0x00f3ff, 22, 10, trailScene);
+assert.strictEqual(getActiveParticleCount(), 22, 'Burst of 22 particles must activate 22 slots');
+assert.strictEqual(particleMesh.visible, true, 'Particle mesh must become visible on burst');
+assert.strictEqual(trailScene.children.includes(particleMesh), true, 'Particle mesh must be attached to host scene');
+
+// Verify initial positions
+const posArr = particleMesh.geometry.attributes.position.array;
+assert.ok(Math.abs(posArr[0] - 0) < 1e-4);
+assert.ok(Math.abs(posArr[1] - 1.7) < 1e-4);
+assert.ok(Math.abs(posArr[2] - 0) < 1e-4);
+
+// Advance physics by 0.2s - particles should still be alive and have moved
+updateSparks(0.2, trailScene);
+assert.strictEqual(getActiveParticleCount(), 22, 'Particles must remain active at 0.2s');
+assert.notStrictEqual(posArr[1], 1.7, 'Particle Y must have moved due to velocity and gravity');
+
+// Advance past lifespan (0.85s total)
+updateSparks(0.7, trailScene);
+assert.strictEqual(getActiveParticleCount(), 0, 'All particles must expire and be recycled after 0.9s');
+assert.strictEqual(particleMesh.visible, false, 'Particle mesh must hide when all particles expire');
+assert.strictEqual(posArr[1], -9999, 'Expired particle slot Y must be reset off-screen');
+
+// Test ring-buffer wraparound without buffer reallocation
+clearAllEffects();
+burst(new THREE.Vector3(0, 0, 0), 0xffaa00, 400, 10, trailScene);
+assert.strictEqual(getActiveParticleCount(), 400);
+burst(new THREE.Vector3(0, 0, 0), 0xff0044, 300, 10, trailScene);
+// Total capacity is 600, so older slots were overwritten cleanly without exceeding capacity
+assert.strictEqual(getActiveParticleCount(), 600, 'Pool capacity must clamp cleanly to 600 slots');
+
+clearAllEffects();
+assert.strictEqual(getActiveParticleCount(), 0, 'clearAllEffects must reset all active slots');
+
+console.log('✓ Group 6: Fixed-capacity particle pool & slot recycling verified.');
 
 console.log('\n=============================================================');
 console.log('ALL CINEMATIC PIPELINE TESTS PASSED (100%)');

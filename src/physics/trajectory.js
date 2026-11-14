@@ -7,10 +7,51 @@ import { tmp } from '../graphics/materials.js';
 import { getPlayerCurveIntent } from '../input/keyboard.js';
 
 const _trajCamDir = new THREE.Vector3();
+const _trajChest = new THREE.Vector3();
+const _trajToAim = new THREE.Vector3();
+const _trajDir = new THREE.Vector3();
+const _trajOrigin = new THREE.Vector3();
+const _trajSimVel = new THREE.Vector3();
+const _threatPos = new THREE.Vector3();
+const _threatVel = new THREE.Vector3();
+const _threatToMe = new THREE.Vector3();
 
-export function simulatePath(origin, vel, maxBounces = 3, tMax = 1.5, step = 1 / 90, curve = 0, charge = 0) {
-  const p = origin.clone(), v = vel.clone();
-  const pts = [p.clone()], bounceAt = [];
+const MAX_SIM_POINTS = 1500;
+const POOL_CAPACITY = 16384;
+const _defaultSimPositions = new Float32Array(MAX_SIM_POINTS * 3);
+const _simPos = new THREE.Vector3();
+const _simVel = new THREE.Vector3();
+const _ptsPool = [];
+for (let i = 0; i < POOL_CAPACITY; i++) {
+  _ptsPool.push(new THREE.Vector3());
+}
+let _poolHead = 0;
+
+const _bouncePool = [];
+for (let i = 0; i < 128; i++) {
+  _bouncePool.push(new THREE.Vector3());
+}
+let _bounceHead = 0;
+
+const _hitFoePool = [];
+for (let i = 0; i < 16; i++) {
+  _hitFoePool.push({ foe: null, point: new THREE.Vector3(), bounces: 0 });
+}
+let _hitFoeHead = 0;
+let _lastTrajLength = -1;
+
+export function simulatePath(origin, vel, maxBounces = 3, tMax = 1.5, step = 1 / 90, curve = 0, charge = 0, outBuffer = null) {
+  const p = _simPos.copy(origin);
+  const v = _simVel.copy(vel);
+  const buf = outBuffer || _defaultSimPositions;
+  const startPoolIdx = _poolHead;
+  _poolHead = (_poolHead + 1) % POOL_CAPACITY;
+
+  buf[0] = p.x; buf[1] = p.y; buf[2] = p.z;
+  _ptsPool[startPoolIdx].set(p.x, p.y, p.z);
+  const pts = [_ptsPool[startPoolIdx]];
+
+  const bounceAt = [];
   let bounces = 0, t = 0, hitFoe = null;
   let k = curve * (1.0 - 0.65 * THREE.MathUtils.clamp(charge || 0, 0, 1));
   let cruiseY = origin.y !== undefined ? origin.y : 1.7;
@@ -65,10 +106,20 @@ export function simulatePath(origin, vel, maxBounces = 3, tMax = 1.5, step = 1 /
           // Rebound upward away from floor into stabilized cruise elevation
           if (sig) {
             bounces++;
-            bounceAt.push(p.clone());
+            const bSlot = _bounceHead;
+            _bounceHead = (_bounceHead + 1) % _bouncePool.length;
+            const bVec = _bouncePool[bSlot].set(p.x, p.y, p.z);
+            bounceAt.push(bVec);
             if (bounces >= maxBounces) {
-              pts.push(p.clone());
-              return { pts, bounceAt, hitFoe };
+              const ptIdx = pts.length;
+              if (ptIdx < MAX_SIM_POINTS) {
+                buf[ptIdx * 3] = p.x; buf[ptIdx * 3 + 1] = p.y; buf[ptIdx * 3 + 2] = p.z;
+                const poolSlot = _poolHead;
+                _poolHead = (_poolHead + 1) % POOL_CAPACITY;
+                _ptsPool[poolSlot].set(p.x, p.y, p.z);
+                pts.push(_ptsPool[poolSlot]);
+              }
+              return { pts, bounceAt, hitFoe, count: pts.length, positions: buf };
             }
           }
         }
@@ -98,11 +149,21 @@ export function simulatePath(origin, vel, maxBounces = 3, tMax = 1.5, step = 1 /
     }
     if (hit) {
       bounces++;
-      bounceAt.push(p.clone());
+      const bSlot = _bounceHead;
+      _bounceHead = (_bounceHead + 1) % _bouncePool.length;
+      const bVec = _bouncePool[bSlot].set(p.x, p.y, p.z);
+      bounceAt.push(bVec);
       k = -k * 0.5;
       if (bounces >= maxBounces) {
-        pts.push(p.clone());
-        return { pts, bounceAt, hitFoe };
+        const ptIdx = pts.length;
+        if (ptIdx < MAX_SIM_POINTS) {
+          buf[ptIdx * 3] = p.x; buf[ptIdx * 3 + 1] = p.y; buf[ptIdx * 3 + 2] = p.z;
+          const poolSlot = _poolHead;
+          _poolHead = (_poolHead + 1) % POOL_CAPACITY;
+          _ptsPool[poolSlot].set(p.x, p.y, p.z);
+          pts.push(_ptsPool[poolSlot]);
+        }
+        return { pts, bounceAt, hitFoe, count: pts.length, positions: buf };
       }
     }
 
@@ -110,14 +171,34 @@ export function simulatePath(origin, vel, maxBounces = 3, tMax = 1.5, step = 1 /
     const simFoes = state.foes;
     for (const f of simFoes) {
       if (p.distanceTo(tmp.copy(f.pos).setY(1.5 + (f.y || 0))) < config.FOE_R + config.DISC_R + .35) {
-        hitFoe = { foe: f, point: p.clone(), bounces };
-        pts.push(p.clone());
-        return { pts, bounceAt, hitFoe };
+        const foeSlot = _hitFoeHead;
+        _hitFoeHead = (_hitFoeHead + 1) % _hitFoePool.length;
+        const hObj = _hitFoePool[foeSlot];
+        hObj.point.set(p.x, p.y, p.z);
+        hObj.foe = f;
+        hObj.bounces = bounces;
+        hitFoe = hObj;
+        const ptIdx = pts.length;
+        if (ptIdx < MAX_SIM_POINTS) {
+          buf[ptIdx * 3] = p.x; buf[ptIdx * 3 + 1] = p.y; buf[ptIdx * 3 + 2] = p.z;
+          const poolSlot = _poolHead;
+          _poolHead = (_poolHead + 1) % POOL_CAPACITY;
+          _ptsPool[poolSlot].set(p.x, p.y, p.z);
+          pts.push(_ptsPool[poolSlot]);
+        }
+        return { pts, bounceAt, hitFoe, count: pts.length, positions: buf };
       }
     }
-    pts.push(p.clone());
+    const ptIdx = pts.length;
+    if (ptIdx < MAX_SIM_POINTS) {
+      buf[ptIdx * 3] = p.x; buf[ptIdx * 3 + 1] = p.y; buf[ptIdx * 3 + 2] = p.z;
+      const poolSlot = _poolHead;
+      _poolHead = (_poolHead + 1) % POOL_CAPACITY;
+      _ptsPool[poolSlot].set(p.x, p.y, p.z);
+      pts.push(_ptsPool[poolSlot]);
+    }
   }
-  return { pts, bounceAt, hitFoe };
+  return { pts, bounceAt, hitFoe, count: pts.length, positions: buf };
 }
 
 // Visuals
@@ -173,16 +254,18 @@ export function updateThreatPaths() {
   for (const D of state.discs) {
     if (D.owner === 'player' || D.returning || n >= threatLines.length) continue;
     const L = threatLines[n++];
-    const sim = simulatePath(D.pos.clone(), D.vel.clone(), 2, 0.8, 1 / 90, D.curve || 0);
     const arr = L.geometry.attributes.position.array;
-    const c = Math.min(sim.pts.length, 400);
-    for (let i = 0; i < c; i++) { arr[i*3] = sim.pts[i].x; arr[i*3+1] = sim.pts[i].y; arr[i*3+2] = sim.pts[i].z; }
+    _threatPos.copy(D.pos);
+    _threatVel.copy(D.vel);
+    const sim = simulatePath(_threatPos, _threatVel, 2, 0.8, 1 / 90, D.curve || 0, 0, arr);
+    const c = Math.min(sim.count, 400);
     L.geometry.setDrawRange(0, c);
     L.geometry.attributes.position.needsUpdate = true;
     L.geometry.computeBoundingSphere();
     L.computeLineDistances();
-    const toMe = tmp.copy(state.player.pos).setY(1.7).sub(D.pos).normalize();
-    L.material.opacity = 0.18 + Math.max(0, D.vel.clone().normalize().dot(toMe)) * 0.5;
+    _threatToMe.copy(state.player.pos).setY(1.7).sub(D.pos).normalize();
+    _threatVel.copy(D.vel).normalize();
+    L.material.opacity = 0.18 + Math.max(0, _threatVel.dot(_threatToMe)) * 0.5;
     L.visible = true;
   }
   for (let i = n; i < threatLines.length; i++) threatLines[i].visible = false;
@@ -196,20 +279,22 @@ export function updateTrajectory(aim, dt) {
   for (const p of bouncePips) p.visible = false;
   if (!show) return null;
 
-  const chest = state.player.pos.clone().setY(1.7 + state.player.y);
-  const toAim = aim.point.clone().sub(chest);
+  const chest = _trajChest.copy(state.player.pos).setY(1.7 + state.player.y);
+  const toAim = _trajToAim.copy(aim.point).sub(chest);
   const horizontalDist = Math.hypot(toAim.x, toAim.z);
-  const dir = toAim.normalize();
+  const dir = _trajDir.copy(toAim).normalize();
   camera.getWorldDirection(_trajCamDir);
   if (horizontalDist < 2.5 && _trajCamDir.y >= -0.35 && dir.y < -0.04) {
     dir.y = Math.max(-0.04, _trajCamDir.y);
     dir.normalize();
   }
-  const origin = chest.clone().addScaledVector(dir, 1.1);
+  const origin = _trajOrigin.copy(chest).addScaledVector(dir, 1.1);
   const charge = state.player.throwCharge || 0;
   const curve = getPlayerCurveIntent();
   const speed = 38.0 + 17.0 * charge;
-  const sim = simulatePath(origin, dir.clone().multiplyScalar(speed), 3, 1.5, 1 / 90, curve, charge);
+  const simVel = _trajSimVel.copy(dir).multiplyScalar(speed);
+  const arr = trajLine.geometry.attributes.position.array;
+  const sim = simulatePath(origin, simVel, 3, 1.5, 1 / 90, curve, charge, arr);
 
   const willHit = !!sim.hitFoe;
   
@@ -236,15 +321,14 @@ export function updateTrajectory(aim, dt) {
   trajLine.material.dashSize = isCurving ? 0.28 : (isGuardCrush ? 0.6 : 0.45);
   trajLine.material.gapSize = isCurving ? 0.20 : (isGuardCrush ? 0.15 : 0.35);
 
-  const arr = trajLine.geometry.attributes.position.array;
-  const n = Math.min(sim.pts.length, 1500);
-  for (let i = 0; i < n; i++) {
-    arr[i*3] = sim.pts[i].x; arr[i*3+1] = sim.pts[i].y; arr[i*3+2] = sim.pts[i].z;
-  }
+  const n = Math.min(sim.count, 1500);
   trajLine.geometry.setDrawRange(0, n);
   trajLine.geometry.attributes.position.needsUpdate = true;
   trajLine.geometry.computeBoundingSphere();
-  trajLine.computeLineDistances();
+  if (n !== _lastTrajLength) {
+    trajLine.computeLineDistances();
+    _lastTrajLength = n;
+  }
 
   sim.bounceAt.slice(0, 4).forEach((b, i) => {
     const pip = bouncePips[i];

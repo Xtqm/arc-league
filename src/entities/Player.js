@@ -20,6 +20,22 @@ import { campaignManager } from '../campaign/CampaignManager.js';
 import { campaignHUD } from '../ui/campaign/CampaignHUD.js';
 import { trialDebriefModal } from '../ui/campaign/TrialDebriefModal.js';
 
+const _playerFwd = new THREE.Vector3();
+const _playerRight = new THREE.Vector3();
+const _playerWish = new THREE.Vector3();
+const _playerDashDir = new THREE.Vector3();
+const _playerBurstPos = new THREE.Vector3();
+const _throwChest = new THREE.Vector3();
+const _throwToAim = new THREE.Vector3();
+const _throwDir = new THREE.Vector3();
+const _throwOrigin = new THREE.Vector3();
+const _throwVel = new THREE.Vector3();
+const _throwNormDir = new THREE.Vector3();
+const _throwAimToOrigin = new THREE.Vector3();
+const _aimPoint = new THREE.Vector3();
+const _aimResult = { point: _aimPoint, foe: null, dist: 0 };
+const _aimDir = new THREE.Vector3();
+
 export function updatePlayer(dt) {
   if (!state.player.alive) return;
 
@@ -73,9 +89,9 @@ export function updatePlayer(dt) {
     if (state.player.yaw < -Math.PI) state.player.yaw += Math.PI * 2;
   }
 
-  const fwd = new THREE.Vector3(-Math.sin(state.player.yaw), 0, -Math.cos(state.player.yaw));
-  const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
-  const wish = new THREE.Vector3();
+  const fwd = _playerFwd.set(-Math.sin(state.player.yaw), 0, -Math.cos(state.player.yaw));
+  const right = _playerRight.set(-fwd.z, 0, fwd.x);
+  const wish = _playerWish.set(0, 0, 0);
 
   if (state.countdownTimer <= 0) {
     if (state.keys.KeyW) wish.add(fwd);
@@ -137,7 +153,7 @@ export function updatePlayer(dt) {
     }
     state.player.jumps++;
     state.player.grounded = false;
-    burst(state.player.pos.clone().setY(state.player.y + .2), config.CYAN, state.player.jumps === 1 ? 12 : 18, 5);
+    burst(_playerBurstPos.copy(state.player.pos).setY(state.player.y + .2), config.CYAN, state.player.jumps === 1 ? 12 : 18, 5);
     shake(.08);
   }
   state.player.jumpHeld = jumpHeld;
@@ -148,7 +164,7 @@ export function updatePlayer(dt) {
   if (isTileSolid) {
     if (state.player.y <= 0 && prevY >= -0.15) {
       if (!state.player.grounded && state.player.vy < -6) {
-        burst(state.player.pos.clone().setY(.15), config.CYAN, 10, 4);
+        burst(_playerBurstPos.copy(state.player.pos).setY(.15), config.CYAN, 10, 4);
         shake(.07);
       }
       state.player.y = 0;
@@ -179,7 +195,7 @@ export function updatePlayer(dt) {
   state.player.dashCd -= dt;
   const isDashTriggered = (state.keys.ShiftLeft || state.keys.ShiftRight || state.touchDashRequested || state.gamepadDashRequested);
   if (isDashTriggered && state.player.energy > 25 && state.player.dashCd <= 0) {
-    let dashDir = wish.clone();
+    let dashDir = _playerDashDir.copy(wish);
     if (dashDir.lengthSq() < 1e-4) dashDir.copy(fwd);
     else dashDir.normalize();
     const dashImpulse = inRecoveryZone ? 38 : 34;
@@ -190,8 +206,8 @@ export function updatePlayer(dt) {
     state.player.energy -= 25;
     state.player.dashCd = .45;
     shake(.18);
-    burst(state.player.pos.clone().setY(state.player.y + .4), config.CYAN, 14, 5);
-    emitHoverDashStreak(state.player.pos.clone().setY(state.player.y), dashDir, config.CYAN, scene);
+    burst(_playerBurstPos.copy(state.player.pos).setY(state.player.y + .4), config.CYAN, 14, 5);
+    emitHoverDashStreak(_playerBurstPos.copy(state.player.pos).setY(state.player.y), dashDir, config.CYAN, scene);
     if (inRecoveryZone) message('RECOVERY DASH');
     playGamepadHaptics({ duration: 110, weakMagnitude: 0.5, strongMagnitude: 0.7 });
   }
@@ -274,23 +290,23 @@ export function throwDisc(customCharge = null) {
   state.player.throwCharge = 0;
 
   const aim = aimTarget();
-  const chest = state.player.pos.clone().add(new THREE.Vector3(0, 1.7 + state.player.y, 0));
-  const toAim = aim.point.clone().sub(chest);
+  const chest = _throwChest.copy(state.player.pos).setY(1.7 + state.player.y);
+  const toAim = _throwToAim.copy(aim.point).sub(chest);
   const horizontalDist = Math.hypot(toAim.x, toAim.z);
-  const dir = toAim.normalize();
+  const dir = _throwDir.copy(toAim).normalize();
   if (horizontalDist < 2.5 && _rd.y >= -0.35 && dir.y < -0.04) {
     dir.y = Math.max(-0.04, _rd.y);
     dir.normalize();
   }
-  const origin = chest.clone().add(dir.clone().multiplyScalar(1.1));
+  const origin = _throwOrigin.copy(chest).addScaledVector(dir, 1.1);
   const rawCurve = getPlayerCurveIntent();
   const gyroDamp = 1.0 - 0.65 * charge;
   const curve = rawCurve * gyroDamp;
   const speed = 38.0 + 17.0 * charge;
-  const vel = dir.clone().multiplyScalar(speed);
+  const vel = _throwVel.copy(dir).multiplyScalar(speed);
   spawnDisc(origin, vel, 'player', config.CYAN, curve, charge);
   if (typeof window !== 'undefined') {
-    window.__lastThrowDot = dir.clone().normalize().dot(aim.point.clone().sub(origin).normalize());
+    window.__lastThrowDot = _throwNormDir.copy(dir).normalize().dot(_throwAimToOrigin.copy(aim.point).sub(origin).normalize());
   }
 
   if (SFX.chargeBlast) {
@@ -393,11 +409,15 @@ export function aimTarget() {
     const t = proj - Math.sqrt(R * R - d2);
     if (t > 0.5 && t < best) { best = t; hitFoe = f; }
   }
-  return { point: _ro.clone().addScaledVector(_rd, Math.min(best, 400)), foe: hitFoe, dist: best };
+  _aimPoint.copy(_ro).addScaledVector(_rd, Math.min(best, 400));
+  _aimResult.point = _aimPoint;
+  _aimResult.foe = hitFoe;
+  _aimResult.dist = best;
+  return _aimResult;
 }
 
 export function aimDir() {
-  return new THREE.Vector3(
+  return _aimDir.set(
     -Math.sin(state.player.yaw) * Math.cos(state.player.pitch),
     Math.sin(state.player.pitch),
     -Math.cos(state.player.yaw) * Math.cos(state.player.pitch)
@@ -412,7 +432,7 @@ export function damagePlayer(amount, from) {
   state.player.invuln = 0.25;
   state.player.hp -= amount;
   state.player.hurtFlash = 1;
-  burst(state.player.pos.clone().setY(state.player.y + 1.6), config.CYAN, 18, 8);
+  burst(_playerBurstPos.copy(state.player.pos).setY(state.player.y + 1.6), config.CYAN, 18, 8);
   shake(0.35);
   playGamepadHaptics({ duration: 200, weakMagnitude: 0.6, strongMagnitude: 0.9 });
 
@@ -430,7 +450,7 @@ export function damagePlayer(amount, from) {
     state.running = false;
     state.gameOverT = 0;
     resetTouchInputs();
-    burst(state.player.pos.clone().setY(state.player.y + 1.4), config.CYAN, 90, 16);
+    burst(_playerBurstPos.copy(state.player.pos).setY(state.player.y + 1.4), config.CYAN, 90, 16);
     if (state.player.obj) state.player.obj.visible = false;
 
     if (state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi') {

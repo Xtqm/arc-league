@@ -43,7 +43,7 @@ The system SHALL manage native lifecycle events, ensuring clean process terminat
 - **THEN** procedural synthesizer audio output is suspended until the window regains focus.
 
 ### Requirement: Executable Packaging Configuration
-The system SHALL provide packaging configurations via electron-builder with official Arc League brand icons (`desktop/icon.ico` and `desktop/icon.png`) to generate branded standalone desktop executables and update manifests for Windows, Linux, and macOS platforms.
+The system SHALL provide packaging configurations via electron-builder targeting the canonical `arc-league` GitHub repository with official Arc League brand icons (`desktop/icon.ico` and `desktop/icon.png`) to generate branded standalone desktop executables and update manifests for Windows, Linux, and macOS platforms.
 
 #### Scenario: Distribution packaging build
 - **WHEN** the developer executes `npm run desktop:build` on a target OS
@@ -55,7 +55,7 @@ The system SHALL provide packaging configurations via electron-builder with offi
 
 #### Scenario: Update manifest generation
 - **WHEN** distribution packaging is executed with release publishing enabled
-- **THEN** `electron-builder` generates platform release manifests (`latest.yml`, `latest-linux.yml`, `latest-mac.yml`) containing binary checksums and version metadata.
+- **THEN** `electron-builder` generates platform release manifests (`latest.yml`, `latest-linux.yml`, `latest-mac.yml`) targeting the canonical `arc-league` repository containing binary checksums and version metadata.
 
 ### Requirement: Automated Update Discovery and Manifest Verification
 The desktop application shell SHALL verify the availability of new client versions against GitHub Releases manifests upon packaged production startup and notify the runtime environment without interrupting offline or local test modes.

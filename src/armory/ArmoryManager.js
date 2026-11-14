@@ -14,7 +14,7 @@ import {
   isValidCategory
 } from './ArmoryCatalog.js';
 import { economyManager as defaultEconomyManager } from '../core/economy/EconomyManager.js';
-import { storageManager as defaultStorageManager } from '../core/storage/StorageManager.js';
+import { storageManager as defaultStorageManager, StorageEvents } from '../core/storage/StorageManager.js';
 
 export const ArmoryEvents = Object.freeze({
   ITEM_UNLOCKED: 'ARMORY_ITEM_UNLOCKED',
@@ -64,6 +64,32 @@ export class ArmoryManager {
     this.storage = options.storage || defaultStorageManager;
 
     this._listeners = new Map();
+
+    // Listen for external / cloud sync storage updates to reactively update active loadout
+    if (this.storage && typeof this.storage.on === 'function') {
+      this.storage.on(StorageEvents.MUTATED, (payload) => {
+        if (!payload || payload.isExternal || payload.source === 'cloud_sync' || payload.path === '*' || (typeof payload.path === 'string' && (payload.path.startsWith('loadout') || payload.path.startsWith('inventory')))) {
+          const activeDisc = this.storage.get('loadout.activeDisc', DEFAULT_LOADOUT_SLOTS.discSkin);
+          const activeArenaSkin = this.storage.get('loadout.activeArenaSkin', DEFAULT_LOADOUT_SLOTS.unlockedMap);
+          this.emit(ArmoryEvents.LOADOUT_CHANGED, {
+            category: 'ALL',
+            activeDisc,
+            activeArenaSkin,
+            source: payload?.source || 'storage_sync'
+          });
+        }
+      });
+      this.storage.on(StorageEvents.INITIALIZED, (payload) => {
+        const activeDisc = this.storage.get('loadout.activeDisc', DEFAULT_LOADOUT_SLOTS.discSkin);
+        const activeArenaSkin = this.storage.get('loadout.activeArenaSkin', DEFAULT_LOADOUT_SLOTS.unlockedMap);
+        this.emit(ArmoryEvents.LOADOUT_CHANGED, {
+          category: 'ALL',
+          activeDisc,
+          activeArenaSkin,
+          source: payload?.source || 'storage_sync'
+        });
+      });
+    }
 
     // Auto-mount debug suite if running in browser window
     if (typeof window !== 'undefined') {

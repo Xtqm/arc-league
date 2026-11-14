@@ -4,7 +4,7 @@
  */
 
 import { state } from '../core/state.js';
-import { defaultStorageManager } from '../core/storage/StorageManager.js';
+import { defaultStorageManager, StorageEvents } from '../core/storage/StorageManager.js';
 import { SECTOR_THEMES } from '../arena/hazards/SectorHazardBuilder.js';
 import { duelMapSelector } from './duel/DuelMapSelector.js';
 
@@ -174,4 +174,20 @@ export function updateArenaSelectControls(root = (typeof document !== 'undefined
   };
 
   return select;
+}
+
+// Reactively re-render arena selection controls upon cloud synchronization or storage mutation
+if (defaultStorageManager && typeof defaultStorageManager.on === 'function') {
+  defaultStorageManager.on(StorageEvents.MUTATED, (payload) => {
+    if (!payload || payload.path === '*' || payload.isExternal || payload.source === 'cloud_sync' || (typeof payload.path === 'string' && payload.path.startsWith('inventory.unlockedMaps'))) {
+      if (typeof document !== 'undefined') {
+        updateArenaSelectControls(document, defaultStorageManager);
+      }
+    }
+  });
+  defaultStorageManager.on(StorageEvents.INITIALIZED, () => {
+    if (typeof document !== 'undefined') {
+      updateArenaSelectControls(document, defaultStorageManager);
+    }
+  });
 }

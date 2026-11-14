@@ -663,6 +663,246 @@ export class StorageManager {
   }
 
   /**
+   * Hydrates an incoming save state or resolved cloud merge directly into active StorageManager state.
+   * Converts flat or structured schemas safely and emits lifecycle update events without recursive sync loops.
+   * @param {object} mergedState
+   * @param {object} [options]
+   * @param {string} [options.source='import'] Identifier indicating the import origin (e.g. 'cloud_sync', 'desktop', 'import')
+   * @param {boolean} [options.autoSave=true] Whether to commit the imported state to persistent storage
+   * @param {boolean} [options.immediate=true] Whether persistence should be synchronous
+   * @returns {object} The updated active TronSaveState
+   */
+  importState(mergedState, options = {}) {
+    if (!mergedState || typeof mergedState !== 'object') {
+      return this.state;
+    }
+
+    const { source = 'import', autoSave = true, immediate = true } = options;
+    const isCloudSync = source === 'cloud_sync' || source === 'desktop' || source === 'cross_tab';
+
+    // If state is not loaded, load baseline first
+    if (!this.state) {
+      this.load();
+    }
+
+    const base = createDefaultSaveState();
+    const existing = this.state || base;
+    const s = mergedState;
+
+    // Player Identity & Currencies
+    const playerId = s.player?.id || s.userId || existing.player?.id || base.player.id;
+    const playerHandle = s.player?.handle || s.handle || existing.player?.handle || base.player.handle;
+    const playerLevel = s.player?.level ?? s.level ?? existing.player?.level ?? base.player.level;
+    const playerXp = s.player?.xp ?? s.xp ?? existing.player?.xp ?? base.player.xp;
+
+    const rawBits = s.player?.currency?.bits ?? s.player?.currency?.credits ?? s.bits ?? existing.player?.currency?.bits ?? 0;
+    const rawCredits = s.player?.currency?.credits ?? s.player?.currency?.bits ?? s.bits ?? existing.player?.currency?.credits ?? 0;
+    const rawSparks = s.player?.currency?.sparks ?? s.sparks ?? existing.player?.currency?.sparks ?? 0;
+
+    // Loadout
+    const loadout = {
+      activeDisc: s.loadout?.activeDisc || existing.loadout?.activeDisc || base.loadout.activeDisc,
+      activeTrail: s.loadout?.activeTrail || existing.loadout?.activeTrail || base.loadout.activeTrail,
+      activeVisor: s.loadout?.activeVisor || existing.loadout?.activeVisor || base.loadout.activeVisor,
+      activeArenaSkin: s.loadout?.activeArenaSkin || existing.loadout?.activeArenaSkin || base.loadout.activeArenaSkin,
+      audioTheme: s.loadout?.audioTheme || existing.loadout?.audioTheme || base.loadout.audioTheme
+    };
+
+    // Campaign Progression
+    const rawCamp = s.campaign || {};
+    const existCamp = existing.campaign || {};
+
+    const completedNodes = Array.from(new Set([
+      ...(Array.isArray(existCamp.completedNodes) ? existCamp.completedNodes : []),
+      ...(Array.isArray(rawCamp.completedNodes) ? rawCamp.completedNodes : [])
+    ]));
+
+    const unlockedNodes = Array.from(new Set([
+      'level_01_01',
+      ...(Array.isArray(existCamp.unlockedNodes) ? existCamp.unlockedNodes : []),
+      ...(Array.isArray(rawCamp.unlockedNodes) ? rawCamp.unlockedNodes : [])
+    ]));
+
+    const unlockedGrids = Array.from(new Set([
+      'grid_01',
+      ...(Array.isArray(existCamp.unlockedGrids) ? existCamp.unlockedGrids : []),
+      ...(Array.isArray(rawCamp.unlockedGrids) ? rawCamp.unlockedGrids : [])
+    ]));
+
+    const levelRecords = {
+      ...(existCamp.levelRecords || {}),
+      ...(rawCamp.levelRecords || {})
+    };
+
+    let totalStars = 0;
+    for (const rec of Object.values(levelRecords)) {
+      totalStars += rec.stars || 0;
+    }
+    const starsEarned = Math.max(
+      totalStars,
+      Number(rawCamp.starsEarned || 0),
+      Number(existCamp.starsEarned || 0)
+    );
+
+    const campaign = {
+      completedNodes,
+      unlockedNodes,
+      unlockedGrids,
+      starsEarned,
+      currentNode: rawCamp.currentNode || existCamp.currentNode || 'level_01_01',
+      chapter: rawCamp.chapter || existCamp.chapter || 1,
+      levelRecords
+    };
+
+    // Inventory
+    const rawInv = s.inventory;
+    const existInv = existing.inventory || {};
+
+    let inputDiscs = [];
+    let inputCosmetics = [];
+    let inputMaps = [];
+    let inputConsumables = {};
+
+    if (Array.isArray(rawInv)) {
+      inputDiscs = rawInv.filter(i => String(i).startsWith('disc_'));
+      inputMaps = rawInv.filter(i => String(i).startsWith('arena_'));
+      inputCosmetics = rawInv.filter(i => !String(i).startsWith('disc_') && !String(i).startsWith('arena_'));
+    } else if (rawInv && typeof rawInv === 'object') {
+      inputDiscs = Array.isArray(rawInv.discs) ? rawInv.discs : [];
+      inputCosmetics = Array.isArray(rawInv.cosmetics) ? rawInv.cosmetics : [];
+      inputMaps = Array.isArray(rawInv.unlockedMaps) ? rawInv.unlockedMaps : [];
+      inputConsumables = typeof rawInv.consumables === 'object' && rawInv.consumables !== null ? rawInv.consumables : {};
+    }
+
+    const mergedDiscs = Array.from(new Set([
+      ...(Array.isArray(existInv.discs) ? existInv.discs : ['disc_identity_default']),
+      ...inputDiscs
+    ]));
+
+    const mergedCosmetics = Array.from(new Set([
+      ...(Array.isArray(existInv.cosmetics) ? existInv.cosmetics : ['trail_cyan_default', 'visor_classic']),
+      ...inputCosmetics
+    ]));
+
+    const mergedMaps = Array.from(new Set([
+      'arena_grid_01',
+      ...(Array.isArray(existInv.unlockedMaps) ? existInv.unlockedMaps : []),
+      ...inputMaps
+    ]));
+
+    const mergedConsumables = { ...(existInv.consumables || {}) };
+    for (const [k, v] of Object.entries(inputConsumables)) {
+      mergedConsumables[k] = Math.max(Number(mergedConsumables[k] || 0), Number(v || 0));
+    }
+
+    const inventory = {
+      discs: mergedDiscs,
+      cosmetics: mergedCosmetics,
+      consumables: mergedConsumables,
+      unlockedMaps: mergedMaps
+    };
+
+    // Preserve custom categories
+    if (rawInv && typeof rawInv === 'object' && !Array.isArray(rawInv)) {
+      for (const [k, v] of Object.entries(rawInv)) {
+        if (!['discs', 'cosmetics', 'consumables', 'unlockedMaps'].includes(k)) {
+          if (Array.isArray(v)) {
+            inventory[k] = Array.from(new Set([...(Array.isArray(existInv[k]) ? existInv[k] : []), ...v]));
+          } else {
+            inventory[k] = v;
+          }
+        }
+      }
+    }
+
+    // Achievements
+    const achievements = Array.from(new Set([
+      ...(Array.isArray(existing.achievements) ? existing.achievements.map(a => (typeof a === 'string' ? a : a.id)) : []),
+      ...(Array.isArray(s.achievements) ? s.achievements.map(a => (typeof a === 'string' ? a : a.id)) : [])
+    ]));
+
+    // Stats
+    const rawStats = s.stats || {};
+    const existStats = existing.stats || {};
+    const stats = {
+      matchesPlayed: Math.max(Number(existStats.matchesPlayed || 0), Number(rawStats.matchesPlayed || 0)),
+      wins: Math.max(Number(existStats.wins || 0), Number(rawStats.wins || 0)),
+      losses: Math.max(Number(existStats.losses || 0), Number(rawStats.losses || 0)),
+      discsThrown: Math.max(Number(existStats.discsThrown || 0), Number(rawStats.discsThrown || 0)),
+      discsDeflected: Math.max(Number(existStats.discsDeflected || 0), Number(rawStats.discsDeflected || 0)),
+      tilesDestroyed: Math.max(Number(existStats.tilesDestroyed || 0), Number(rawStats.tilesDestroyed || 0)),
+      highestWave: Math.max(Number(existStats.highestWave || 1), Number(rawStats.highestWave || 1)),
+      swarmHighestWave: Math.max(
+        Number(existStats.swarmHighestWave || existStats.highestWave || 1),
+        Number(rawStats.swarmHighestWave || rawStats.highestWave || 1)
+      ),
+      highestScore: Math.max(Number(existStats.highestScore || 0), Number(rawStats.highestScore || 0)),
+      totalPlaytimeSec: Math.max(Number(existStats.totalPlaytimeSec || 0), Number(rawStats.totalPlaytimeSec || 0)),
+      totalDerezzes: Math.max(
+        Number(existStats.totalDerezzes ?? existStats.totalDeallocations ?? 0),
+        Number(rawStats.totalDerezzes ?? rawStats.totalDeallocations ?? 0)
+      ),
+      totalDeallocations: Math.max(
+        Number(existStats.totalDeallocations ?? existStats.totalDerezzes ?? 0),
+        Number(rawStats.totalDeallocations ?? rawStats.totalDerezzes ?? 0)
+      ),
+      parriesExecuted: Math.max(Number(existStats.parriesExecuted || 0), Number(rawStats.parriesExecuted || 0)),
+      curveEliminations: Math.max(Number(existStats.curveEliminations || 0), Number(rawStats.curveEliminations || 0))
+    };
+
+    // Settings
+    const settings = {
+      ...(existing.settings || {}),
+      ...(s.settings || {})
+    };
+
+    const nextState = {
+      version: SAVE_STATE_VERSION,
+      createdAt: Math.min(existing.createdAt || Date.now(), s.createdAt || Date.now()),
+      updatedAt: Date.now(),
+      player: {
+        id: playerId,
+        handle: playerHandle,
+        level: playerLevel,
+        xp: playerXp,
+        currency: {
+          bits: rawBits,
+          credits: rawCredits,
+          sparks: rawSparks
+        }
+      },
+      loadout,
+      campaign,
+      inventory,
+      achievements,
+      stats,
+      settings
+    };
+
+    const previousValue = this.state;
+    this.state = deepClone(nextState);
+
+    if (autoSave) {
+      this.save({ immediate });
+    }
+
+    this.emit(StorageEvents.MUTATED, {
+      path: '*',
+      value: deepClone(this.state),
+      previousValue,
+      isExternal: isCloudSync,
+      source
+    });
+
+    this.emit(StorageEvents.INITIALIZED, {
+      state: deepClone(this.state),
+      source
+    });
+
+    return this.state;
+  }
+
+  /**
    * Cleans up registered event listeners and node bus references.
    */
   destroy() {

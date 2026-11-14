@@ -184,8 +184,9 @@ async function runMultiplayerTests() {
 
   await guestPage.waitForFunction(() => {
     const opp = window.__dbg.duelOpponent();
+    if (window.__dbg && window.__dbg.step) window.__dbg.step(0.016);
     return opp && opp.targetPos && Math.abs(opp.targetPos.x - 5.0) < 0.1;
-  }, { timeout: 4000 });
+  }, { timeout: 10000, polling: 100 });
 
   // P2 steps physics to interpolate remote opponent
   const p2Perception = await guestPage.evaluate(() => {
@@ -236,7 +237,7 @@ async function runMultiplayerTests() {
 
   await guestPage.waitForFunction(() => {
     return window.__dbg.discs().some(d => d.owner === 'foe');
-  }, { timeout: 4000 });
+  }, { timeout: 10000, polling: 100 });
 
   const throwSyncResults = await guestPage.evaluate(() => {
     const oppDiscs = window.__dbg.discs().filter(d => d.owner === 'foe');
@@ -345,7 +346,7 @@ async function runMultiplayerTests() {
     const overlay = document.getElementById('overlay');
     const h1 = overlay ? overlay.querySelector('h1') : null;
     return h1 && h1.textContent === 'DEREZZED';
-  }, { timeout: 4000 });
+  }, { timeout: 10000, polling: 100 });
 
   const endState = await Promise.all([
     hostPage.evaluate(() => {

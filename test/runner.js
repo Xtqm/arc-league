@@ -21,7 +21,8 @@ const TEST_DOMAINS = {
     'storage/cloud_sync_resolver.test.js',
     'storage/cross_tab_sync.test.js',
     'storage/offline_resilience.test.js',
-    'storage/supabase_cloud_sync.test.js'
+    'storage/supabase_cloud_sync.test.js',
+    'storage/multi_device_sync.test.js'
   ],
   economy: [
     'economy/economy_manager.test.js',

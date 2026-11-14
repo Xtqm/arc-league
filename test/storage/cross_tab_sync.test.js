@@ -61,8 +61,8 @@ assert.strictEqual(mergedInTabB.level, 6, 'Level must be max(6, 4) = 6 (no downg
 assert.strictEqual(mergedInTabB.starMastery[1], 3);
 assert.strictEqual(mergedInTabB.starMastery[2], 3);
 assert.strictEqual(mergedInTabB.starMastery[3], 2);
-assert.ok(mergedInTabB.inventory.includes('skin_clu'));
-assert.ok(mergedInTabB.inventory.includes('disc_solar_flare'));
+assert.ok(mergedInTabB.inventory.cosmetics.includes('skin_clu'));
+assert.ok(mergedInTabB.inventory.discs.includes('disc_solar_flare'));
 assert.ok(mergedInTabB.achievements.includes('ACH_GRID_MASTER'));
 assert.ok(mergedInTabB.achievements.includes('ACH_FIRST_WIN'));
 console.log('✓ Peer save state merged monotonically without overriding higher local progress');

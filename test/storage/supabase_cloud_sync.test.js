@@ -20,7 +20,28 @@ const testState = normalizeSaveState({
   bits: 2500,
   level: 5,
   starMastery: { 1: 3, 2: 3, 3: 2 },
-  inventory: ['disc_default', 'disc_heavy', 'trail_cyan'],
+  campaign: {
+    completedNodes: ['level_01_01'],
+    unlockedNodes: ['level_01_01', 'level_01_02'],
+    unlockedGrids: ['grid_01'],
+    starsEarned: 3,
+    levelRecords: {
+      level_01_01: { levelId: 'level_01_01', stars: 3, completed: true }
+    }
+  },
+  inventory: {
+    discs: ['disc_default', 'disc_heavy'],
+    cosmetics: ['trail_cyan'],
+    consumables: {},
+    unlockedMaps: ['arena_grid_01']
+  },
+  loadout: {
+    activeDisc: 'disc_heavy',
+    activeTrail: 'trail_cyan',
+    activeVisor: 'visor_classic',
+    activeArenaSkin: 'grid_default',
+    audioTheme: 'synthwave_82'
+  },
   achievements: ['ACH_FIRST_WIN', 'ACH_PERFECT_DEFLECTION'],
   stats: { matchesPlayed: 10, wins: 8, highestWave: 15, highestTier: 3, totalScore: 45000 },
   settings: { sens: 0.003, invertY: false },
@@ -32,8 +53,10 @@ assert.strictEqual(row.user_id, testState.userId);
 assert.strictEqual(row.handle, testState.handle);
 assert.strictEqual(row.bits, 2500);
 assert.strictEqual(row.level, 5);
-assert.deepStrictEqual(row.star_mastery, { 1: 3, 2: 3, 3: 2 });
-assert.deepStrictEqual(row.inventory, ['disc_default', 'disc_heavy', 'trail_cyan']);
+assert.deepStrictEqual(row.star_mastery, testState.starMastery);
+assert.deepStrictEqual(row.campaign, testState.campaign);
+assert.deepStrictEqual(row.loadout, testState.loadout);
+assert.deepStrictEqual(row.inventory, testState.inventory);
 assert.deepStrictEqual(row.achievements, ['ACH_FIRST_WIN', 'ACH_PERFECT_DEFLECTION']);
 assert.strictEqual(typeof row.created_at, 'string');
 assert.strictEqual(typeof row.last_active_at, 'string');
@@ -45,9 +68,33 @@ assert.strictEqual(reconstructed.handle, testState.handle);
 assert.strictEqual(reconstructed.bits, testState.bits);
 assert.strictEqual(reconstructed.level, testState.level);
 assert.deepStrictEqual(reconstructed.starMastery, testState.starMastery);
+assert.deepStrictEqual(reconstructed.campaign, testState.campaign);
+assert.deepStrictEqual(reconstructed.loadout, testState.loadout);
 assert.deepStrictEqual(reconstructed.inventory, testState.inventory);
 assert.deepStrictEqual(reconstructed.achievements, testState.achievements);
 console.log('✓ rowToSaveState accurately reconstructs normalized TronSaveState from Postgres row');
+
+// Test 1b: Legacy Row Backward-Compatible Reconstruction
+const legacyRow = {
+  user_id: 'legacy-uuid',
+  handle: 'LEGACY_PROG',
+  bits: '100',
+  level: '2',
+  star_mastery: { 1: 2 },
+  inventory: ['disc_default', 'trail_amber'],
+  achievements: ['ACH_FIRST_WIN'],
+  stats: {},
+  settings: {},
+  version: 1
+};
+const reconstructedLegacy = rowToSaveState(legacyRow);
+assert.strictEqual(reconstructedLegacy.userId, 'legacy-uuid');
+assert.ok(reconstructedLegacy.inventory.discs.includes('disc_default'));
+assert.ok(reconstructedLegacy.inventory.cosmetics.includes('trail_amber'));
+assert.ok(reconstructedLegacy.inventory.unlockedMaps.includes('arena_grid_01'));
+assert.strictEqual(reconstructedLegacy.campaign.starsEarned, 2);
+assert.strictEqual(reconstructedLegacy.loadout.activeDisc, 'disc_identity_default');
+console.log('✓ Legacy Postgres rows safely translated with default campaign, loadout, and structured inventory');
 
 // Test 2: Remote Fetch and Upsert with Mock Client
 const mockDatabase = new Map();
@@ -116,8 +163,8 @@ assert.strictEqual(resolved.starMastery[1], 3);
 assert.strictEqual(resolved.starMastery[2], 3);
 assert.strictEqual(resolved.starMastery[3], 2);
 assert.strictEqual(resolved.starMastery[4], 2);
-assert.ok(resolved.inventory.includes('disc_plasma'), 'Local unique item preserved');
-assert.ok(resolved.inventory.includes('disc_heavy'), 'Cloud unique item preserved');
+assert.ok(resolved.inventory.discs.includes('disc_plasma'), 'Local unique item preserved');
+assert.ok(resolved.inventory.discs.includes('disc_heavy'), 'Cloud unique item preserved');
 console.log('✓ CloudSyncResolver guarantees strictly non-decreasing convergence across local and cloud profiles');
 
 // Test 4: Offline Fallback & Sync Queueing

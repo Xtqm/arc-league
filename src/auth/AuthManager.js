@@ -4,14 +4,20 @@ import { MockAuthProvider } from './MockAuthProvider.js';
 import { SupabaseAuthProvider, resolveSupabaseConfig } from './SupabaseAuthProvider.js';
 import { getOrCreateSaveState, updateSaveStats, updateSaveSettings, saveSaveState } from './saveState.js';
 import { crossTabSync } from '../storage/CrossTabSync.js';
-import { CloudSyncResolver, fetchRemoteSaveState, upsertRemoteSaveState } from '../storage/CloudSyncResolver.js';
+import { CloudSyncResolver, fetchRemoteSaveState, upsertRemoteSaveState, normalizeSaveState } from '../storage/CloudSyncResolver.js';
 import { offlineSyncQueue } from '../storage/OfflineSyncQueue.js';
+import { storageManager as defaultStorageManager, StorageEvents } from '../core/storage/StorageManager.js';
 
 /**
  * AuthManager - Central singleton orchestrating identity, authentication providers, and local save states.
+ * Uses StorageManager as the single authoritative source of truth for runtime state and cloud sync.
  */
 export class AuthManager {
-  constructor() {
+  /**
+   * @param {object} [options]
+   * @param {import('../core/storage/StorageManager.js').StorageManager} [options.storage]
+   */
+  constructor(options = {}) {
     this._provider = new MockAuthProvider();
     this._currentUser = null;
     this._saveState = null;
@@ -19,6 +25,34 @@ export class AuthManager {
     this._initPromise = null;
     this._crossTabUnsub = crossTabSync.onMessage((msg) => this._handleCrossTabMessage(msg));
     this._isSyncingCloud = false;
+    this._storage = options.storage || defaultStorageManager;
+    this._cloudSyncDebounceTimeout = null;
+
+    // Listen to StorageManager saved events to schedule cloud sync when online
+    if (this._storage && typeof this._storage.on === 'function') {
+      this._storage.on(StorageEvents.SAVED, (event) => {
+        if (!event?.isExternal && event?.source !== 'cloud_sync' && this._currentUser && this._provider?.client) {
+          this._scheduleDebouncedCloudSync();
+        }
+      });
+    }
+  }
+
+  get storage() {
+    return this._storage;
+  }
+
+  _scheduleDebouncedCloudSync(delayMs = 800) {
+    if (this._cloudSyncDebounceTimeout) {
+      clearTimeout(this._cloudSyncDebounceTimeout);
+    }
+    this._cloudSyncDebounceTimeout = setTimeout(() => {
+      this._cloudSyncDebounceTimeout = null;
+      this.syncCloudSave().catch(() => {});
+    }, delayMs);
+    if (typeof this._cloudSyncDebounceTimeout?.unref === 'function') {
+      this._cloudSyncDebounceTimeout.unref();
+    }
   }
 
   /**
@@ -171,6 +205,11 @@ export class AuthManager {
     if (this._currentUser) {
       this._currentUser.handle = sanitized;
     }
+
+    if (this._storage) {
+      this._storage.set('player.handle', sanitized, { immediate: true });
+      this._saveState = normalizeSaveState(this._storage.state);
+    }
     if (this._saveState) {
       this._saveState.handle = sanitized;
       saveSaveState(this._saveState);
@@ -190,15 +229,28 @@ export class AuthManager {
     this._applyUser(null);
   }
 
-
   /**
-   * Updates combat statistics in the current user's save state.
+   * Updates combat statistics in the current user's save state and StorageManager.
    * @param {object} statsDelta
    * @returns {object|null}
    */
   recordStats(statsDelta) {
     if (!this._currentUser) return null;
-    this._saveState = updateSaveStats(this._currentUser.uid, statsDelta);
+
+    if (this._storage && statsDelta && typeof statsDelta === 'object') {
+      for (const [key, val] of Object.entries(statsDelta)) {
+        this._storage.set(`stats.${key}`, val, { autoSave: false });
+      }
+      this._storage.save({ immediate: true });
+      this._saveState = normalizeSaveState(this._storage.state);
+    } else {
+      this._saveState = updateSaveStats(this._currentUser.uid, statsDelta);
+    }
+
+    if (this._saveState) {
+      saveSaveState(this._saveState, { broadcast: false });
+    }
+
     authEventBus.emit(AuthEvents.PROFILE_UPDATED, { user: this._currentUser, saveState: this._saveState });
     this.syncCloudSave().catch(() => {});
     return this._saveState;
@@ -211,7 +263,16 @@ export class AuthManager {
    */
   recordSettings(settingsDelta) {
     if (!this._currentUser) return null;
-    this._saveState = updateSaveSettings(this._currentUser.uid, settingsDelta);
+
+    if (this._storage && settingsDelta && typeof settingsDelta === 'object') {
+      for (const [key, val] of Object.entries(settingsDelta)) {
+        this._storage.set(`settings.${key}`, val, { autoSave: false });
+      }
+      this._storage.save({ immediate: true });
+      this._saveState = normalizeSaveState(this._storage.state);
+    } else {
+      this._saveState = updateSaveSettings(this._currentUser.uid, settingsDelta);
+    }
 
     if (this._saveState && this._saveState.settings) {
       if (typeof this._saveState.settings.sens === 'number') {
@@ -220,6 +281,7 @@ export class AuthManager {
       if (typeof this._saveState.settings.invertY === 'boolean') {
         state.invertY = this._saveState.settings.invertY;
       }
+      saveSaveState(this._saveState, { broadcast: false });
     }
 
     authEventBus.emit(AuthEvents.PROFILE_UPDATED, { user: this._currentUser, saveState: this._saveState });
@@ -227,12 +289,6 @@ export class AuthManager {
     return this._saveState;
   }
 
-  /**
-   * Convenience listener for auth events.
-   * @param {string} event
-   * @param {Function} callback
-   * @returns {() => void} Unsubscribe function
-   */
   /**
    * Upgrades the current user session by linking an identity (OAuth or passkey).
    * @param {object} credentials
@@ -270,8 +326,21 @@ export class AuthManager {
       const incomingSave = msg.payload?.saveState;
       if (this._currentUser && incomingSave && incomingSave.userId === this._currentUser.uid) {
         // Monotonically merge save states to prevent multi-tab desynchronization
-        this._saveState = CloudSyncResolver.resolve(this._saveState, incomingSave);
+        const currentLocal = this._storage
+          ? normalizeSaveState(this._storage.state)
+          : this._saveState;
+
+        const merged = CloudSyncResolver.resolve(currentLocal, incomingSave);
+
+        if (this._storage) {
+          this._storage.importState(merged, { source: 'cross_tab', immediate: true });
+          this._saveState = normalizeSaveState(this._storage.state);
+        } else {
+          this._saveState = merged;
+        }
+
         saveSaveState(this._saveState, { broadcast: false });
+
         if (this._saveState && this._saveState.settings) {
           if (typeof this._saveState.settings.sens === 'number') {
             state.sens = this._saveState.settings.sens;
@@ -302,18 +371,33 @@ export class AuthManager {
 
     this._isSyncingCloud = true;
     try {
+      const currentLocal = this._storage
+        ? normalizeSaveState(this._storage.state)
+        : this._saveState;
+
       // 1. Fetch remote state
       const remoteState = await fetchRemoteSaveState(this._currentUser.uid, client);
       if (remoteState) {
         // 2. Monotonically resolve local and remote state
-        const merged = CloudSyncResolver.resolve(this._saveState, remoteState);
-        this._saveState = merged;
+        const merged = CloudSyncResolver.resolve(currentLocal, remoteState);
+
+        if (this._storage) {
+          this._storage.importState(merged, { source: 'cloud_sync', immediate: true });
+          this._saveState = normalizeSaveState(this._storage.state);
+        } else {
+          this._saveState = merged;
+        }
+
         saveSaveState(this._saveState, { broadcast: false });
       }
 
       // 3. Upsert resolved state to cloud
-      if (this._saveState) {
-        await upsertRemoteSaveState(this._saveState, client);
+      const stateToPersist = this._storage
+        ? normalizeSaveState(this._storage.state)
+        : this._saveState;
+
+      if (stateToPersist) {
+        await upsertRemoteSaveState(stateToPersist, client);
       }
 
       // 4. Drain pending offline queue mutations if online
@@ -333,8 +417,11 @@ export class AuthManager {
       return this._saveState;
     } catch (err) {
       console.warn('AuthManager: Cloud sync encountered network error, queueing mutation:', err);
-      if (this._saveState) {
-        offlineSyncQueue.enqueue(this._saveState);
+      const stateToQueue = this._storage
+        ? normalizeSaveState(this._storage.state)
+        : this._saveState;
+      if (stateToQueue) {
+        offlineSyncQueue.enqueue(stateToQueue);
       }
       return this._saveState;
     } finally {
@@ -347,11 +434,26 @@ export class AuthManager {
     state.currentUser = user;
 
     if (user && user.uid) {
-      this._saveState = getOrCreateSaveState(user.uid, user.handle);
-      if (user.handle && this._saveState && this._saveState.handle !== user.handle) {
-        this._saveState.handle = user.handle;
-        saveSaveState(this._saveState);
+      if (this._storage) {
+        if (!this._storage.isInitialized) {
+          this._storage.load();
+        }
+        if (this._storage.state) {
+          this._storage.state.player.id = user.uid;
+          if (user.handle) {
+            this._storage.state.player.handle = user.handle;
+          }
+          this._storage.save({ immediate: true });
+        }
+        this._saveState = normalizeSaveState(this._storage.state);
+      } else {
+        this._saveState = getOrCreateSaveState(user.uid, user.handle);
+        if (user.handle && this._saveState && this._saveState.handle !== user.handle) {
+          this._saveState.handle = user.handle;
+          saveSaveState(this._saveState);
+        }
       }
+
       if (this._saveState && this._saveState.settings) {
         if (typeof this._saveState.settings.sens === 'number') {
           state.sens = this._saveState.settings.sens;
@@ -360,6 +462,7 @@ export class AuthManager {
           state.invertY = this._saveState.settings.invertY;
         }
       }
+
       if (!options.fromCrossTab && this._provider?.client) {
         setTimeout(() => {
           this.syncCloudSave().catch(err => {

@@ -699,7 +699,8 @@ async function runStalledHostRematchTimeoutTest() {
 async function runHostedArenaSyncAndTeardownTest() {
   console.log('\n--- HOSTED MULTIPLAYER ARENA SYNC & TEARDOWN TEST ---');
   await withBrowserTest(async ({ browser, page: hostPage, baseUrl }) => {
-    const guestPage = await browser.newPage();
+    const guestContext = await browser.createBrowserContext();
+    const guestPage = await guestContext.newPage();
 
     await hostPage.goto(`${baseUrl}/index.html`);
     await guestPage.goto(`${baseUrl}/index.html`);
@@ -709,7 +710,7 @@ async function runHostedArenaSyncAndTeardownTest() {
     // Host unlocks Grid 02 (Solar Sail) and hosts from #hostModal; Guest does NOT own Grid 02
     await hostPage.evaluate(async () => {
       const { defaultStorageManager } = await import('/src/core/storage/StorageManager.js');
-      defaultStorageManager.set('inventory.unlockedMaps', ['arena_grid_01', 'arena_solar_sail']);
+      defaultStorageManager.set('inventory.unlockedMaps', ['arena_grid_01', 'arena_solar_sail'], { immediate: true });
       document.getElementById('hostMatchBtn')?.click();
       const sel = document.getElementById('arenaSelect');
       if (sel) {
@@ -735,7 +736,7 @@ async function runHostedArenaSyncAndTeardownTest() {
 
     await guestPage.evaluate(async (code) => {
       const { defaultStorageManager } = await import('/src/core/storage/StorageManager.js');
-      defaultStorageManager.set('inventory.unlockedMaps', ['arena_grid_01']);
+      defaultStorageManager.set('inventory.unlockedMaps', ['arena_grid_01'], { immediate: true });
       await window.__dbg.joinRoom(code);
     }, hostRoom.code);
 

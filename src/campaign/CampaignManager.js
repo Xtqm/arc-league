@@ -7,7 +7,7 @@
 
 import { campaignRegistry as defaultCampaignRegistry } from './CampaignRegistry.js';
 import { starEvaluator as defaultStarEvaluator } from './StarEvaluator.js';
-import { storageManager as defaultStorageManager } from '../core/storage/StorageManager.js';
+import { storageManager as defaultStorageManager, StorageEvents } from '../core/storage/StorageManager.js';
 import { economyManager as defaultEconomyManager } from '../core/economy/EconomyManager.js';
 
 export const CampaignEvents = Object.freeze({
@@ -46,6 +46,26 @@ export class CampaignManager {
     this._activeTrial = null;
 
     this._ensureStorageInitialized();
+
+    // Listen for external / cloud sync storage updates to reactively synchronize campaign progress
+    if (this.storage && typeof this.storage.on === 'function') {
+      this.storage.on(StorageEvents.MUTATED, (payload) => {
+        if (!payload || payload.path === '*' || payload.isExternal || payload.source === 'cloud_sync' || (typeof payload.path === 'string' && payload.path.startsWith('campaign'))) {
+          this._ensureStorageInitialized();
+          this.emit(CampaignEvents.STARS_UPDATED, {
+            totalStars: this.getTotalStars(),
+            source: payload?.source || 'storage_sync'
+          });
+        }
+      });
+      this.storage.on(StorageEvents.INITIALIZED, (payload) => {
+        this._ensureStorageInitialized();
+        this.emit(CampaignEvents.STARS_UPDATED, {
+          totalStars: this.getTotalStars(),
+          source: payload?.source || 'storage_sync'
+        });
+      });
+    }
   }
 
   // ==========================================

@@ -611,13 +611,20 @@ export function initAuthTerminal() {
 
   if (storageManager && typeof storageManager.on === 'function') {
     storageManager.on(StorageEvents.MUTATED, (data) => {
-      if (!data || data.path === 'player.currency.bits' || data.path === '*' || (typeof data.path === 'string' && data.path.startsWith('stats.'))) {
-        if (authManager.saveState && typeof economyManager?.getBits === 'function') {
-          authManager.saveState.bits = economyManager.getBits();
-        }
-        if (isAuthTerminalOpen()) {
-          populateDossierData();
-        }
+      if (authManager.saveState && typeof economyManager?.getBits === 'function') {
+        authManager.saveState.bits = economyManager.getBits();
+      }
+      updateIdentityHeader();
+      if (isAuthTerminalOpen()) {
+        populateTerminalData();
+        populateDossierData();
+      }
+    });
+    storageManager.on(StorageEvents.INITIALIZED, () => {
+      updateIdentityHeader();
+      if (isAuthTerminalOpen()) {
+        populateTerminalData();
+        populateDossierData();
       }
     });
   }

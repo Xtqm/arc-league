@@ -8,7 +8,7 @@
  */
 
 import { state } from '../../core/state.js';
-import { defaultStorageManager } from '../../core/storage/StorageManager.js';
+import { defaultStorageManager, StorageEvents } from '../../core/storage/StorageManager.js';
 import { selectArenaMap } from '../arenaSelector.js';
 
 export const DUEL_ARENA_REGISTRY = Object.freeze({
@@ -95,6 +95,23 @@ export class DuelMapSelector {
     this.storage = options.storage || defaultStorageManager;
     this.selectedMapId = 'arena_grid_01';
     this._listeners = new Map();
+    this._mountedContainer = null;
+    this._mountOptions = null;
+
+    if (this.storage && typeof this.storage.on === 'function') {
+      this.storage.on(StorageEvents.MUTATED, (payload) => {
+        if (!payload || payload.path === '*' || payload.isExternal || payload.source === 'cloud_sync' || (typeof payload.path === 'string' && payload.path.startsWith('inventory.unlockedMaps'))) {
+          if (this._mountedContainer && typeof document !== 'undefined' && document.body?.contains(this._mountedContainer)) {
+            this.mount(this._mountedContainer, this._mountOptions);
+          }
+        }
+      });
+      this.storage.on(StorageEvents.INITIALIZED, () => {
+        if (this._mountedContainer && typeof document !== 'undefined' && document.body?.contains(this._mountedContainer)) {
+          this.mount(this._mountedContainer, this._mountOptions);
+        }
+      });
+    }
   }
 
   // ==========================================
@@ -227,6 +244,8 @@ export class DuelMapSelector {
    */
   mount(container, options = {}) {
     if (!container) return null;
+    this._mountedContainer = container;
+    this._mountOptions = options;
     const storage = options.storage || this.storage;
     const currentSelection = state.selectedArenaMap || this.getUnlockedMaps(storage)[0] || 'arena_grid_01';
     this.selectedMapId = currentSelection;

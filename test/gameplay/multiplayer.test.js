@@ -11,6 +11,8 @@ async function runMultiplayerTests() {
 
     await hostPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.createRoom);
     await guestPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.joinRoom);
+    await hostPage.waitForFunction(() => !!window.__TRON__?.auth()?.currentUser);
+    await guestPage.waitForFunction(() => !!window.__TRON__?.auth()?.currentUser);
     console.log('Both client pages loaded and window.__dbg ready.');
 
   // -------------------------------------------------------------

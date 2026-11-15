@@ -32,6 +32,7 @@ export class WebRTCPeer {
     this.onReliableMessage = options.onReliableMessage || (() => {});
     this.onConnectionChange = options.onConnectionChange || (() => {});
     this.onLocalCandidate = options.onLocalCandidate || (() => {});
+    this.onPingUpdate = options.onPingUpdate || (() => {});
     this.rtcConfig = options.rtcConfig || DEFAULT_RTC_CONFIG;
 
     this.connectionState = 'idle'; // 'idle' | 'connecting' | 'connected' | 'closed' | 'failed'
@@ -39,6 +40,14 @@ export class WebRTCPeer {
     this.fastChannel = null;
     this.reliableChannel = null;
     this.pendingCandidates = [];
+
+    this.rtt = null;
+    this.ping = null;
+    this._pingIdCounter = 0;
+    this._pingSentTimes = new Map();
+    this._pingIntervalId = null;
+    this._cachedPingBuffer = new ArrayBuffer(4);
+    this._cachedPongBuffer = new ArrayBuffer(4);
 
     this.isMock = options.isMock || (typeof RTCPeerConnection === 'undefined');
     if (this.isMock) {
@@ -95,6 +104,9 @@ export class WebRTCPeer {
             this.reliableChannel = ch;
             this._setupChannel(ch, 'reliable');
           }
+          if (this._bothChannelsOpen()) {
+            this._updateState('connected');
+          }
         };
       }
     } catch (err) {
@@ -104,6 +116,10 @@ export class WebRTCPeer {
   }
 
   _setupChannel(channel, type) {
+    if (type === 'fast') {
+      try { channel.binaryType = 'arraybuffer'; } catch (_) {}
+    }
+
     channel.onopen = () => {
       if (this._bothChannelsOpen()) {
         this._updateState('connected');
@@ -120,9 +136,14 @@ export class WebRTCPeer {
 
     channel.onmessage = (event) => {
       try {
-        const parsed = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        let parsed;
+        if (typeof event.data === 'string') {
+          parsed = JSON.parse(event.data);
+        } else {
+          parsed = event.data;
+        }
         if (type === 'fast') {
-          this.onFastMessage(parsed);
+          this._handleFastPacket(parsed);
         } else {
           this.onReliableMessage(parsed);
         }
@@ -130,6 +151,10 @@ export class WebRTCPeer {
         console.warn(`Error parsing WebRTC [${type}] payload:`, err);
       }
     };
+
+    if (channel.readyState === 'open' && this._bothChannelsOpen()) {
+      this._updateState('connected');
+    }
   }
 
   _bothChannelsOpen() {
@@ -144,8 +169,113 @@ export class WebRTCPeer {
   _updateState(state) {
     if (this.connectionState !== state) {
       this.connectionState = state;
-      this.onConnectionChange(state);
+      try {
+        this.onConnectionChange(state);
+      } catch (err) {
+        console.warn('WebRTCPeer onConnectionChange handler error:', err);
+      }
+      if (state === 'connected') {
+        try {
+          this._startPingInterval();
+        } catch (err) {
+          console.warn('WebRTCPeer startPingInterval error:', err);
+        }
+      } else {
+        this._stopPingInterval();
+      }
     }
+  }
+
+  sendPing() {
+    if (this.connectionState !== 'connected') return false;
+    const pingId = (this._pingIdCounter++) & 0xFF;
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    this._pingSentTimes.set(pingId, now);
+    if (this._pingSentTimes.size > 20) {
+      const oldest = this._pingSentTimes.keys().next().value;
+      this._pingSentTimes.delete(oldest);
+    }
+    const view = new DataView(this._cachedPingBuffer);
+    view.setUint8(0, 0xFE);
+    view.setUint8(1, pingId);
+    view.setUint16(2, 0, true);
+    return this.sendFast(this._cachedPingBuffer);
+  }
+
+  _startPingInterval() {
+    this._stopPingInterval();
+    setTimeout(() => {
+      if (this.connectionState === 'connected') {
+        this.sendPing();
+      }
+    }, 100);
+    this._pingIntervalId = setInterval(() => {
+      if (this.connectionState === 'connected') {
+        this.sendPing();
+      } else {
+        this._stopPingInterval();
+      }
+    }, 1500);
+    if (this._pingIntervalId && typeof this._pingIntervalId.unref === 'function') {
+      this._pingIntervalId.unref();
+    }
+  }
+
+  _stopPingInterval() {
+    if (this._pingIntervalId) {
+      clearInterval(this._pingIntervalId);
+      this._pingIntervalId = null;
+    }
+  }
+
+  _isPingOrPong(data) {
+    if (!data) return false;
+    if ((data instanceof ArrayBuffer || ArrayBuffer.isView(data)) && data.byteLength === 4) {
+      const b0 = new Uint8Array(data.buffer || data, data.byteOffset || 0, 4)[0];
+      return b0 === 0xFE || b0 === 0xFF;
+    }
+    if (typeof data === 'object' && (data.type === 'RTC_PING' || data.type === 'RTC_PONG')) {
+      return true;
+    }
+    return false;
+  }
+
+  _processPingPongPacket(data) {
+    let opcode, pingId;
+    if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
+      const bytes = new Uint8Array(data.buffer || data, data.byteOffset || 0, 4);
+      opcode = bytes[0];
+      pingId = bytes[1];
+    } else {
+      opcode = data.type === 'RTC_PING' ? 0xFE : 0xFF;
+      pingId = data.id;
+    }
+
+    if (opcode === 0xFE) {
+      const view = new DataView(this._cachedPongBuffer);
+      view.setUint8(0, 0xFF);
+      view.setUint8(1, pingId);
+      view.setUint16(2, 0, true);
+      this.sendFast(this._cachedPongBuffer);
+    } else if (opcode === 0xFF) {
+      const sentTime = this._pingSentTimes.get(pingId);
+      if (sentTime !== undefined) {
+        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        const rtt = Math.max(0, Math.round(now - sentTime));
+        this.rtt = rtt;
+        this.ping = rtt;
+        this._pingSentTimes.delete(pingId);
+        this.onPingUpdate(rtt);
+      }
+    }
+  }
+
+  _handleFastPacket(data) {
+    if (this._isPingOrPong(data)) {
+      this._processPingPongPacket(data);
+      return;
+    }
+    this.onFastMessage(data);
   }
 
   /**
@@ -162,11 +292,6 @@ export class WebRTCPeer {
     return desc && desc.toJSON ? desc.toJSON() : { type: desc.type, sdp: desc.sdp };
   }
 
-  /**
-   * Accepts remote offer and generates a local SDP answer (Guest only)
-   * @param {Object} offer - Remote SDP offer
-   * @returns {Promise<Object>} SDP answer object
-   */
   async createAnswer(offer) {
     if (this.isMock) {
       return this._mockCreateAnswer(offer);
@@ -179,10 +304,6 @@ export class WebRTCPeer {
     return desc && desc.toJSON ? desc.toJSON() : { type: desc.type, sdp: desc.sdp };
   }
 
-  /**
-   * Completes the handshake by setting the remote answer (Host only)
-   * @param {Object} answer - Remote SDP answer
-   */
   async setAnswer(answer) {
     if (this.isMock) {
       return this._mockSetAnswer(answer);
@@ -228,8 +349,19 @@ export class WebRTCPeer {
       return this._mockSend('fast', data);
     }
     if (this.fastChannel && this.fastChannel.readyState === 'open') {
-      this.fastChannel.send(typeof data === 'string' ? data : JSON.stringify(data));
-      return true;
+      try {
+        if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
+          this.fastChannel.send(data);
+        } else if (typeof data === 'string') {
+          this.fastChannel.send(data);
+        } else {
+          this.fastChannel.send(JSON.stringify(data));
+        }
+        return true;
+      } catch (err) {
+        console.warn('sendFast transmission error:', err);
+        return false;
+      }
     }
     return false;
   }
@@ -251,6 +383,8 @@ export class WebRTCPeer {
   }
 
   close() {
+    this._stopPingInterval();
+    this._pingSentTimes.clear();
     this._updateState('closed');
     if (this.fastChannel) {
       try { this.fastChannel.close(); } catch (_) {}
@@ -302,9 +436,16 @@ export class WebRTCPeer {
       return false;
     }
     if (this._mockPeer && this._mockPeer.connectionState === 'connected') {
-      const copy = JSON.parse(JSON.stringify(data));
+      let copy;
+      if (data instanceof ArrayBuffer) {
+        copy = data.slice(0);
+      } else if (ArrayBuffer.isView(data)) {
+        copy = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+      } else {
+        copy = JSON.parse(JSON.stringify(data));
+      }
       if (type === 'fast') {
-        this._mockPeer.onFastMessage(copy);
+        this._mockPeer._handleFastPacket(copy);
       } else {
         this._mockPeer.onReliableMessage(copy);
       }

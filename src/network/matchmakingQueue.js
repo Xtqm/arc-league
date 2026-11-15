@@ -12,18 +12,10 @@
 import { state } from '../core/state.js';
 import { WebRTCPeer } from './webrtcPeer.js';
 import { SignalingBridge } from './signalingBridge.js';
+import { handleIncomingFastPacket } from './sync.js';
 
 let _fastPacketHandler = (data) => {
-  if (!data || !data.role || !state.multiPlayers) return;
-  const opp = state.multiPlayers[data.role];
-  if (!opp || !data.state) return;
-  if (opp.targetPos) opp.targetPos.set(data.state.x, 0, data.state.z);
-  opp.targetY = data.state.y;
-  opp.targetYaw = data.state.yaw;
-  opp.targetPitch = data.state.pitch;
-  opp.hp = data.state.hp;
-  opp.blocking = data.state.blocking;
-  opp.hasDisc = data.state.hasDisc;
+  handleIncomingFastPacket(data);
 };
 
 export function registerFastPacketHandler(fn) {

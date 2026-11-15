@@ -28,7 +28,8 @@ export const DEFAULT_CHROMIUM_ARGS = Object.freeze([
   '--disable-setuid-sandbox',
   '--disable-dev-shm-usage',
   '--use-gl=angle',
-  '--use-angle=swiftshader'
+  '--use-angle=swiftshader',
+  '--disable-features=WebRtcHideLocalIpsWithMdns'
 ]);
 
 /**

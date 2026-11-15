@@ -44,6 +44,7 @@ const TEST_DOMAINS = {
   ],
   network: [
     'network/webrtc_peer.test.js',
+    'network/binary_netcode.test.js',
     'network/signaling_bridge.test.js',
     'network/matchmaking_queue.test.js',
     'network/warmup_sparring.test.js'

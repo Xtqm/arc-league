@@ -699,8 +699,7 @@ async function runStalledHostRematchTimeoutTest() {
 async function runHostedArenaSyncAndTeardownTest() {
   console.log('\n--- HOSTED MULTIPLAYER ARENA SYNC & TEARDOWN TEST ---');
   await withBrowserTest(async ({ browser, page: hostPage, baseUrl }) => {
-    const guestContext = await browser.createBrowserContext();
-    const guestPage = await guestContext.newPage();
+    const guestPage = await browser.newPage();
 
     await hostPage.goto(`${baseUrl}/index.html`);
     await guestPage.goto(`${baseUrl}/index.html`);

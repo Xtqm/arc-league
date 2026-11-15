@@ -46,6 +46,8 @@ let _lastBblText = null;
 let _lastRivalHpPct = -1;
 let _lastSwHtml = null;
 let _lastSwDisplay = null;
+let _lastNpdHtml = null;
+let _lastNpdDisplay = null;
 
 export function resetHUDDirtyState() {
   _lastPlayerHp = -1;
@@ -63,6 +65,8 @@ export function resetHUDDirtyState() {
   _lastRivalHpPct = -1;
   _lastSwHtml = null;
   _lastSwDisplay = null;
+  _lastNpdHtml = null;
+  _lastNpdDisplay = null;
 }
 
 export function message(t) {
@@ -84,6 +88,28 @@ export function message(t) {
     msg.style.color = 'var(--cyan)';
     msg.style.textShadow = '0 0 22px var(--cyan)';
   }
+}
+
+export function getOrCreateNetPingDisplay() {
+  if (typeof document === 'undefined') return null;
+  let element = getCachedElement('netPingDisplay');
+  if (!element) {
+    const tr = getCachedElement('tr');
+    if (tr && typeof document.createElement === 'function') {
+      element = document.createElement('div');
+      element.id = 'netPingDisplay';
+      element.className = 'net-ping-display';
+      element.style.display = 'none';
+      element.style.marginTop = '4px';
+      element.style.fontSize = '10px';
+      element.style.letterSpacing = '1px';
+      element.style.color = 'var(--cyan)';
+      element.style.textAlign = 'right';
+      tr.appendChild(element);
+      _domCache['netPingDisplay'] = element;
+    }
+  }
+  return element;
 }
 
 export function updateHUD() {
@@ -283,6 +309,31 @@ export function updateHUD() {
   if (sc && _lastScore !== state.score) {
     sc.textContent = state.score;
     _lastScore = state.score;
+  }
+
+  const npd = getOrCreateNetPingDisplay();
+  if (npd) {
+    const isOnline = state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi';
+    const isWebRTC = !!(state.webrtcPeer && state.webrtcPeer.connectionState === 'connected');
+    const pingVal = state.ping !== undefined && state.ping !== null ? state.ping : (state.webrtcPeer?.ping !== undefined && state.webrtcPeer?.ping !== null ? state.webrtcPeer.ping : null);
+
+    if (isOnline && isWebRTC && pingVal !== null) {
+      const color = pingVal < 60 ? '#00ff66' : (pingVal < 120 ? '#ffff00' : 'var(--orange)');
+      const npdHtml = `<span style="opacity:.65;">PING</span> <b style="color:${color}">${pingVal} ms</b>`;
+      if (_lastNpdDisplay !== 'block') {
+        npd.style.display = 'block';
+        _lastNpdDisplay = 'block';
+      }
+      if (_lastNpdHtml !== npdHtml) {
+        npd.innerHTML = npdHtml;
+        _lastNpdHtml = npdHtml;
+      }
+    } else {
+      if (_lastNpdDisplay !== 'none') {
+        npd.style.display = 'none';
+        _lastNpdDisplay = 'none';
+      }
+    }
   }
 }
 

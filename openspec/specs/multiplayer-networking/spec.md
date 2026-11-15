@@ -18,15 +18,15 @@ The system SHALL facilitate creating and joining peer rooms using 4-character co
 - **THEN** the system retries ICE candidate exchange through configured STUN servers and notifies the player if the peer is unreachable.
 
 ### Requirement: Throttled State Synchronization and Interpolation
-The system SHALL broadcast entity state, disc throws, and combat actions directly across low-latency WebRTC DataChannels at up to 60 Hz and smooth incoming peer positions using linear interpolation on the receiving client without database write overhead.
+The system SHALL broadcast player kinematics directly across low-latency WebRTC DataChannels at up to 60 Hz using a compact binary packet layout, queue incoming packets in a snapshot jitter buffer, and smoothly interpolate peer positions and animations using timestamped spline or linear interpolation without database write overhead.
 
 #### Scenario: Remote entity position interpolation
-- **WHEN** incoming state updates arrive across the WebRTC DataChannel from remote peers
-- **THEN** remote player models interpolate smoothly toward target positions and orientations without hitching the local 60 FPS render loop.
+- **WHEN** incoming binary state packets arrive across the WebRTC DataChannel from remote peers
+- **THEN** remote player models interpolate smoothly through historical snapshot buffers toward target positions and orientations without hitching or sliding during packet jitter.
 
 #### Scenario: Direct kinetic disc synchronization
 - **WHEN** a player executes a kinetic disc throw or curve strike
-- **THEN** the disc launch parameters (origin, velocity vector, curve spin) are transmitted immediately over the unbuffered DataChannel to the remote peer.
+- **THEN** the disc launch parameters (origin, velocity vector, curve spin) are transmitted immediately over the reliable or unbuffered DataChannel to the remote peer.
 
 ### Requirement: In-Place Rematch Voting
 The system SHALL provide reversible post-match rematch voting over reliable WebRTC DataChannels (with room-document fallback), allowing participants to vote or un-vote before consensus and resetting arena tiles, health, series scores, and round state in place once all active participants agree.
@@ -136,3 +136,14 @@ The system SHALL resolve each participant's active callsign from the identity pr
 #### Scenario: Post-match screen displays participant names
 - **WHEN** an online `1v1` or `2v2` match finishes with a `VICTORY` or `DEREZZED` overlay
 - **THEN** the post-match summary displays the combatants' callsigns (such as the local player vs. opponent in `1v1` or team rosters in `2v2`) alongside the existing rematch and menu controls.
+
+### Requirement: Live Network Latency and Ping Telemetry
+The system SHALL periodically measure peer-to-peer round-trip time (RTT) across the WebRTC connection and display a live network latency indicator (ping in milliseconds) in the multiplayer combat HUD.
+
+#### Scenario: Live latency display
+- **WHEN** an online match is in progress across an active WebRTC peer connection
+- **THEN** periodic ping-pong packets compute the round-trip latency and render the measured ping in the top-right multiplayer status panel.
+
+#### Scenario: Graceful latency fallback
+- **WHEN** peer-to-peer connection is establishing or operating in database fallback mode
+- **THEN** the HUD hides the latency readout or indicates standby status without throwing runtime errors.

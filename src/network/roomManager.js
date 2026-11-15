@@ -984,8 +984,16 @@ export function initWebRTCPeerSession(isHost, roomCode) {
     onReliableMessage: (msg) => {
       handleReliableMatchMessage(msg);
     },
+    onPingUpdate: (rtt) => {
+      state.ping = rtt;
+      state.networkLatency = rtt;
+    },
     onConnectionChange: (connState) => {
       console.log(`WebRTC Peer connection state: ${connState}`);
+      if (connState !== 'connected') {
+        state.ping = null;
+        state.networkLatency = null;
+      }
       if (connState === 'connected') {
         hadConnected = true;
         try {

@@ -31,6 +31,8 @@ export const state = {
   lastProcessedThrowId: null,
   roomFallenTiles: [],
   netSyncTimer: 0,
+  ping: null,
+  networkLatency: null,
   webrtcPeer: null,
   signalingBridge: null,
   matchmakingQueueState: 'idle',

@@ -1,6 +1,23 @@
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getAuth, signInWithCustomToken, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+let initializeApp, getAuth, signInWithCustomToken, signInAnonymously;
+let getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot;
+
+if (typeof window !== 'undefined') {
+  try {
+    const appMod = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
+    initializeApp = appMod.initializeApp;
+    const authMod = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
+    getAuth = authMod.getAuth;
+    signInWithCustomToken = authMod.signInWithCustomToken;
+    signInAnonymously = authMod.signInAnonymously;
+    const firestoreMod = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+    getFirestore = firestoreMod.getFirestore;
+    doc = firestoreMod.doc;
+    setDoc = firestoreMod.setDoc;
+    getDoc = firestoreMod.getDoc;
+    updateDoc = firestoreMod.updateDoc;
+    onSnapshot = firestoreMod.onSnapshot;
+  } catch (_) {}
+}
 import { state } from '../core/state.js';
 import { config } from '../core/config.js';
 import { authManager } from '../auth/AuthManager.js';

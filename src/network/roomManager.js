@@ -20,6 +20,8 @@ import { handleIncomingFastPacket } from './sync.js';
 import { matchmakingQueue, registerMatchmakingSessionHandlers } from './matchmakingQueue.js';
 import { authManager } from '../auth/AuthManager.js';
 
+let matchmakingCallsign = null;
+
 function escapeHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;')
@@ -907,20 +909,22 @@ registerMatchmakingSessionHandlers({
   }
 });
 
-export function transitionFromWarmupToPeerMatch(role, opponentId) {
+export function transitionFromWarmupToPeerMatch(role, opponentId, localCallsign = null) {
   if (typeof document !== 'undefined') {
     const banner = document.getElementById('matchmakingQueueHUD');
     if (banner) banner.style.display = 'none';
   }
   state.multiplayerMapId = null;
-  applyPlayerName(role, getLocalCallsign());
+  const callsign = localCallsign || matchmakingCallsign || getLocalCallsign();
+  applyPlayerName(role, callsign);
   const roomCode = 'MATCH_' + Math.random().toString(36).substring(2, 6).toUpperCase();
   startMultiplayerDuel(role, roomCode, '1v1', {
     roundId: 1,
     seriesRound: 1,
     bestOf: 3,
     seriesScores: { t1: 0, t2: 0 },
-    mapId: null
+    mapId: null,
+    localCallsign: callsign
   });
   message('CHALLENGER CONNECTED — FIGHT!');
 }
@@ -930,6 +934,7 @@ export function startMatchmakingWithWarmup() {
     requestFullScreen();
   }
   state.multiplayerNames = { p1: null, p2: null, p3: null, p4: null };
+  matchmakingCallsign = getLocalCallsign();
   state.multiplayerMapId = null;
   teardownSectorArena();
   if (typeof window !== 'undefined' && window.__tronStartMode) {
@@ -957,7 +962,7 @@ export function startMatchmakingWithWarmup() {
 
   matchmakingQueue.startQueue({
     onMatchSuccess: ({ role, opponentId }) => {
-      transitionFromWarmupToPeerMatch(role, opponentId);
+      transitionFromWarmupToPeerMatch(role, opponentId, matchmakingCallsign);
     }
   });
 
@@ -1404,7 +1409,8 @@ export function startMultiplayerDuel(role, roomCode, mode = '1v1', options = {})
   state.gameMode = mode === '2v2' ? 'duos_multi' : 'duel_multi';
   state.playerRole = role;
   state.currentRoomId = roomCode;
-  applyPlayerName(role, getLocalCallsign());
+  const localCallsign = options.localCallsign || getLocalCallsign();
+  applyPlayerName(role, localCallsign);
   state.lastProcessedThrowId = null;
   state.netSyncTimer = 0;
   state.roomFallenTiles = [];
@@ -1503,7 +1509,7 @@ export function startMultiplayerDuel(role, roomCode, mode = '1v1', options = {})
       state.webrtcPeer.sendReliable({
         type: 'PLAYER_INFO',
         role,
-        name: getLocalCallsign(),
+        name: localCallsign,
         bestOf: state.seriesBestOf || 3
       });
     } catch (_) {}

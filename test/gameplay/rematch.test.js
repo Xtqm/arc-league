@@ -224,6 +224,8 @@ async function runQuickMatchWebRTCRematchTest() {
     // Ensure deterministic lexicographical host assignment (player_a_host < player_z_guest)
     // and verify zero Firestore/mock room DB is initialized.
     await hostPage.evaluate(async () => {
+      // CI Chromium can expose WebRTC without any usable ICE interfaces.
+      window.__USE_MOCK_WEBRTC__ = true;
       const auth = window.__TRON__.auth();
       await auth.init();
       if (auth._currentUser) auth._currentUser.handle = 'QM_HOST';
@@ -237,6 +239,7 @@ async function runQuickMatchWebRTCRematchTest() {
     await new Promise(r => setTimeout(r, 400));
 
     await guestPage.evaluate(async () => {
+      window.__USE_MOCK_WEBRTC__ = true;
       const auth = window.__TRON__.auth();
       await auth.init();
       if (auth._currentUser) auth._currentUser.handle = 'QM_GUEST';

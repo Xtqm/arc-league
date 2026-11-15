@@ -40,6 +40,8 @@ export class WebRTCPeer {
     this.fastChannel = null;
     this.reliableChannel = null;
     this.pendingCandidates = [];
+    this.mockChannel = null;
+    this.mockChannelName = options.mockChannelName || null;
 
     this.rtt = null;
     this.ping = null;
@@ -49,7 +51,9 @@ export class WebRTCPeer {
     this._cachedPingBuffer = new ArrayBuffer(4);
     this._cachedPongBuffer = new ArrayBuffer(4);
 
-    this.isMock = options.isMock || (typeof RTCPeerConnection === 'undefined');
+    this.isMock = options.isMock ||
+      (typeof window !== 'undefined' && window.__USE_MOCK_WEBRTC__) ||
+      (typeof RTCPeerConnection === 'undefined');
     if (this.isMock) {
       this._initMock();
     } else {
@@ -402,6 +406,10 @@ export class WebRTCPeer {
       try { this._mockChannel.close(); } catch (_) {}
       this._mockChannel = null;
     }
+    if (this.mockChannel) {
+      try { this.mockChannel.close(); } catch (_) {}
+      this.mockChannel = null;
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -410,6 +418,19 @@ export class WebRTCPeer {
   _initMock() {
     this._mockPeer = null;
     this.connectionState = 'connecting';
+    if (this.mockChannelName && typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
+      this.mockChannel = new BroadcastChannel(this.mockChannelName);
+      this.mockChannel.onmessage = (event) => {
+        const { type, data } = event.data || {};
+        if (type === 'connected') {
+          this._updateState('connected');
+        } else if (type === 'fast') {
+          this._handleFastPacket(data);
+        } else if (type === 'reliable') {
+          this.onReliableMessage(data);
+        }
+      };
+    }
   }
 
   connectMockPeer(otherPeer) {
@@ -424,10 +445,15 @@ export class WebRTCPeer {
   }
 
   _mockCreateAnswer(offer) {
+    this._updateState('connected');
     return Promise.resolve({ type: 'answer', sdp: 'mock_answer_sdp' });
   }
 
   _mockSetAnswer(answer) {
+    this._updateState('connected');
+    if (this.mockChannel) {
+      this.mockChannel.postMessage({ type: 'connected' });
+    }
     return Promise.resolve();
   }
 
@@ -449,6 +475,10 @@ export class WebRTCPeer {
       } else {
         this._mockPeer.onReliableMessage(copy);
       }
+      return true;
+    }
+    if (this.mockChannel && this.connectionState === 'connected') {
+      this.mockChannel.postMessage({ type, data });
       return true;
     }
     return false;

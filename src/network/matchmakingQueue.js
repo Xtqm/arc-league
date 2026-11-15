@@ -196,6 +196,7 @@ export class MatchmakingQueue {
 
     this.peer = new WebRTCPeer({
       isHost,
+      mockChannelName: `arc_webrtc_${[this.peerId, targetPeerId].sort().join('_')}`,
       onLocalCandidate: (candidate) => {
         if (this.bridge && this.matchedPeerId) {
           this.bridge.sendCandidate(candidate, this.matchedPeerId);

@@ -90,7 +90,13 @@ export function applyPlayerName(role, name) {
 
 export function getDisplayNameForRole(role, fallback = null) {
   if (!role) return fallback || 'PROGRAM';
-  if (role === state.playerRole) return getLocalCallsign();
+  if (role === state.playerRole) {
+    return (
+      state.multiPlayers?.[role]?.name ||
+      state.multiplayerNames?.[role] ||
+      getLocalCallsign()
+    );
+  }
   return (
     state.multiPlayers?.[role]?.name ||
     state.multiplayerNames?.[role] ||

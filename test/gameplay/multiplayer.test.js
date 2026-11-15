@@ -24,11 +24,6 @@ async function runMultiplayerTests() {
     await auth.init();
     await auth.updateCallsign('TRON_HOST');
   });
-  await guestPage.evaluate(async () => {
-    const auth = window.__TRON__.auth();
-    await auth.init();
-    await auth.updateCallsign('FLYNN_GUEST');
-  });
   const hostRoomData = await hostPage.evaluate(async () => {
     await window.__dbg.createRoom({ bestOf: 1 });
     const code = window.__dbg.currentRoomId();
@@ -51,6 +46,12 @@ async function runMultiplayerTests() {
   } else {
     throw new Error(`Test 1 FAILED: ${JSON.stringify(hostRoomData)}`);
   }
+
+  await guestPage.evaluate(async () => {
+    const auth = window.__TRON__.auth();
+    await auth.init();
+    await auth.updateCallsign('FLYNN_GUEST');
+  });
 
   // -------------------------------------------------------------
   // TEST 2: Copy Room Code Helper

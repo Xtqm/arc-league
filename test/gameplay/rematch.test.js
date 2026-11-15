@@ -228,8 +228,7 @@ async function runQuickMatchWebRTCRematchTest() {
       window.__USE_MOCK_WEBRTC__ = true;
       const auth = window.__TRON__.auth();
       await auth.init();
-      if (auth._currentUser) auth._currentUser.handle = 'QM_HOST';
-      if (auth._saveState) auth._saveState.handle = 'QM_HOST';
+      await auth.updateCallsign('QM_HOST');
       const { matchmakingQueue } = await import('/src/network/matchmakingQueue.js');
       const { startMatchmakingWithWarmup } = await import('/src/network/roomManager.js');
       matchmakingQueue.peerId = 'player_a_host';
@@ -242,8 +241,7 @@ async function runQuickMatchWebRTCRematchTest() {
       window.__USE_MOCK_WEBRTC__ = true;
       const auth = window.__TRON__.auth();
       await auth.init();
-      if (auth._currentUser) auth._currentUser.handle = 'QM_GUEST';
-      if (auth._saveState) auth._saveState.handle = 'QM_GUEST';
+      await auth.updateCallsign('QM_GUEST');
       const { matchmakingQueue } = await import('/src/network/matchmakingQueue.js');
       const { startMatchmakingWithWarmup } = await import('/src/network/roomManager.js');
       matchmakingQueue.peerId = 'player_z_guest';

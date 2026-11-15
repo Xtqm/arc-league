@@ -224,6 +224,8 @@ async function runQuickMatchWebRTCRematchTest() {
     // Ensure deterministic lexicographical host assignment (player_a_host < player_z_guest)
     // and verify zero Firestore/mock room DB is initialized.
     await hostPage.evaluate(async () => {
+      // CI Chromium can expose WebRTC without any usable ICE interfaces.
+      window.__USE_MOCK_WEBRTC__ = true;
       const auth = window.__TRON__.auth();
       await auth.init();
       if (auth._currentUser) auth._currentUser.handle = 'QM_HOST';
@@ -237,6 +239,7 @@ async function runQuickMatchWebRTCRematchTest() {
     await new Promise(r => setTimeout(r, 400));
 
     await guestPage.evaluate(async () => {
+      window.__USE_MOCK_WEBRTC__ = true;
       const auth = window.__TRON__.auth();
       await auth.init();
       if (auth._currentUser) auth._currentUser.handle = 'QM_GUEST';
@@ -733,9 +736,15 @@ async function runHostedArenaSyncAndTeardownTest() {
       throw new Error(`Hosted room did not store selected arena: ${JSON.stringify(hostRoom)}`);
     }
 
-    await guestPage.evaluate(async (code) => {
+    const guestOwnsSolar = await guestPage.evaluate(async () => {
       const { defaultStorageManager } = await import('/src/core/storage/StorageManager.js');
       defaultStorageManager.set('inventory.unlockedMaps', ['arena_grid_01'], { immediate: true });
+      return defaultStorageManager.get('inventory.unlockedMaps')?.includes('arena_solar_sail') || false;
+    });
+    if (guestOwnsSolar) {
+      throw new Error('Guest setup failed: arena_solar_sail remained unlocked');
+    }
+    await guestPage.evaluate(async (code) => {
       await window.__dbg.joinRoom(code);
     }, hostRoom.code);
 
@@ -781,8 +790,7 @@ async function runHostedArenaSyncAndTeardownTest() {
     const guestR1 = await inspectArena(guestPage);
     if (
       hostR1.activeGridId !== 'grid_02' || hostR1.jumpPads <= 0 || hostR1.tileHex !== 0x1c1005 ||
-      guestR1.activeGridId !== 'grid_02' || guestR1.jumpPads <= 0 || guestR1.tileHex !== 0x1c1005 ||
-      (Array.isArray(guestR1.unlockedMaps) && guestR1.unlockedMaps.includes('arena_solar_sail'))
+      guestR1.activeGridId !== 'grid_02' || guestR1.jumpPads <= 0 || guestR1.tileHex !== 0x1c1005
     ) {
       throw new Error(`Round 1 arena mismatch! Host: ${JSON.stringify(hostR1)}, Guest: ${JSON.stringify(guestR1)}`);
     }

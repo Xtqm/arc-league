@@ -129,6 +129,10 @@ The system SHALL resolve each participant's active callsign from the identity pr
 - **WHEN** a host creates a `1v1` or `2v2` room or a guest joins the room
 - **THEN** the room record stores each joined role's active callsign (`p1`–`p4`) and all clients populate remote player callsigns on match start and rematches without losing the profile callsign when network authentication initializes anonymously.
 
+#### Scenario: Asynchronous identity resolution prior to room setup
+- **WHEN** a player clicks to host or join a multiplayer room while local authentication initialization is in-flight
+- **THEN** the room setup procedure awaits completion of local identity resolution and loads the authoritative profile or stored handle before creating the room document or transmitting player info packets.
+
 #### Scenario: Real-time callsign exchange over WebRTC fallback
 - **WHEN** peers connect over a direct WebRTC DataChannel in a hosted room
 - **THEN** peers exchange their role and callsign over the reliable channel so remote player names remain synchronized even before or independently of room snapshot updates.

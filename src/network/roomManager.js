@@ -59,6 +59,7 @@ export function getLocalCallsign() {
   const handle =
     authManager?.currentUser?.handle ||
     authManager?.saveState?.handle ||
+    authManager?.storage?.state?.player?.handle ||
     state.currentUser?.handle ||
     'PROGRAM';
   const clean = String(handle).trim().toUpperCase();
@@ -1178,6 +1179,9 @@ export async function onClickCreateRoom(e, mode = '1v1', mapId = null, bestOf = 
     if (e.cancelable) e.preventDefault();
   }
   try {
+    if (authManager?.init) {
+      await authManager.init();
+    }
     await initNetwork();
     if (!state.currentUser) {
       message('MULTIPLAYER OFFLINE');
@@ -1272,6 +1276,9 @@ export async function onClickConfirmJoin(e) {
   if (inp) inp.disabled = true;
 
   try {
+    if (authManager?.init) {
+      await authManager.init();
+    }
     await initNetwork();
     if (!state.currentUser) {
       throw new Error('OFFLINE - MULTIPLAYER REQUIRES DATA CONNECTION');

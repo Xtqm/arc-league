@@ -11,21 +11,23 @@ async function runMultiplayerTests() {
 
     await hostPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.createRoom);
     await guestPage.waitForFunction(() => !!window.__dbg && !!window.__dbg.joinRoom);
+    await hostPage.waitForFunction(() => !!window.__dbg && !!window.__TRON__?.auth()?._currentUser, { polling: 100 });
+    await guestPage.waitForFunction(() => !!window.__dbg && !!window.__TRON__?.auth()?._currentUser, { polling: 100 });
     console.log('Both client pages loaded and window.__dbg ready.');
 
   // -------------------------------------------------------------
   // TEST 1: Room Creation & 4-Character Code Generation
   // -------------------------------------------------------------
   console.log('\n--- TEST 1: Room Creation & 4-Character Code Generation ---');
-  await hostPage.evaluate(() => {
+  await hostPage.evaluate(async () => {
     const auth = window.__TRON__.auth();
-    if (auth._currentUser) auth._currentUser.handle = 'TRON_HOST';
-    if (auth._saveState) auth._saveState.handle = 'TRON_HOST';
+    await auth.init();
+    await auth.updateCallsign('TRON_HOST');
   });
-  await guestPage.evaluate(() => {
+  await guestPage.evaluate(async () => {
     const auth = window.__TRON__.auth();
-    if (auth._currentUser) auth._currentUser.handle = 'FLYNN_GUEST';
-    if (auth._saveState) auth._saveState.handle = 'FLYNN_GUEST';
+    await auth.init();
+    await auth.updateCallsign('FLYNN_GUEST');
   });
   const hostRoomData = await hostPage.evaluate(async () => {
     await window.__dbg.createRoom({ bestOf: 1 });

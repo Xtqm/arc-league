@@ -501,6 +501,8 @@ export function updateCrosshair(aim, traj) {
     ch.classList.toggle('hot', onFoe);
     ch.classList.toggle('bank', !!(traj && traj.willHit && traj.bounces > 0));
     ch.classList.toggle('empty', !state.player.hasDisc);
+    ch.classList.toggle('parry-active', (state.player.parryTimer || 0) > 0);
+    ch.classList.toggle('parry-cooldown', (state.player.shieldCd || 0) > 0);
     const qHeld = (!!state.keys.KeyQ || state.touchCurveL || state.gamepadCurveL) && !(!!state.keys.KeyE || state.touchCurveR || state.gamepadCurveR);
     const eHeld = (!!state.keys.KeyE || state.touchCurveR || state.gamepadCurveR) && !(!!state.keys.KeyQ || state.touchCurveL || state.gamepadCurveL);
     ch.classList.toggle('curve-l', qHeld);
@@ -539,6 +541,11 @@ export function updateCrosshair(aim, traj) {
       if (range.textContent !== rangeText) {
         range.textContent = rangeText;
       }
+    }
+
+    const btnBlock = getCachedElement('btnBlock');
+    if (btnBlock) {
+      btnBlock.classList.toggle('cooling', (state.player.shieldCd || 0) > 0);
     }
   }
 }

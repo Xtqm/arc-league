@@ -43,6 +43,28 @@ export function updatePlayer(dt) {
     state.player.invuln -= dt;
   }
 
+  // Handle parry window and recovery cooldown
+  if (state.player.parryTimer > 0) {
+    state.player.parryTimer -= dt;
+    if (state.player.parryTimer <= 0) {
+      state.player.parryTimer = 0;
+      state.player.blocking = false;
+      state.touchBlocking = false;
+      state.gamepadBlocking = false;
+      state.player.shieldCd = 1.0;
+      if (SFX.whiffFizzle) {
+        SFX.whiffFizzle();
+      }
+    } else {
+      state.player.blocking = true;
+    }
+  } else {
+    state.player.blocking = false;
+    if (state.player.shieldCd > 0) {
+      state.player.shieldCd = Math.max(0, state.player.shieldCd - dt);
+    }
+  }
+
   // Handle throw charge cycle
   if (state.player.chargingThrow) {
     if (!state.player.hasDisc || !state.player.alive || state.countdownTimer > 0) {
@@ -186,7 +208,7 @@ export function updatePlayer(dt) {
     damagePlayer(999);
   }
 
-  const isBlocking = !!(state.player.blocking || state.touchBlocking || state.gamepadBlocking);
+  const isBlocking = state.player.parryTimer > 0;
   let speed = isBlocking ? 5.5 : 12;
   if (!hasKeys && stickDeflection > 0) {
     speed *= Math.min(1, Math.max(0.3, stickDeflection));
@@ -234,7 +256,7 @@ export function updatePlayer(dt) {
       speed: state.player.vel.length(),
       vy: state.player.vy,
       grounded: state.player.grounded,
-      blocking: !!(state.player.blocking || state.touchBlocking || state.gamepadBlocking),
+      blocking: state.player.parryTimer > 0,
       hurt: state.player.invuln > 0 ? 0.2 : 0,
       time: state.time,
       hasDisc: state.player.hasDisc,
@@ -355,11 +377,26 @@ export function throwDisc(customCharge = null) {
   }
 }
 
+export function triggerPlayerParry() {
+  if (state.countdownTimer > 0) return false;
+  if (!state.player.alive || !state.player.hasDisc) return false;
+  if ((state.player.shieldCd || 0) > 0) return false;
+  if ((state.player.parryTimer || 0) > 0) return false;
+
+  state.player.parryTimer = 0.35;
+  state.player.blocking = true;
+  if (SFX.parrySnap) {
+    SFX.parrySnap();
+  }
+  return true;
+}
+
 if (typeof window !== 'undefined') {
   window.__tronThrowDisc = throwDisc;
   window.__tronStartChargingThrow = startChargingThrow;
   window.__tronReleaseChargingThrow = releaseChargingThrow;
   window.__tronCancelChargingThrow = cancelChargingThrow;
+  window.__tronTriggerPlayerParry = triggerPlayerParry;
 }
 
 export const _ro = new THREE.Vector3(), _rd = new THREE.Vector3();
@@ -509,6 +546,8 @@ export function resetRound(spawnX = 0, spawnZ = 14, yaw = Math.PI) {
   state.player.hasDisc = true;
   state.player.alive = true;
   state.player.blocking = false;
+  state.player.parryTimer = 0;
+  state.player.shieldCd = 0;
   if (state.player.obj) {
     state.player.obj.visible = true;
     if (state.player.obj.userData && state.player.obj.userData.backDisc) {

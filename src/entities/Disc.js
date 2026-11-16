@@ -520,9 +520,14 @@ export function updateDiscs(dt) {
       if (!isTeammate && !D.returning && D.pos.distanceTo(pc) < config.PLAYER_R + config.DISC_R + .35) {
         const toDisc = D.pos.clone().sub(pc).setY(0).normalize();
         const facing = new THREE.Vector3(-Math.sin(state.player.yaw), 0, -Math.cos(state.player.yaw));
-        const isPlayerBlocking = !!(state.player.blocking || state.touchBlocking || state.gamepadBlocking);
+        const isPlayerBlocking = (state.player.parryTimer || 0) > 0 || !!state.player.blocking;
         const isGuardCrush = (D.charge || 0) >= 0.85;
         if (isPlayerBlocking && !isGuardCrush && state.player.hasDisc && toDisc.dot(facing) > .35) {
+          state.player.parryTimer = 0;
+          state.player.blocking = false;
+          state.touchBlocking = false;
+          state.gamepadBlocking = false;
+          state.player.shieldCd = 1.0;
           burst(D.pos.clone(), config.WHITE, 30, 12);
           shake(.25);
           playGamepadHaptics({ duration: 160, weakMagnitude: 0.6, strongMagnitude: 0.85 });
@@ -582,6 +587,8 @@ export function updateDiscs(dt) {
             message('GUARD CRUSH // SHIELD BROKEN!');
             shake(0.35);
             burst(D.pos.clone(), config.WHITE, 32, 14);
+            state.player.parryTimer = 0;
+            state.player.shieldCd = 1.0;
             state.player.blocking = false;
             state.touchBlocking = false;
             state.gamepadBlocking = false;

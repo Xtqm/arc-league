@@ -178,17 +178,21 @@ async function runTests() {
   // -------------------------------------------------------------
   // TEST 4: Disc Deflection (Parry) & Alert Feedback
   // -------------------------------------------------------------
-  console.log('\n--- TEST 4: Disc Deflection (Parry) & Alert Feedback ---');
+  console.log('\n--- TEST 4: Disc Deflection (Parry), Cooldown & Whiff Timeout ---');
   const test4 = await page.evaluate(async () => {
     const dbg = window.__dbg;
     dbg.resetTiles();
     dbg.setPlayerPos(0, 5, 0);
+
+    // 1. Active parry deflection within 0.35s window
     dbg.setPlayerBlocking(true);
+    const parryActiveOnTrigger = dbg.state.player.parryTimer > 0;
 
     dbg.spawnParryTestDisc();
 
     let isDeflected = false;
     let deflectMsg = false;
+    let cooldownAfterDeflection = false;
 
     for (let f = 0; f < 30; f++) {
       dbg.step(0.016);
@@ -201,18 +205,76 @@ async function runTests() {
       if (msg === 'DEFLECTED!') {
         deflectMsg = true;
       }
-      if (isDeflected && deflectMsg) break;
+      if (isDeflected && deflectMsg) {
+        cooldownAfterDeflection = dbg.state.player.shieldCd > 0 && dbg.state.player.parryTimer === 0;
+        break;
+      }
     }
 
+    // 2. Recovery cooldown lockout: parry cannot re-trigger during cooldown
+    const lockoutBlocked = dbg.triggerPlayerParry ? !dbg.triggerPlayerParry() : true;
+
+    // Hostile disc during recovery cooldown hits player without deflection
+    dbg.state.discs.length = 0;
+    dbg.state.player.hp = 100;
+    dbg.state.player.invuln = 0;
+    dbg.spawnParryTestDisc();
+    let hitDuringCooldown = false;
+    for (let f = 0; f < 30; f++) {
+      dbg.step(0.016);
+      if (dbg.state.player.hp < 100) {
+        hitDuringCooldown = true;
+        break;
+      }
+    }
+
+    // 3. Whiff timeout: parry window expires into 1.0s cooldown when no disc hits
+    dbg.state.discs.length = 0;
+    dbg.state.player.shieldCd = 0;
+    dbg.state.player.parryTimer = 0;
+    dbg.state.player.hp = 100;
+    dbg.setPlayerBlocking(true);
+    const parryStarted = dbg.state.player.parryTimer > 0;
+
+    for (let f = 0; f < 25; f++) {
+      dbg.step(0.016);
+    }
+    const whiffExpired = dbg.state.player.parryTimer === 0 && !dbg.state.player.blocking;
+    const whiffInCooldown = dbg.state.player.shieldCd > 0;
+
+    // Reset
+    dbg.state.player.parryTimer = 0;
+    dbg.state.player.shieldCd = 0;
+    dbg.state.player.blocking = false;
+    dbg.state.player.hp = 100;
+    dbg.state.discs.length = 0;
+
     return {
+      parryActiveOnTrigger,
       isDeflected,
-      deflectMsg
+      deflectMsg,
+      cooldownAfterDeflection,
+      lockoutBlocked,
+      hitDuringCooldown,
+      parryStarted,
+      whiffExpired,
+      whiffInCooldown
     };
   });
 
   console.log('Test 4 results:', test4);
-  if (test4.isDeflected && test4.deflectMsg) {
-    console.log('>>> TEST 4 PASSED: Player parry tagged disc as deflected and displayed DEFLECTED! message.');
+  if (
+    test4.parryActiveOnTrigger &&
+    test4.isDeflected &&
+    test4.deflectMsg &&
+    test4.cooldownAfterDeflection &&
+    test4.lockoutBlocked &&
+    test4.hitDuringCooldown &&
+    test4.parryStarted &&
+    test4.whiffExpired &&
+    test4.whiffInCooldown
+  ) {
+    console.log('>>> TEST 4 PASSED: Active parry (0.35s window), recovery cooldown lockout (1.0s), and whiff timeout verified!');
   } else {
     throw new Error(`Test 4 FAILED: ${JSON.stringify(test4)}`);
   }
@@ -981,10 +1043,11 @@ async function runTests() {
         break;
       }
     }
-    const playerStillBlocking = state.player.blocking === true;
+    const parryDeflectedNormal = normalDeflected && state.player.hp === 100 && state.player.shieldCd > 0;
     const hpAfterNormal = state.player.hp;
 
     state.discs.length = 0;
+    state.player.shieldCd = 0;
 
     // 2. Player Blocking vs Guard Crush Disc (>= 0.85 charge): Guard broken, full damage, stagger!
     dbg.setPlayerPos(0, 5, 0);
@@ -1053,7 +1116,7 @@ async function runTests() {
 
     return {
       normalDeflected,
-      playerStillBlocking,
+      parryDeflectedNormal,
       hpAfterNormal,
       crushDeflected,
       guardBroken,
@@ -1067,7 +1130,7 @@ async function runTests() {
 
   console.log('Test 16 results:', test16);
   if (
-    test16.normalDeflected && test16.playerStillBlocking && test16.hpAfterNormal === 100 &&
+    test16.normalDeflected && test16.parryDeflectedNormal && test16.hpAfterNormal === 100 &&
     !test16.crushDeflected && test16.guardBroken && test16.tookDamage && test16.crushMessage &&
     test16.normalAbsorbed && test16.shieldPierced && test16.shieldIntact
   ) {

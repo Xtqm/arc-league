@@ -1,4 +1,7 @@
 import { getAudioCtx, getSFXDestination } from './synth.js';
+import { playParrySnapSound, playWhiffFizzleSound } from './sounds.js';
+
+export { playParrySnapSound, playWhiffFizzleSound };
 
 export function playDeRezSound() {
   const ctx = getAudioCtx();
@@ -434,7 +437,9 @@ export const SFX = {
   achievementFanfare: () => playAchievementFanfare(),
   chargeWindup: (progress = 0) => playChargeWindupSound(progress),
   chargeBlast: (charge = 0) => playChargeBlastSound(charge),
-  guardCrush: () => playGuardCrushSound()
+  guardCrush: () => playGuardCrushSound(),
+  parrySnap: () => playParrySnapSound(),
+  whiffFizzle: () => playWhiffFizzleSound()
 };
 
 if (typeof window !== 'undefined') {

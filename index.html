@@ -140,6 +140,15 @@
   #crosshair.empty .ring { border-style:dashed; }
   #crosshair.bank .ring { border-color:#fff; box-shadow:0 0 18px #fff, inset 0 0 10px rgba(255,255,255,.4); }
   #crosshair.bank .tick { background:#fff; box-shadow:0 0 8px #fff; }
+  /* active parry window: cyan/white defensive shield flare */
+  #crosshair.parry-active { transform:scale(1.35); }
+  #crosshair.parry-active .ring { border-color:#fff; border-width:2px; box-shadow:0 0 20px #fff, 0 0 35px var(--cyan), inset 0 0 14px #fff; }
+  #crosshair.parry-active .dot { background:#fff; box-shadow:0 0 14px #fff; }
+  #crosshair.parry-active .tick { background:#fff; box-shadow:0 0 10px #fff; }
+  /* shield recovery cooldown: muted, dashed indicator */
+  #crosshair.parry-cooldown .ring { border-color:rgba(255,106,16,.55); border-style:dashed; box-shadow:0 0 8px rgba(255,106,16,.3); }
+  #crosshair.parry-cooldown .dot { background:#ff6a10; box-shadow:0 0 6px #ff6a10; }
+  #crosshair.parry-cooldown .tick { background:rgba(255,106,16,.5); box-shadow:none; }
   /* curve indicator brackets */
   #crosshair .curve-bracket { position:absolute; top:50%; width:5px; height:20px; margin-top:-10px;
     border:1.5px solid transparent; opacity:0; pointer-events:none;
@@ -707,6 +716,13 @@
     border-color: #fff;
     color: #fff;
     box-shadow: 0 0 22px var(--cyan), inset 0 0 14px rgba(79, 242, 255, 0.4);
+  }
+  .btn-block.cooling {
+    opacity: 0.45;
+    border-color: rgba(255, 106, 16, 0.5);
+    color: rgba(255, 179, 122, 0.65);
+    box-shadow: 0 0 6px rgba(255, 106, 16, 0.2);
+    filter: grayscale(0.5);
   }
 
   /* ───────────────────────── Orientation Helper Overlay ───────────────────────── */

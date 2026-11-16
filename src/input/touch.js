@@ -30,6 +30,7 @@ export let joyThumb = null;
 export const R_STICK = 52; // radius in px
 
 export function showJoystick(x, y) {
+  if (typeof document === 'undefined') return;
   if (!joyBase) joyBase = document.getElementById('joystickBase');
   if (!joyThumb) joyThumb = document.getElementById('joystickThumb');
   if (!joyBase) return;
@@ -41,6 +42,7 @@ export function showJoystick(x, y) {
 }
 
 export function updateJoystick(x, y) {
+  if (typeof document === 'undefined') return;
   if (!joyThumb) joyThumb = document.getElementById('joystickThumb');
   const dx = x - moveStartPos.x;
   const dy = y - moveStartPos.y;
@@ -58,6 +60,11 @@ export function updateJoystick(x, y) {
 }
 
 export function hideJoystick() {
+  if (typeof document === 'undefined') {
+    touchMove.x = 0;
+    touchMove.y = 0;
+    return;
+  }
   if (!joyBase) joyBase = document.getElementById('joystickBase');
   if (!joyThumb) joyThumb = document.getElementById('joystickThumb');
   if (joyBase) {
@@ -72,6 +79,7 @@ export function hideJoystick() {
 }
 
 export function updateCurveButtons() {
+  if (typeof document === 'undefined') return;
   const btnCurveL = document.getElementById('btnCurveL');
   const btnCurveR = document.getElementById('btnCurveR');
   if (btnCurveL) btnCurveL.classList.toggle('active', state.touchCurveL);
@@ -132,7 +140,8 @@ export function resetTouchInputs({ cancelThrow = true } = {}) {
   state.touchJumpHeld = false;
   state.touchDashRequested = false;
   state.touchBlocking = false;
-  if (state.player && !state.keys?.KeyShift && !state.gamepadBlocking) {
+  state.gamepadBlocking = false;
+  if (state.player && !state.keys?.KeyShift) {
     state.player.blocking = false;
   }
   state.touchCurveL = false;
@@ -142,8 +151,12 @@ export function resetTouchInputs({ cancelThrow = true } = {}) {
   if (cancelThrow && typeof window !== 'undefined' && window.__tronCancelChargingThrow) {
     window.__tronCancelChargingThrow();
   }
-  if (typeof document !== 'undefined' && document.querySelectorAll) {
-    document.querySelectorAll('.touch-btn.pressed').forEach((el) => el.classList.remove('pressed'));
+  if (typeof document !== 'undefined') {
+    const btnBlock = document.getElementById('btnBlock');
+    if (btnBlock) btnBlock.classList.remove('pressed');
+    if (document.querySelectorAll) {
+      document.querySelectorAll('.touch-btn.pressed').forEach((el) => el.classList.remove('pressed'));
+    }
   }
 }
 
@@ -397,21 +410,27 @@ export function bindMobileButtons() {
   }
 
   if (btnBlock) {
-    const startBlock = (e) => {
+    const doParry = (e) => {
       e.preventDefault(); e.stopPropagation();
+      if (!state.running || state.paused) return;
       state.touchBlocking = true;
-      state.player.blocking = true;
+      if (typeof window !== 'undefined' && window.__tronTriggerPlayerParry) {
+        window.__tronTriggerPlayerParry();
+      }
       btnBlock.classList.add('pressed');
+      setTimeout(() => btnBlock.classList.remove('pressed'), 120);
     };
-    const endBlock = (e) => {
-      e.preventDefault(); e.stopPropagation();
+    const endParry = (e) => {
+      if (e) {
+        e.preventDefault(); e.stopPropagation();
+      }
       state.touchBlocking = false;
-      state.player.blocking = false;
       btnBlock.classList.remove('pressed');
     };
-    btnBlock.addEventListener('touchstart', startBlock, { passive: false });
-    btnBlock.addEventListener('touchend', endBlock, { passive: false });
-    btnBlock.addEventListener('touchcancel', endBlock, { passive: false });
+    btnBlock.addEventListener('touchstart', doParry, { passive: false });
+    btnBlock.addEventListener('touchend', endParry, { passive: false });
+    btnBlock.addEventListener('touchcancel', endParry, { passive: false });
+    btnBlock.addEventListener('click', doParry);
   }
 
   if (btnCurveL) {

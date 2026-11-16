@@ -182,7 +182,9 @@ export function initMouse(targetCanvas) {
       }
     }
     if (e.button === 2) {
-      state.player.blocking = true;
+      if (typeof window !== 'undefined' && window.__tronTriggerPlayerParry) {
+        window.__tronTriggerPlayerParry();
+      }
     }
   });
 
@@ -192,9 +194,6 @@ export function initMouse(targetCanvas) {
       if (typeof window !== 'undefined' && window.__tronReleaseChargingThrow) {
         window.__tronReleaseChargingThrow();
       }
-    }
-    if (e.button === 2 && !state.touchBlocking) {
-      state.player.blocking = false;
     }
   });
 

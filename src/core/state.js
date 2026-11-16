@@ -148,6 +148,8 @@ export const player = {
   energy: 100, 
   hasDisc: true, 
   blocking: false,
+  parryTimer: 0,
+  shieldCd: 0,
   chargingThrow: false,
   throwCharge: 0,
   throwChargeTime: 0,

@@ -244,6 +244,11 @@ export function pollGamepads(deadzone = state.gamepadDeadzone || DEFAULT_DEADZON
   }
 
   // 3. Update active combat flags
+  if (isButtonJustPressed(GAMEPAD_BUTTONS.L2)) {
+    if (typeof window !== 'undefined' && window.__tronTriggerPlayerParry) {
+      window.__tronTriggerPlayerParry();
+    }
+  }
   state.gamepadCurveL = isButtonPressed(GAMEPAD_BUTTONS.L1);
   state.gamepadCurveR = isButtonPressed(GAMEPAD_BUTTONS.R1);
   state.gamepadBlocking = isButtonPressed(GAMEPAD_BUTTONS.L2);
@@ -337,6 +342,12 @@ export function updateGamepadUINavigation() {
 
   const activeContainer = candidates.find(el => el && el.style && el.style.display !== 'none');
   if (!activeContainer) return;
+
+  if (state) {
+    state.gamepadBlocking = false;
+    state.gamepadCurveL = false;
+    state.gamepadCurveR = false;
+  }
 
   const focusables = Array.from(activeContainer.querySelectorAll('button, .btn, .mode-btn, input'))
     .filter(el => {

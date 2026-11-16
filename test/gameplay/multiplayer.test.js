@@ -279,13 +279,15 @@ async function runMultiplayerTests() {
     return {
       isDeflected: deflectedDiscs.length > 0,
       deflectedCount: deflectedDiscs.length,
-      lastMsg: dbg.lastMessage()
+      lastMsg: dbg.lastMessage(),
+      cooldownActive: dbg.state.player.shieldCd > 0,
+      parryWindowClosed: dbg.state.player.parryTimer === 0
     };
   });
 
   console.log('Guest parry evaluation:', parryResult);
-  if (parryResult.isDeflected && parryResult.lastMsg === 'DEFLECTED!') {
-    console.log('>>> TEST 6 PASSED: Guest successfully shield-parried incoming disc, turning it into deflected threat!');
+  if (parryResult.isDeflected && parryResult.lastMsg === 'DEFLECTED!' && parryResult.cooldownActive && parryResult.parryWindowClosed) {
+    console.log('>>> TEST 6 PASSED: Guest successfully shield-parried incoming disc during active window and entered recovery cooldown!');
   } else {
     throw new Error(`Test 6 FAILED: ${JSON.stringify(parryResult)}`);
   }

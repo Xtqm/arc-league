@@ -5,7 +5,7 @@ import { config } from './config.js';
 import { renderer, scene, camera, grid, ring, floor, initGraphics, updateCamera, renderScene } from '../graphics/scene.js';
 import { updateSparks } from '../graphics/particles.js';
 import { tiles, getTileAt, worldToTile, tileToWorld, triggerTileWarning, updateTiles, rebuildArenaTiles } from '../entities/Arena.js';
-import { updatePlayer, throwDisc, startChargingThrow, releaseChargingThrow, aimTarget, aimDir } from '../entities/Player.js';
+import { updatePlayer, throwDisc, startChargingThrow, releaseChargingThrow, triggerPlayerParry, aimTarget, aimDir } from '../entities/Player.js';
 import { updateFoes, spawnDuelBoss, spawnWave, killFoe } from '../entities/Bot.js';
 import { updateDiscs, spawnDisc, applyDamageToTarget } from '../entities/Disc.js';
 import { simulatePath, trajLine, updateThreatPaths, updateTrajectory } from '../physics/trajectory.js';
@@ -110,6 +110,13 @@ export function handleGamepadInput(dt) {
     // Dash on East or West button
     if (isButtonJustPressed(GAMEPAD_BUTTONS.EAST) || isButtonJustPressed(GAMEPAD_BUTTONS.WEST)) {
       state.gamepadDashRequested = true;
+    }
+
+    // Edge-triggered parry on L2
+    if (isButtonJustPressed(GAMEPAD_BUTTONS.L2)) {
+      if (typeof window !== 'undefined' && window.__tronTriggerPlayerParry) {
+        window.__tronTriggerPlayerParry();
+      }
     }
   }
 }
@@ -544,7 +551,16 @@ window.__dbg = {
   playerGrounded: () => state.player.grounded,
   playerJumps: () => state.player.jumps,
   playerHasDisc: () => state.player.hasDisc,
-  setPlayerBlocking: (b) => { state.player.blocking = b; },
+  setPlayerBlocking: (b) => {
+    state.player.blocking = b;
+    if (b) {
+      state.player.parryTimer = 0.35;
+      state.player.shieldCd = 0;
+    } else {
+      state.player.parryTimer = 0;
+    }
+  },
+  triggerPlayerParry: () => triggerPlayerParry(),
   setPlayerPos: (x, z, y = 0) => {
     state.player.pos.x = x;
     state.player.pos.z = z;

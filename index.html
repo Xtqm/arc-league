@@ -80,6 +80,124 @@
   #energybar > i { background:var(--orange); box-shadow:0 0 12px var(--orange); }
   .big { font-size:20px; letter-spacing:4px; }
   .tl-label-gap { margin-top: 6px; }
+
+  /* Bottom Combat HUD Under-Rail Dock */
+  #bottomDock {
+    position: absolute;
+    bottom: max(16px, env(safe-area-inset-bottom));
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 6px 18px 8px;
+    background: rgba(0, 16, 24, 0.45);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    border: 1px solid rgba(79, 242, 255, 0.22);
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    box-shadow: 0 0 16px rgba(79, 242, 255, 0.1) inset, 0 -2px 10px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+    user-select: none;
+    z-index: 45;
+  }
+  .dock-rail {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--cyan);
+    box-shadow: 0 0 8px var(--cyan), 0 0 16px rgba(79, 242, 255, 0.6);
+  }
+  .dock-meter {
+    display: flex;
+    flex-direction: column;
+    width: 140px;
+  }
+  .dock-meter .bar {
+    height: 7px;
+    margin-top: 0;
+    border: 1px solid rgba(79, 242, 255, 0.5);
+    background: rgba(0, 0, 0, 0.65);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .dock-label {
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #bfefff;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    opacity: 0.9;
+  }
+  .dock-meter-left .dock-label {
+    text-align: left;
+  }
+  .dock-meter-right .dock-label {
+    text-align: right;
+  }
+
+  /* Identity Disc Emblem */
+  #discEmblem {
+    position: relative;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease, transform 0.2s ease;
+  }
+  #discEmblem .disc-core {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  #discEmblem.ready {
+    border: 2px solid var(--cyan);
+    box-shadow: 0 0 10px var(--cyan), inset 0 0 6px var(--cyan);
+    opacity: 1;
+  }
+  #discEmblem.ready .disc-core {
+    background: #ffffff;
+    box-shadow: 0 0 6px #ffffff, 0 0 10px var(--cyan);
+  }
+  #discEmblem.in-flight {
+    border: 2px dashed rgba(79, 242, 255, 0.45);
+    box-shadow: none;
+    opacity: 0.28;
+  }
+  #discEmblem.in-flight .disc-core {
+    background: transparent;
+    box-shadow: none;
+  }
+  #discEmblem.catch-pulse {
+    animation: discCatchPulse 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  @keyframes discCatchPulse {
+    0% {
+      transform: scale(1);
+      border-color: #ffffff;
+      box-shadow: 0 0 18px #ffffff, 0 0 28px var(--cyan);
+    }
+    40% {
+      transform: scale(1.35);
+      border-color: var(--cyan);
+      box-shadow: 0 0 24px var(--cyan), 0 0 36px var(--cyan), inset 0 0 10px #ffffff;
+    }
+    100% {
+      transform: scale(1);
+      border-color: var(--cyan);
+      box-shadow: 0 0 10px var(--cyan), inset 0 0 6px var(--cyan);
+    }
+  }
   #arenaNameplates {
     position: fixed;
     inset: 0;
@@ -177,10 +295,10 @@
     pointer-events: none; z-index: 100; text-align: center; user-select: none;
     display: none; transition: transform 0.08s ease-out, opacity 0.25s ease;
   }
-  #hint { position:absolute; left:50%; bottom:22px; transform:translateX(-50%); font-size:11px;
+  #hint { position:absolute; left:50%; bottom:64px; transform:translateX(-50%); font-size:11px;
     letter-spacing:3px; opacity:.55; text-transform:uppercase; transition: opacity 0.3s ease; }
   #mobileHint {
-    position:absolute; left:50%; bottom:max(14px, env(safe-area-inset-bottom)); transform:translateX(-50%);
+    position:absolute; left:50%; bottom:max(58px, calc(env(safe-area-inset-bottom) + 44px)); transform:translateX(-50%);
     font-size:10px; letter-spacing:2px; opacity:.75; text-transform:uppercase; white-space:nowrap;
     pointer-events:none; color:var(--cyan); text-shadow:0 0 8px rgba(79,242,255,.4); display:none;
     transition: opacity 0.3s ease;
@@ -779,6 +897,34 @@
   }
   body.touch-device #mobileHint {
     display: block;
+    bottom: max(58px, calc(env(safe-area-inset-bottom) + 44px));
+  }
+  body.touch-device #bottomDock {
+    bottom: max(10px, env(safe-area-inset-bottom));
+    padding: 4px 10px 5px;
+    gap: 10px;
+    max-width: min(290px, calc(100vw - 220px));
+    border-radius: 5px 5px 0 0;
+  }
+  body.touch-device #bottomDock .dock-meter {
+    width: 88px;
+    min-width: 60px;
+  }
+  body.touch-device #bottomDock .dock-label {
+    font-size: 8px;
+    letter-spacing: 1px;
+    margin-bottom: 1px;
+  }
+  body.touch-device #bottomDock .bar {
+    height: 6px;
+  }
+  body.touch-device #discEmblem {
+    width: 18px;
+    height: 18px;
+  }
+  body.touch-device #discEmblem .disc-core {
+    width: 5px;
+    height: 5px;
   }
   body.touch-device #hint,
   body.touch-device #sens,
@@ -2611,11 +2757,14 @@
   }
 </style>
 <script>
-  // Compatibility alias for hudFullscreenBtn
+  // Compatibility alias for hudFullscreenBtn and legacy HUD queries
   const _origGetElementById = document.getElementById.bind(document);
   document.getElementById = function(id) {
     if (id === 'hudFullscreenBtn') {
       return _origGetElementById('hudFullscreenBtn') || _origGetElementById('fullscreenBtn');
+    }
+    if (id === 'discbar') {
+      return _origGetElementById('discbar') || _origGetElementById('discEmblem');
     }
     return _origGetElementById(id);
   };
@@ -2628,13 +2777,22 @@
 </div>
 <div id="hud">
   <div id="arenaNameplates"></div>
-  <div class="panel" id="tl">
-    <div>Program Integrity</div>
-    <div class="bar" id="hpbar"><i style="width:100%"></i></div>
-    <div class="tl-label-gap">Identity Disc</div>
+  <div class="panel" id="tl" style="display:none;" aria-hidden="true">
     <div class="bar" id="discbar"><i style="width:100%"></i></div>
-    <div class="tl-label-gap">Energy</div>
-    <div class="bar" id="energybar"><i style="width:100%"></i></div>
+  </div>
+  <div id="bottomDock" class="bottom-dock">
+    <div class="dock-meter dock-meter-left">
+      <div class="dock-label">Program Integrity</div>
+      <div class="bar" id="hpbar"><i style="width:100%"></i></div>
+    </div>
+    <div id="discEmblem" class="disc-emblem ready" title="Identity Disc" aria-label="Identity Disc">
+      <div class="disc-core"></div>
+    </div>
+    <div class="dock-meter dock-meter-right">
+      <div class="dock-label">Energy</div>
+      <div class="bar" id="energybar"><i style="width:100%"></i></div>
+    </div>
+    <div class="dock-rail"></div>
   </div>
   <div class="panel" id="tr">
     <div id="trHeaderRow" style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px">

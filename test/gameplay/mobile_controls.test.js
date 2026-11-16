@@ -103,7 +103,28 @@ async function runMobileTests() {
     const mobileControls = document.getElementById('mobileControls');
     const mobileControlsVisible = mobileControls && window.getComputedStyle(mobileControls).display === 'block';
 
-    const tlRect = document.getElementById('tl')?.getBoundingClientRect();
+    const bottomDock = document.getElementById('bottomDock');
+    const dockRect = bottomDock?.getBoundingClientRect();
+    const dockVisible = bottomDock && window.getComputedStyle(bottomDock).display !== 'none';
+    const compactDock = !!dockRect && dockRect.width <= 320 && dockVisible;
+    const hasDockElements = !!bottomDock?.querySelector('#hpbar') &&
+                            !!bottomDock?.querySelector('#discEmblem') &&
+                            !!bottomDock?.querySelector('#energybar');
+
+    // Verify disc emblem state transitions
+    const discEmblem = document.getElementById('discEmblem');
+    const initialReady = discEmblem?.classList.contains('ready') && !discEmblem?.classList.contains('in-flight');
+
+    // Simulate disc throw
+    dbg.state.player.hasDisc = false;
+    dbg.step(0.016);
+    const inFlightState = discEmblem?.classList.contains('in-flight') && !discEmblem?.classList.contains('ready');
+
+    // Simulate disc catch
+    dbg.state.player.hasDisc = true;
+    dbg.step(0.016);
+    const catchPulseState = discEmblem?.classList.contains('ready') && discEmblem?.classList.contains('catch-pulse');
+
     const labelSpan = document.querySelector('#pauseBtn .hud-btn-label');
     const btnLabelHidden = !labelSpan || window.getComputedStyle(labelSpan).display === 'none';
 
@@ -114,15 +135,21 @@ async function runMobileTests() {
       hintHidden,
       mobileHintVisible,
       mobileControlsVisible,
-      compactTl: !!tlRect && tlRect.width <= 190,
+      compactDock,
+      hasDockElements,
+      initialReady,
+      inFlightState,
+      catchPulseState,
       btnLabelHidden
     };
   });
 
   console.log('Test 2 results:', test2);
   if (test2.isTouch && test2.isBodyTouch && test2.lockBannerHidden && test2.hintHidden &&
-      test2.mobileHintVisible && test2.mobileControlsVisible && test2.compactTl && test2.btnLabelHidden) {
-    console.log('>>> TEST 2 PASSED: Touch environment detected, pointer lock bypassed, compact mobile HUD active!');
+      test2.mobileHintVisible && test2.mobileControlsVisible && test2.compactDock &&
+      test2.hasDockElements && test2.initialReady && test2.inFlightState &&
+      test2.catchPulseState && test2.btnLabelHidden) {
+    console.log('>>> TEST 2 PASSED: Touch environment detected, pointer lock bypassed, bottom dock & disc emblem states verified!');
   } else {
     throw new Error(`Test 2 FAILED: ${JSON.stringify(test2)}`);
   }

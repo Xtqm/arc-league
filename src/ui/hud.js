@@ -124,11 +124,29 @@ export function updateHUD() {
   }
 
   if (state.player.hasDisc !== _lastPlayerHasDisc) {
+    const discEmblem = getCachedElement('discEmblem');
+    if (discEmblem) {
+      if (state.player.hasDisc) {
+        discEmblem.classList.remove('in-flight');
+        discEmblem.classList.add('ready');
+        if (_lastPlayerHasDisc === false) {
+          discEmblem.classList.remove('catch-pulse');
+          void discEmblem.offsetWidth;
+          discEmblem.classList.add('catch-pulse');
+          discEmblem.addEventListener('animationend', () => {
+            discEmblem.classList.remove('catch-pulse');
+          }, { once: true });
+        }
+      } else {
+        discEmblem.classList.remove('ready', 'catch-pulse');
+        discEmblem.classList.add('in-flight');
+      }
+    }
     const dbFill = getCachedFill('discbar', 'dbFill');
     if (dbFill) {
       dbFill.style.width = (state.player.hasDisc ? 100 : 0) + '%';
-      _lastPlayerHasDisc = state.player.hasDisc;
     }
+    _lastPlayerHasDisc = state.player.hasDisc;
   }
 
   if (state.player.energy !== _lastPlayerEnergy) {

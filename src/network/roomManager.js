@@ -75,7 +75,7 @@ export function applyPlayerName(role, name) {
   if (!state.multiplayerNames) {
     state.multiplayerNames = { p1: null, p2: null, p3: null, p4: null };
   }
-  if (role === state.playerRole && state.multiplayerNames[role] && state.multiplayerNames[role] !== clean) {
+  if (state.multiplayerNames[role] && state.multiplayerNames[role] !== clean) {
     return;
   }
   state.multiplayerNames[role] = clean;

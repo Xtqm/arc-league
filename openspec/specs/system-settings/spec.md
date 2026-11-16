@@ -87,7 +87,7 @@ The system SHALL provide a user-configurable 3D render resolution scaling slider
 - **THEN** the engine applies the stored render scale immediately upon graphics initialization.
 
 ### Requirement: Graphics Quality Presets Configuration
-The system SHALL provide one-click graphics quality presets (Competitive, Low, Medium, High, Ultra) that batch-configure shadow map resolution, bloom quality, particle budget, and render resolution scaling.
+The system SHALL provide one-click graphics quality presets (Competitive, Low, Medium, High, Ultra) that batch-configure shadow map resolution, bloom quality, particle budget, render resolution scaling, and frame rate caps, defaulting High and Ultra presets to uncapped frame rate (`fpsCap: 0`) to match native high-refresh displays.
 
 #### Scenario: Selecting competitive preset
 - **WHEN** the player selects the Competitive preset
@@ -95,4 +95,8 @@ The system SHALL provide one-click graphics quality presets (Competitive, Low, M
 
 #### Scenario: Selecting ultra preset
 - **WHEN** the player selects the Ultra preset
-- **THEN** shadows are set to 1024 or higher, bloom is set to full HDR resolution, particles are enabled at 100%, and render scale is set to 100%.
+- **THEN** shadows are set to 1024 or higher, bloom is set to full HDR resolution, particles are enabled at 100%, render scale is set to 100%, and frame rate cap is set to uncapped (`fpsCap: 0`).
+
+#### Scenario: Selecting high preset
+- **WHEN** the player selects the High preset
+- **THEN** shadows are set to 1024, bloom is set to full HDR resolution, particles are enabled at 100%, render scale is set to 100%, and frame rate cap defaults to uncapped (`fpsCap: 0`) for smooth display refresh synchronization.

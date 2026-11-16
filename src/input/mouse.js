@@ -79,11 +79,10 @@ export function focusGame() {
 }
 
 export function look(dx, dy) {
-  if (Math.abs(dx) > MAX_MOUSE_DELTA || Math.abs(dy) > MAX_MOUSE_DELTA) {
-    return;
-  }
-  state.player.yaw -= dx * sens;
-  state.player.pitch = THREE.MathUtils.clamp(state.player.pitch - dy * sens * (state.invertY ? -1 : 1), -0.6, 0.55);
+  const clampedDx = Math.sign(dx) * Math.min(Math.abs(dx), MAX_MOUSE_DELTA);
+  const clampedDy = Math.sign(dy) * Math.min(Math.abs(dy), MAX_MOUSE_DELTA);
+  state.player.yaw -= clampedDx * sens;
+  state.player.pitch = THREE.MathUtils.clamp(state.player.pitch - clampedDy * sens * (state.invertY ? -1 : 1), -0.6, 0.55);
   if (state.player.yaw > Math.PI) state.player.yaw -= Math.PI * 2;
   if (state.player.yaw < -Math.PI) state.player.yaw += Math.PI * 2;
 }

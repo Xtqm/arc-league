@@ -249,7 +249,7 @@ let lastRenderTime = 0;
 export function loop() {
   requestAnimationFrame(loop);
 
-  const fpsCap = Number(settingsManager.get('fpsCap', 60));
+  const fpsCap = Number(settingsManager.get('fpsCap', 0));
   const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
   if (fpsCap > 0 && lastRenderTime > 0) {
     const minInterval = 1000 / fpsCap;

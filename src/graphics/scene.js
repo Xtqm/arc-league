@@ -7,7 +7,20 @@ import { createProceduralEnvironment } from './Environment.js';
 import { CinematicComposer } from './PostProcessing.js';
 import { cosmeticMaterialEngine } from '../armory/CosmeticMaterialEngine.js';
 
-export const renderer = typeof document !== 'undefined' ? new THREE.WebGLRenderer({ antialias: true }) : null;
+function initRenderer() {
+  if (typeof document === 'undefined') return null;
+  try {
+    return new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  } catch (_) {
+    try {
+      return new THREE.WebGLRenderer({ antialias: true });
+    } catch (e) {
+      return null;
+    }
+  }
+}
+
+export const renderer = initRenderer();
 export let composer = null;
 if (renderer) {
   const scale = THREE.MathUtils.clamp(Number(settingsManager.get('renderScale', 1.0)), 0.5, 1.0);

@@ -80,7 +80,7 @@ export class SettingsModal {
 
     const currentMaster = Math.round(this.settings.get('masterVolume', 1.0) * 100);
     const currentSFX = Math.round(this.settings.get('sfxVolume', 1.0) * 100);
-    const currentFPS = Number(this.settings.get('fpsCap', 60));
+    const currentFPS = Number(this.settings.get('fpsCap', 0));
     const currentDisplay = this.settings.get('displayMode', isFullScreen() ? 'fullscreen' : 'windowed');
     const currentMute = this.settings.get('muteOnBlur', true);
     const currentBloom = this.settings.get('bloom', true);
@@ -309,7 +309,7 @@ export class SettingsModal {
         b.classList.toggle('hot', b.getAttribute('data-bloom') === bq);
       });
 
-      const fps = Number(this.settings.get('fpsCap', 60));
+      const fps = Number(this.settings.get('fpsCap', 0));
       fpsButtons.forEach((b) => {
         b.classList.toggle('hot', Number(b.getAttribute('data-fps')) === fps);
       });

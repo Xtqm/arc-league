@@ -28,6 +28,7 @@ function getBackupProfilePath() {
 // Hardware acceleration and GPU switches
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
+app.commandLine.appendSwitch('force_high_performance_gpu');
 
 let mainWindow = null;
 

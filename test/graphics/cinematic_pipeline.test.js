@@ -233,6 +233,7 @@ assert.strictEqual(settingsManager.get('renderScale'), 1.0);
 assert.strictEqual(settingsManager.get('bloomQuality'), 'full');
 assert.strictEqual(settingsManager.get('bloom'), true);
 assert.strictEqual(settingsManager.get('shadows'), 2048);
+assert.strictEqual(settingsManager.get('fpsCap'), 0);
 assert.strictEqual(settingsManager.get('particleBudget'), 1.0);
 assert.strictEqual(presetChangeEmitted, 'ultra');
 
@@ -242,6 +243,7 @@ assert.strictEqual(settingsManager.get('graphicsPreset'), 'high');
 assert.strictEqual(settingsManager.get('renderScale'), 1.0);
 assert.strictEqual(settingsManager.get('bloomQuality'), 'full');
 assert.strictEqual(settingsManager.get('shadows'), 1024);
+assert.strictEqual(settingsManager.get('fpsCap'), 0);
 
 // Medium Preset
 settingsManager.applyPreset('medium');

@@ -11,7 +11,7 @@ export const GRAPHICS_PRESETS = Object.freeze({
     shadows: 2048,
     particles: true,
     particleBudget: 1.0,
-    fpsCap: 60
+    fpsCap: 0
   }),
   high: Object.freeze({
     preset: 'high',
@@ -21,7 +21,7 @@ export const GRAPHICS_PRESETS = Object.freeze({
     shadows: 1024,
     particles: true,
     particleBudget: 1.0,
-    fpsCap: 60
+    fpsCap: 0
   }),
   medium: Object.freeze({
     preset: 'medium',
@@ -57,7 +57,7 @@ export const GRAPHICS_PRESETS = Object.freeze({
 
 export const DEFAULT_SETTINGS = Object.freeze({
   displayMode: 'fullscreen', // 'fullscreen' | 'windowed'
-  fpsCap: 60,                // 60, 120, 144, 0 (uncapped)
+  fpsCap: 0,                 // 60, 120, 144, 0 (uncapped)
   masterVolume: 1.0,         // 0.0 - 1.0
   sfxVolume: 1.0,            // 0.0 - 1.0
   muteOnBlur: true,

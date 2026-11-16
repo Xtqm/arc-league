@@ -47,7 +47,7 @@ The system SHALL maintain player health and energy pools, regenerating energy au
 - **THEN** the player is de-rezzed and the elimination flow is initiated.
 
 ### Requirement: Combat Viewport Stability and Aim Alignment
-The system SHALL maintain a glitch-free, 1:1 responsive third-person combat camera that eliminates gimbal lock flips, boundary collision inversion, and pointer lock delta spikes.
+The system SHALL maintain a glitch-free, 1:1 responsive third-person combat camera that eliminates gimbal lock flips, boundary collision inversion, and pointer lock delta spikes while clamping rapid mouse swipes to preserve continuous aim orientation.
 
 #### Scenario: Rapid rotational flick
 - **WHEN** the player rapidly rotates their view by 90 or 180 degrees
@@ -63,7 +63,7 @@ The system SHALL maintain a glitch-free, 1:1 responsive third-person combat came
 
 #### Scenario: Pointer lock delta spike rejection
 - **WHEN** the browser reports an anomalous synthetic mouse movement delta exceeding safe input thresholds
-- **THEN** the system discards the anomalous delta frame completely without adjusting camera orientation, preventing unnatural instantaneous camera snapping.
+- **THEN** the system clamps anomalous delta frames to the maximum threshold rather than dropping user input, preventing unnatural camera snapping while preserving fluid aiming.
 
 #### Scenario: Unadjusted raw input negotiation
 - **WHEN** desktop pointer lock is initiated on a supporting browser platform

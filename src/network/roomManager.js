@@ -75,6 +75,9 @@ export function applyPlayerName(role, name) {
   if (!state.multiplayerNames) {
     state.multiplayerNames = { p1: null, p2: null, p3: null, p4: null };
   }
+  if (state.multiplayerNames[role] && state.multiplayerNames[role] !== clean) {
+    return;
+  }
   state.multiplayerNames[role] = clean;
   if (state.multiPlayers && state.multiPlayers[role]) {
     state.multiPlayers[role].name = clean;
@@ -90,7 +93,9 @@ export function applyPlayerName(role, name) {
 
 export function getDisplayNameForRole(role, fallback = null) {
   if (!role) return fallback || 'PROGRAM';
-  if (role === state.playerRole) return getLocalCallsign();
+  if (role === state.playerRole) {
+    return state.multiplayerNames?.[role] || getLocalCallsign();
+  }
   return (
     state.multiPlayers?.[role]?.name ||
     state.multiplayerNames?.[role] ||

@@ -1,5 +1,6 @@
 import * as THREE from '../../vendor/three.module.js';
 import { state } from '../core/state.js';
+import { setLastInputDevice } from '../ui/hud.js';
 
 export let canvas = null;
 export let lockFailed = false;
@@ -145,6 +146,9 @@ export function initMouse(targetCanvas) {
 
   window.addEventListener('mousemove', e => {
     if (state.isTouchDevice) return;
+    if (e.movementX !== 0 || e.movementY !== 0) {
+      setLastInputDevice('kbm');
+    }
     state.cursorX = e.clientX;
     state.cursorY = e.clientY;
     if (!state.running || state.paused) return;
@@ -166,19 +170,20 @@ export function initMouse(targetCanvas) {
     }
   });
 
-  window.addEventListener('wheel', e => {
-    if (!state.running) return;
-    state.sens = THREE.MathUtils.clamp(state.sens * (e.deltaY > 0 ? 0.9 : 1.1), 0.0006, 0.012);
-    showSens();
-  }, { passive: true });
-
   window.addEventListener('mousedown', e => {
     if (state.isTouchDevice || !state.running || state.paused) return;
+    setLastInputDevice('kbm');
     if (e.button === 0) {
       if (typeof window !== 'undefined' && window.__tronStartChargingThrow) {
         window.__tronStartChargingThrow();
       } else if (typeof window !== 'undefined' && window.__tronThrowDisc) {
         window.__tronThrowDisc();
+      }
+    }
+    if (e.button === 1) {
+      e.preventDefault();
+      if (typeof window !== 'undefined' && window.__tronTogglePerspective) {
+        window.__tronTogglePerspective();
       }
     }
     if (e.button === 2) {

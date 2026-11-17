@@ -313,6 +313,13 @@ export function killFoe(f) {
     storageManager.set('stats.totalDerezzes', currentDerezzes + 1);
   } catch (_) {}
 
+  if (state.gameMode === 'calibration') {
+    if (typeof window !== 'undefined' && window.__tronCalibrationMode) {
+      window.__tronCalibrationMode.destroyTarget(f);
+    }
+    return;
+  }
+
   if (state.gameMode === 'duel' || state.gameMode === 'duel_ai') {
     duelEconomyBridge.processMatchOutcome('victory', 'ai');
     state.tier = (state.tier || state.duelTier || 1) + 1;

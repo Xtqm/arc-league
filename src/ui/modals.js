@@ -279,6 +279,19 @@ export function bindPauseAndModalEvents() {
   pauseBtn = document.getElementById('pauseBtn');
   if (pauseBtn) { pauseBtn.onclick = onPauseClick; pauseBtn.ontouchstart = onPauseClick; }
 
+  const btnPerspective = document.getElementById('btnPerspectiveToggle');
+  if (btnPerspective) {
+    const onPerspectiveClick = (e) => {
+      e.stopPropagation();
+      if (e.cancelable) e.preventDefault();
+      if (typeof window !== 'undefined' && window.__tronTogglePerspective) {
+        window.__tronTogglePerspective();
+      }
+    };
+    btnPerspective.onclick = onPerspectiveClick;
+    btnPerspective.ontouchstart = onPerspectiveClick;
+  }
+
   fullscreenBtn = document.getElementById('fullscreenBtn');
   if (fullscreenBtn) {
     fullscreenBtn.onclick = onFullscreenToggleClick;

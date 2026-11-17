@@ -9,6 +9,7 @@ import { armoryModal } from './modals/ArmoryModal.js';
 import { achievementsModal } from './modals/AchievementsModal.js';
 import { settingsModal } from './modals/SettingsModal.js';
 import { updateSteamRichPresence, syncGameStateRichPresence } from '../core/steamTelemetry.js';
+import { lobbyCoresManager } from './lobbyCores.js';
 
 // Setup Campaign UI navigation transitions
 gridSelectorModal.setOnSelectGrid((gridId) => levelSelectView.show(gridId));
@@ -44,6 +45,7 @@ function teardownSectorArena() {
 }
 
 export function startMode(mode) {
+  lobbyCoresManager.despawnCores();
   state.gameMode = (mode === 'duel' || mode === 'duel_ai') ? 'duel_ai' : mode;
   if (state.gameMode === 'swarm') {
     teardownSectorArena();
@@ -102,15 +104,16 @@ export function showModeSelect() {
   state.authModalOpen = false;
   state.armoryModalOpen = false;
   state.paused = false;
-  state.running = false;
+  state.running = true;
+  state.gameMode = 'lobby';
   state.slowMoActive = false;
   state.timeScale = 1.0;
+  state.player.hp = 100;
+  state.player.alive = true;
+  state.player.hasDisc = true;
   resetTouchInputs();
   updateSteamRichPresence('In Main Menu');
   teardownMultiplayer();
-  if (typeof document !== 'undefined' && document.pointerLockElement) {
-    document.exitPointerLock();
-  }
   setCursor();
   showModeSelectMenu();
 }
@@ -159,6 +162,14 @@ export function getMainMenuHtml() {
 
 export function showModeSelectMenu() {
   updateSteamRichPresence('In Main Menu');
+  state.gameMode = 'lobby';
+  state.running = true;
+  state.paused = false;
+  state.player.hp = 100;
+  state.player.alive = true;
+  state.player.hasDisc = true;
+  lobbyCoresManager.init();
+  lobbyCoresManager.spawnCores();
   const hm = document.getElementById('hostModal');
   if (hm) hm.style.display = 'none';
   const rm = document.getElementById('roomModal');
@@ -402,12 +413,17 @@ export function bindMainMenuEvents() {
   }
 }
 
+export function enterLobby() {
+  showModeSelect();
+}
+
 export function bindMenuButtons() {
   bindMainMenuEvents();
   bindPauseAndModalEvents();
 }
 
 if (typeof window !== 'undefined') {
+  window.__tronEnterLobby = enterLobby;
   window.__tronShowModeSelect = showModeSelect;
   window.__tronShowModeSelectMenu = showModeSelectMenu;
   window.__tronTeardownMultiplayer = teardownMultiplayer;

@@ -318,6 +318,9 @@ export function updateDiscs(dt) {
     // Disc collision against characters
     let discCaught = false;
     if (D.owner === 'player') {
+      if (state.gameMode === 'lobby' && typeof window !== 'undefined' && window.__tronLobbyCores) {
+        window.__tronLobbyCores.checkDiscIntersection(D);
+      }
       for (const f of state.foes) {
         if (D.hitFoes && D.hitFoes.has(f)) continue;
         const fCenter = tmp.copy(f.pos).setY(1.5 + (f.y || 0));
@@ -533,6 +536,9 @@ export function updateDiscs(dt) {
           playGamepadHaptics({ duration: 160, weakMagnitude: 0.6, strongMagnitude: 0.85 });
           state.score += 50;
           duelEconomyBridge.rewardParry();
+          if (state.gameMode === 'calibration' && typeof window !== 'undefined' && window.__tronCalibrationMode) {
+            window.__tronCalibrationMode.onDiscDeflected();
+          }
           D.originalOwner = (D.owner !== 'player') ? D.owner : (D.originalOwner || state.foes[0]);
           D.owner = 'player';
           D.color = config.WHITE;

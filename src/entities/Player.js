@@ -252,6 +252,27 @@ export function updatePlayer(dt) {
     state.player.obj.position.y = state.player.y + (state.player.grounded ? Math.sin(state.time * 11) * .05 * Math.min(state.player.vel.length() / 8, 1) : 0);
     state.player.obj.rotation.x = THREE.MathUtils.clamp(-state.player.vy * 0.018, -.22, .22);
 
+    // First-person mesh culling (hide head and torso when blend < 0.2, keeping arms and disc visible)
+    const blend = state.cameraPerspectiveBlend !== undefined ? state.cameraPerspectiveBlend : 1.0;
+    const isFirstPerson = blend < 0.2;
+    const uData = state.player.obj.userData;
+    if (uData && uData.torso) {
+      const torso = uData.torso;
+      const ls = uData.leftShoulder;
+      const rs = uData.rightShoulder;
+      if (uData.head) uData.head.visible = !isFirstPerson;
+      if (uData.neck) uData.neck.visible = !isFirstPerson;
+      if (uData.headHalo) uData.headHalo.visible = !isFirstPerson;
+      for (let i = 0; i < torso.children.length; i++) {
+        const child = torso.children[i];
+        if (child === ls || child === rs) {
+          child.visible = true;
+        } else {
+          child.visible = !isFirstPerson;
+        }
+      }
+    }
+
     animateProgramKinematics(state.player.obj, dt, {
       speed: state.player.vel.length(),
       vy: state.player.vy,
@@ -265,7 +286,45 @@ export function updatePlayer(dt) {
     });
 
     if (state.player.obj.userData && state.player.obj.userData.backDisc) {
-      state.player.obj.userData.backDisc.visible = state.player.hasDisc;
+      const disc = state.player.obj.userData.backDisc;
+      disc.visible = state.player.hasDisc;
+
+      if (state.countdownTimer > 0) {
+        const p = THREE.MathUtils.clamp(1.0 - (state.countdownTimer / 3.0), 0.0, 1.0);
+        disc.scale.setScalar(0.2 + 0.8 * Math.pow(p, 0.7));
+        if (disc.userData) {
+          if (disc.userData.outerMesh && disc.userData.outerMesh.material) {
+            disc.userData.outerMesh.material.wireframe = p < 0.95;
+            disc.userData.outerMesh.material.transparent = true;
+            disc.userData.outerMesh.material.opacity = 0.2 + p * 0.8;
+          }
+          if (disc.userData.hubMesh && disc.userData.hubMesh.material) {
+            disc.userData.hubMesh.material.wireframe = p < 0.95;
+          }
+          if (disc.userData.faceMesh && disc.userData.faceMesh.material) {
+            disc.userData.faceMesh.material.opacity = 0.05 + p * 0.25;
+          }
+        }
+        if (Math.random() < 0.4) {
+          const worldPos = new THREE.Vector3();
+          disc.getWorldPosition(worldPos);
+          burst(worldPos.x, worldPos.y, worldPos.z, 2, config.CYAN);
+        }
+      } else {
+        disc.scale.setScalar(1.0);
+        if (disc.userData) {
+          if (disc.userData.outerMesh && disc.userData.outerMesh.material) {
+            disc.userData.outerMesh.material.wireframe = false;
+            disc.userData.outerMesh.material.opacity = 1.0;
+          }
+          if (disc.userData.hubMesh && disc.userData.hubMesh.material) {
+            disc.userData.hubMesh.material.wireframe = false;
+          }
+          if (disc.userData.faceMesh && disc.userData.faceMesh.material) {
+            disc.userData.faceMesh.material.opacity = 0.24;
+          }
+        }
+      }
     }
   }
 }

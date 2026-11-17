@@ -2745,6 +2745,74 @@
   .fabricate-pulse {
     animation: neon-fabricate-pulse 0.95s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
   }
+
+  /* Boot Terminal (Cold Open) */
+  #bootTerminal {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: radial-gradient(circle at center, #021824 0%, #00080d 75%, #000 100%);
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    font-family: "Courier New", Courier, monospace, "Segoe UI", sans-serif;
+    color: var(--cyan);
+    text-shadow: 0 0 10px rgba(79, 242, 255, 0.7);
+    overflow: hidden;
+  }
+  #bootTerminal::before {
+    content: " ";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+    background-size: 100% 3px, 6px 100%;
+    pointer-events: none;
+    opacity: 0.6;
+  }
+  #bootTerminal .terminal-box {
+    max-width: 680px;
+    width: 90%;
+    padding: 36px 40px;
+    border: 1px solid rgba(79, 242, 255, 0.5);
+    background: rgba(0, 15, 24, 0.92);
+    box-shadow: 0 0 40px rgba(79, 242, 255, 0.2), inset 0 0 20px rgba(79, 242, 255, 0.08);
+    border-radius: 8px;
+    position: relative;
+    pointer-events: none;
+  }
+  #bootTerminal .terminal-header {
+    font-size: 13px;
+    letter-spacing: 3px;
+    opacity: 0.75;
+    margin-bottom: 20px;
+    border-bottom: 1px solid rgba(79, 242, 255, 0.25);
+    padding-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+  }
+  #bootTerminal .terminal-line {
+    font-size: 15px;
+    line-height: 1.8;
+    letter-spacing: 2px;
+    margin: 6px 0;
+  }
+  #bootTerminal .terminal-prompt {
+    margin-top: 28px;
+    font-size: 18px;
+    font-weight: bold;
+    letter-spacing: 3px;
+    text-align: center;
+    color: #fff;
+    text-shadow: 0 0 15px var(--cyan), 0 0 30px var(--cyan);
+    animation: terminal-blink 1.2s infinite ease-in-out;
+  }
+  @keyframes terminal-blink {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.45; transform: scale(0.99); }
+  }
 </style>
 <script>
   // Compatibility alias for hudFullscreenBtn and legacy HUD queries
@@ -2766,6 +2834,7 @@
   <span id="offlineBannerText">[GRID OFFLINE] SYNC BUFFER ACTIVE // PROGRESS SAFEGUARDED</span>
 </div>
 <div id="hud">
+  <div id="calibrationBypass" style="display:none; position:fixed; top:max(16px, env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:100; padding:6px 14px; background:rgba(0,16,24,0.85); border:1px solid rgba(79,242,255,0.45); border-radius:4px; font-size:11px; letter-spacing:2px; color:var(--cyan); cursor:pointer; pointer-events:auto; text-shadow:0 0 8px var(--cyan); box-shadow:0 0 14px rgba(79,242,255,0.2);">[ESC / START] BYPASS TO LOBBY</div>
   <div id="arenaNameplates"></div>
   <div class="panel" id="tl" style="display:none;" aria-hidden="true">
     <div class="bar" id="discbar"><i style="width:100%"></i></div>
@@ -2788,6 +2857,7 @@
     <div id="trHeaderRow" style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px">
       <div id="roundLabel">Cycle <span id="wave" class="big">1</span></div>
       <div id="topControls" style="display:flex;align-items:center;gap:6px;pointer-events:auto;z-index:50;">
+        <button id="btnPerspectiveToggle" class="hud-btn" title="Toggle Perspective (1P/3P)" aria-label="Toggle Perspective">👁<span class="hud-btn-label"> 3P</span></button>
         <button id="fullscreenBtn" data-id="hudFullscreenBtn" class="hud-btn" title="Toggle Fullscreen" aria-label="Toggle Fullscreen">⛶<span class="hud-btn-label"> FULLSCREEN</span></button>
         <button id="pauseBtn" class="hud-btn" title="Pause" aria-label="Pause">II<span class="hud-btn-label"> PAUSE</span></button>
       </div>
@@ -3119,6 +3189,20 @@
   </div>
 </div>
 
+<!-- Cold Open Boot Terminal -->
+<div id="bootTerminal" style="display:none;">
+  <div class="terminal-box">
+    <div class="terminal-header">
+      <span>ARC_OS // KERNEL v4.19</span>
+      <span>STATUS: ACTIVE</span>
+    </div>
+    <div class="terminal-line">&gt; SUB-STRATA RIG DETECTED</div>
+    <div class="terminal-line">&gt; NEURAL INTERFACE ONLINE</div>
+    <div class="terminal-line">&gt; WEBAUDIO: STANDBY // POINTER_LOCK: UNBOUND</div>
+    <div class="terminal-prompt">[ CLICK ANYWHERE TO SYNCHRONIZE ]</div>
+  </div>
+</div>
+
 <div id="overlay">
   <div id="identityHeader" class="identity-header"></div>
   <div class="card" id="mainMenu">
@@ -3165,6 +3249,18 @@
     <h1 style="font-size:24px; user-select:none;">CURSOR UNLOCKED - CLICK ARENA TO RESUME</h1>
     <div class="menu-actions">
       <button id="leaveMatchBtn" class="btn" style="border-color:var(--orange); color:#ffb37a; margin: 0 auto; pointer-events:auto; cursor:pointer;">LEAVE MATCH</button>
+    </div>
+  </div>
+</div>
+
+<!-- Energy Core Launch Confirmation Modal -->
+<div id="coreConfirmModal" class="modal modal-overlay" style="display:none; z-index:9000; background:rgba(0,10,18,0.75);">
+  <div class="card" style="max-width:440px; text-align:center;">
+    <h2 id="coreConfirmTitle" style="color:var(--cyan); letter-spacing:3px; margin-top:0;">INITIALIZE CIRCUIT?</h2>
+    <p id="coreConfirmDesc" style="font-size:13px; letter-spacing:1px; opacity:0.85; margin:16px 0 24px;">ENGAGE ARCFIELD MODE SEQUENCE</p>
+    <div style="display:flex; justify-content:center; gap:16px;">
+      <button id="btnCoreConfirmLaunch" class="btn" style="border-color:var(--cyan); color:#fff; background:rgba(79,242,255,0.25); min-width:120px;">LAUNCH</button>
+      <button id="btnCoreConfirmCancel" class="btn" style="border-color:var(--orange); color:#ffb37a; min-width:120px;">CANCEL</button>
     </div>
   </div>
 </div>

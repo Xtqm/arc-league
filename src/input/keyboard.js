@@ -1,4 +1,5 @@
 import { state } from '../core/state.js';
+import { setLastInputDevice } from '../ui/hud.js';
 
 export const EAT = ['Space','KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','KeyP','KeyT','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','F1'];
 
@@ -86,6 +87,7 @@ export function onDown(e) {
   }
 
   if (!c) return;
+  setLastInputDevice('kbm');
   state.keys[c] = true;
 
   // Opposite-key curve neutralization
@@ -133,6 +135,13 @@ export function onDown(e) {
   }
   if (c === 'KeyP' || c === 'Escape') {
     if (state.running) {
+      if (state.gameMode === 'calibration' && c === 'Escape') {
+        e.preventDefault();
+        if (typeof window !== 'undefined' && window.__tronBypassCalibration) {
+          window.__tronBypassCalibration();
+        }
+        return;
+      }
       const now = performance.now();
       if (now - state.lastPauseToggle > 180) {
         state.lastPauseToggle = now;

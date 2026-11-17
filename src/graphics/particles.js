@@ -44,7 +44,7 @@ const _tempColor = new THREE.Color();
 
 export function ensureParticleMesh(targetScene = null) {
   const host = targetScene || (typeof window !== 'undefined' ? window.__tronScene : null);
-  if (host && particleMesh.parent !== host) {
+  if (host && typeof host.add === 'function' && particleMesh.parent !== host) {
     if (particleMesh.parent) particleMesh.parent.remove(particleMesh);
     host.add(particleMesh);
   }

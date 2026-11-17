@@ -2,6 +2,7 @@ import * as THREE from '../../vendor/three.module.js';
 import { state, player, touchState } from '../core/state.js';
 import { settingsManager } from '../core/settings.js';
 import { sens } from './mouse.js';
+import { setLastInputDevice } from '../ui/hud.js';
 
 export const MAX_TOUCH_DELTA = 240;
 export const MAX_FLICK_SPEED = 2200;
@@ -160,6 +161,7 @@ export function resetTouchInputs({ cancelThrow = true } = {}) {
 }
 
 export function onTouchStart(e) {
+  setLastInputDevice('touch');
   if (e.target && e.target.closest && e.target.closest('.card')) {
     return;
   }

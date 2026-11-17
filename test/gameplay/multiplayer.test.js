@@ -420,7 +420,8 @@ async function runMultiplayerTests() {
   console.log('Teardown results [Host, Guest]:', teardownResults);
   const bothCleaned = teardownResults[0].roomId === null && teardownResults[1].roomId === null &&
                       teardownResults[0].opponent === null && teardownResults[1].opponent === null &&
-                      !teardownResults[0].running && !teardownResults[1].running;
+                      (teardownResults[0].mode === 'lobby' || !teardownResults[0].running) &&
+                      (teardownResults[1].mode === 'lobby' || !teardownResults[1].running);
 
   if (bothCleaned) {
     console.log('>>> TEST 9 PASSED: Complete teardown cleanly cleared room, remote models, and listeners!');

@@ -706,3 +706,95 @@ export function showFloatingNeonCredits(amount, label = '', options = {}) {
 
 export const showFloatingNeonBits = showFloatingNeonCredits;
 
+export const INPUT_GLYPHS = Object.freeze({
+  kbm: Object.freeze({
+    throw: '[LMB]',
+    block: '[RMB]',
+    curve: '[Q/E]',
+    jump: '[SPACE]',
+    dash: '[SHIFT]',
+    pause: '[ESC]',
+    bypass: '[ESC]',
+    look: '[MOUSE]',
+    move: '[WASD]'
+  }),
+  gamepad: Object.freeze({
+    throw: '[RT]',
+    block: '[LT]',
+    curve: '[LB/RB]',
+    jump: '[A]',
+    dash: '[B/X]',
+    pause: '[START]',
+    bypass: '[START]',
+    look: '[R-STICK]',
+    move: '[L-STICK]'
+  }),
+  touch: Object.freeze({
+    throw: '[THROW]',
+    block: '[SHIELD]',
+    curve: '[L/R]',
+    jump: '[JUMP]',
+    dash: '[DASH]',
+    pause: '[PAUSE]',
+    bypass: '[TAP]',
+    look: '[DRAG]',
+    move: '[JOYSTICK]'
+  })
+});
+
+export function setLastInputDevice(device) {
+  if (device !== 'kbm' && device !== 'gamepad' && device !== 'touch') return;
+  if (state.lastInputDevice === device) return;
+  state.lastInputDevice = device;
+  updateAdaptiveHUDPrompts();
+  if (typeof window !== 'undefined' && window.__tronOnInputDeviceChanged) {
+    window.__tronOnInputDeviceChanged(device);
+  }
+}
+
+export function getInputGlyph(action, device = null) {
+  const d = device || state.lastInputDevice || (state.isTouchDevice ? 'touch' : 'kbm');
+  const glyphMap = INPUT_GLYPHS[d] || INPUT_GLYPHS.kbm;
+  return glyphMap[action] || '';
+}
+
+export function formatAdaptivePrompt(template, device = null) {
+  const d = device || state.lastInputDevice || (state.isTouchDevice ? 'touch' : 'kbm');
+  const glyphMap = INPUT_GLYPHS[d] || INPUT_GLYPHS.kbm;
+  return template.replace(/\{(\w+)\}/g, (match, action) => glyphMap[action] || match);
+}
+
+export function updateAdaptiveHUDPrompts() {
+  if (typeof document === 'undefined') return;
+  const device = state.lastInputDevice || (state.isTouchDevice ? 'touch' : 'kbm');
+  const hintEl = getCachedElement('hint');
+  if (hintEl) {
+    if (device === 'gamepad') {
+      hintEl.textContent = 'LEFT STICK move · LB / RB curve disc · RIGHT STICK look/aim · RT throw disc · LT block · A jump / double-jump · B / X dash · START pause';
+    } else if (device === 'touch') {
+      hintEl.textContent = 'DRAG LEFT TO MOVE · DRAG RIGHT OR THROW TO AIM · HOLD THROW TO CHARGE · TAP SHIELD TO PARRY · TAP JUMP / DASH';
+    } else {
+      hintEl.textContent = 'WASD move / strafe · Q / E hook / curve disc · MOUSE look/aim · ARC previews ricochets · LMB throw disc · RMB block · SPACE jump / double-jump · SHIFT dash · P / ESC pause · F1 input monitor';
+    }
+  }
+
+  const bypassEl = getCachedElement('calibrationBypass');
+  if (bypassEl) {
+    if (device === 'gamepad') {
+      bypassEl.textContent = '[START] BYPASS TO LOBBY';
+    } else if (device === 'touch') {
+      bypassEl.textContent = '[TAP] BYPASS TO LOBBY';
+    } else {
+      bypassEl.textContent = '[ESC] BYPASS TO LOBBY';
+    }
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.__tronSetLastInputDevice = setLastInputDevice;
+  window.__tronGetInputGlyph = getInputGlyph;
+  window.__tronFormatAdaptivePrompt = formatAdaptivePrompt;
+  window.__tronUpdateAdaptiveHUDPrompts = updateAdaptiveHUDPrompts;
+}
+
+

@@ -192,8 +192,45 @@ if (typeof window !== 'undefined') {
   document.addEventListener('MSFullscreenChange', onResize);
 }
 
+export function toggleCameraPerspective() {
+  state.cameraPerspective = state.cameraPerspective === 'first_person' ? 'third_person' : 'first_person';
+  if (typeof document !== 'undefined') {
+    const btn = document.getElementById('btnPerspectiveToggle');
+    if (btn) {
+      const isFirst = state.cameraPerspective === 'first_person';
+      btn.innerHTML = `👁<span class="hud-btn-label"> ${isFirst ? '1P' : '3P'}</span>`;
+    }
+  }
+  if (typeof window !== 'undefined' && window.__tronOnPerspectiveChanged) {
+    window.__tronOnPerspectiveChanged(state.cameraPerspective);
+  }
+  return state.cameraPerspective;
+}
+
+if (typeof window !== 'undefined') {
+  window.__tronTogglePerspective = toggleCameraPerspective;
+}
+
 export function updateCamera(dt, snap = false) {
-  const DIST = 9.0, HEIGHT = 4.3, SHOULDER = 1.7;
+  const targetBlend = state.cameraPerspective === 'first_person' ? 0.0 : 1.0;
+  if (snap || dt <= 0) {
+    state.cameraPerspectiveBlend = targetBlend;
+  } else {
+    // 0.2 second smooth transition: rate = dt / 0.2 = dt * 5.0
+    const step = dt * 5.0;
+    if (state.cameraPerspectiveBlend < targetBlend) {
+      state.cameraPerspectiveBlend = Math.min(targetBlend, state.cameraPerspectiveBlend + step);
+    } else if (state.cameraPerspectiveBlend > targetBlend) {
+      state.cameraPerspectiveBlend = Math.max(targetBlend, state.cameraPerspectiveBlend - step);
+    }
+  }
+
+  const blend = state.cameraPerspectiveBlend !== undefined ? state.cameraPerspectiveBlend : 1.0;
+  const DIST = THREE.MathUtils.lerp(0.0, 9.0, blend);
+  const HEIGHT = THREE.MathUtils.lerp(1.8, 4.3, blend);
+  const SHOULDER = THREE.MathUtils.lerp(0.0, 1.7, blend);
+  const PITCH_DROP = THREE.MathUtils.lerp(0.0, 5.0, blend);
+
   const fwd = new THREE.Vector3(-Math.sin(state.player.yaw), 0, -Math.cos(state.player.yaw));
   const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
   const back = new THREE.Vector3(-fwd.x, 0, -fwd.z);
@@ -203,7 +240,7 @@ export function updateCamera(dt, snap = false) {
 
   const camOff = back.clone().multiplyScalar(DIST)
     .addScaledVector(right, SHOULDER)
-    .setY(HEIGHT - 1.8 - state.player.pitch * 5.0);
+    .setY(HEIGHT - 1.8 - state.player.pitch * PITCH_DROP);
 
   // Soft boundary compression along boom to prevent wall clipping and player pass-through
   const maxArena = config.ARENA - 2;
@@ -225,7 +262,7 @@ export function updateCamera(dt, snap = false) {
   desired.x = THREE.MathUtils.clamp(desired.x, -maxArena, maxArena);
   desired.z = THREE.MathUtils.clamp(desired.z, -maxArena, maxArena);
 
-  if (snap) {
+  if (snap || blend === 0.0) {
     camera.position.copy(desired);
   } else {
     camera.position.lerp(desired, 1 - Math.pow(.000000015, dt));

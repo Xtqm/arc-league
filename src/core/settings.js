@@ -71,7 +71,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   touchSensitivity: 1.0,     // 0.5 - 2.0
   touchInertia: 'smooth',    // 'smooth' | 'light' | 'off'
   invertY: false,
-  slowMoEnabled: true
+  slowMoEnabled: true,
+  mouseSensitivity: 1.0,     // 0.1 - 3.0
+  coreLaunchConfirmation: true, // boolean
+  defaultCameraPerspective: 'third_person' // 'third_person' | 'first_person'
 });
 
 export class SettingsManager {
@@ -147,6 +150,14 @@ export class SettingsManager {
     } else if (key === 'particles') {
       normalized = Boolean(value);
       this.settings.graphicsPreset = 'custom';
+    } else if (key === 'mouseSensitivity') {
+      const n = Number(value);
+      normalized = Number.isFinite(n) ? Math.max(0.1, Math.min(3.0, Math.round(n * 100) / 100)) : DEFAULT_SETTINGS.mouseSensitivity;
+    } else if (key === 'coreLaunchConfirmation') {
+      normalized = Boolean(value);
+    } else if (key === 'defaultCameraPerspective') {
+      const s = String(value).toLowerCase();
+      normalized = (s === 'first_person' || s === 'third_person') ? s : DEFAULT_SETTINGS.defaultCameraPerspective;
     } else if (key === 'graphicsPreset') {
       return this.applyPreset(value);
     }
@@ -206,6 +217,10 @@ export class SettingsManager {
       setSFXVolume(value);
     } else if (key === 'invertY') {
       state.invertY = Boolean(value);
+    } else if (key === 'mouseSensitivity') {
+      state.sens = 0.0022 * Number(value);
+    } else if (key === 'defaultCameraPerspective') {
+      state.cameraPerspective = value;
     } else if (key === 'slowMoEnabled') {
       state.slowMoEnabled = Boolean(value);
       if (!state.slowMoEnabled && state.slowMoActive) {
@@ -219,6 +234,10 @@ export class SettingsManager {
     setMasterVolume(this.settings.masterVolume);
     setSFXVolume(this.settings.sfxVolume);
     state.invertY = Boolean(this.settings.invertY);
+    state.sens = 0.0022 * (this.settings.mouseSensitivity !== undefined ? this.settings.mouseSensitivity : 1.0);
+    if (this.settings.defaultCameraPerspective) {
+      state.cameraPerspective = this.settings.defaultCameraPerspective;
+    }
     state.slowMoEnabled = Boolean(this.settings.slowMoEnabled !== undefined ? this.settings.slowMoEnabled : true);
     if (!state.slowMoEnabled && state.slowMoActive) {
       state.slowMoActive = false;

@@ -10,11 +10,11 @@ import { updateFoes, spawnDuelBoss, spawnWave, killFoe } from '../entities/Bot.j
 import { updateDiscs, spawnDisc, applyDamageToTarget } from '../entities/Disc.js';
 import { simulatePath, trajLine, updateThreatPaths, updateTrajectory } from '../physics/trajectory.js';
 import { InputManager, initInput, isLocked, getPlayerCurveIntent, updateCurveAccumulator, resetPlayerCurveIntent, sens, touchMove, updateCurveButtons, resetTouchInputs } from '../input/InputManager.js';
-import { pollGamepads, isButtonPressed, isButtonJustPressed, isButtonJustReleased, GAMEPAD_BUTTONS, updateGamepadUINavigation } from '../input/gamepad.js';
+import { pollGamepads, isButtonPressed, isButtonJustPressed, isButtonJustReleased, GAMEPAD_BUTTONS, updateGamepadUINavigation, getActiveGamepad, getLeftStick, getRightStick } from '../input/gamepad.js';
 import { initNetwork, initMockNetwork, getRoomRef, roomGetDoc } from '../network/firebaseSetup.js';
 import { onClickCreateRoom, onClickConfirmJoin, copyRoomCode, teardownMultiplayer, startMultiplayerDuel } from '../network/roomManager.js';
 import { syncNetworkState, onTileDestabilizedByHost, updateRemotePlayers } from '../network/sync.js';
-import { updateHUD, message, msgEl, updateCrosshair, updateKeyMonitor, updateLockStateBanner, updateControlHintTimer, updateArenaNameplates } from '../ui/hud.js';
+import { updateHUD, message, msgEl, updateCrosshair, updateKeyMonitor, updateLockStateBanner, updateControlHintTimer, updateArenaNameplates, setLastInputDevice } from '../ui/hud.js';
 import { startMode, showModeSelect, bindMenuButtons } from '../ui/menus.js';
 import { pauseGame, resumeGame, restartMatch, checkOrientation, requestFullScreen, exitFullScreen, toggleFullScreen, isFullScreen } from '../ui/modals.js';
 import { SFX, playDeRezSound } from '../audio/sfx.js';
@@ -28,6 +28,11 @@ import { achievementManager } from '../achievements/AchievementManager.js';
 import { updateNotification } from '../ui/components/UpdateNotification.js';
 import { settingsManager } from './settings.js';
 import { updateSteamRichPresence } from './steamTelemetry.js';
+import { storageManager } from './storage/StorageManager.js';
+import { getAudioCtx } from '../audio/synth.js';
+import { tryLock } from '../input/mouse.js';
+import { calibrationMode } from '../modes/CalibrationMode.js';
+import { lobbyCoresManager } from '../ui/lobbyCores.js';
 
 
 export const clock = new THREE.Clock();
@@ -62,8 +67,30 @@ if (typeof window !== 'undefined') {
 export function handleGamepadInput(dt) {
   pollGamepads();
 
+  const gp = getActiveGamepad();
+  if (gp) {
+    let hasGamepadActivity = false;
+    for (let i = 0; i < gp.buttons.length; i++) {
+      if (gp.buttons[i].pressed) { hasGamepadActivity = true; break; }
+    }
+    if (!hasGamepadActivity) {
+      const ls = getLeftStick();
+      const rs = getRightStick();
+      if ((ls && ls.mag > 0.15) || (rs && rs.mag > 0.15)) {
+        hasGamepadActivity = true;
+      }
+    }
+    if (hasGamepadActivity) {
+      setLastInputDevice('gamepad');
+    }
+  }
+
   // Edge-triggered Pause (Options / Start Button 9)
   if (isButtonJustPressed(GAMEPAD_BUTTONS.START)) {
+    if (state.running && state.gameMode === 'calibration') {
+      calibrationMode.bypass();
+      return;
+    }
     if (state.running) {
       const now = performance.now();
       if (now - state.lastPauseToggle > 180) {
@@ -88,6 +115,13 @@ export function handleGamepadInput(dt) {
   if (state.paused || !state.running) {
     updateGamepadUINavigation();
     return;
+  }
+
+  // Edge-triggered perspective toggle on R3 (Right Stick Click)
+  if (isButtonJustPressed(GAMEPAD_BUTTONS.R3)) {
+    if (typeof window !== 'undefined' && window.__tronTogglePerspective) {
+      window.__tronTogglePerspective();
+    }
   }
 
   // Edge-triggered combat actions during active play
@@ -162,6 +196,7 @@ export function update(dt) {
       state.countdownTimer = 0;
       state.fightDisplayTimer = 0.8;
       SFX.fight();
+      SFX.countdownLock();
       if (cdEl) {
         cdEl.style.display = 'block';
         cdEl.textContent = 'FIGHT!';
@@ -181,6 +216,8 @@ export function update(dt) {
           spawnDuelBoss(state.tier || state.duelTier || 1);
         } else if (state.gameMode === 'swarm') {
           spawnWave();
+        } else if (state.gameMode === 'calibration') {
+          // Calibration mode manages its own drones
         }
       }
     }
@@ -204,6 +241,8 @@ export function update(dt) {
   updateRemotePlayers(dt);
   updateFoes(dt);
   updateDiscs(dt);
+  calibrationMode.update(dt);
+  lobbyCoresManager.update(dt);
 
   // Rematch / Wave spawn timer
   if (state.spawnTimer > 0) {
@@ -297,6 +336,68 @@ export function loop() {
 
 export const animate = loop;
 
+export function initBootTerminal() {
+  const bootTerminal = typeof document !== 'undefined' ? document.getElementById('bootTerminal') : null;
+  if (!bootTerminal) return;
+
+  const isCalibrated = storageManager.get('calibration_completed', false);
+  const isBypassed = typeof window !== 'undefined' && (
+    window.__tronSkipBootTerminal ||
+    window.__TRON_HEADLESS__ ||
+    (typeof navigator !== 'undefined' && navigator.webdriver && !window.__tronEnforceBootTerminal)
+  );
+
+  if (isCalibrated || isBypassed) {
+    bootTerminal.style.display = 'none';
+    return;
+  }
+
+  const overlay = document.getElementById('overlay');
+  if (overlay) overlay.style.display = 'none';
+  bootTerminal.style.display = 'flex';
+
+  const onBootClick = (e) => {
+    if (e && e.cancelable) e.preventDefault();
+    tryLock();
+    const ctx = getAudioCtx();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    SFX.terminalBoot();
+    bootTerminal.style.display = 'none';
+
+    if (typeof window !== 'undefined' && window.__tronStartCalibration) {
+      window.__tronStartCalibration();
+    } else {
+      showModeSelect();
+    }
+  };
+
+  bootTerminal.addEventListener('click', onBootClick);
+  bootTerminal.addEventListener('pointerdown', onBootClick);
+}
+
+if (typeof window !== 'undefined') {
+  window.__tronInitBootTerminal = initBootTerminal;
+  window.__tronTriggerBootClick = () => {
+    const bootTerminal = document.getElementById('bootTerminal');
+    if (bootTerminal) {
+      tryLock();
+      const ctx = getAudioCtx();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      SFX.terminalBoot();
+      bootTerminal.style.display = 'none';
+      if (typeof window !== 'undefined' && window.__tronStartCalibration) {
+        window.__tronStartCalibration();
+      } else {
+        showModeSelect();
+      }
+    }
+  };
+}
+
 export function initApp() {
   try {
     const authReady = authManager.init().catch(err => console.warn("Auth initialization error:", err));
@@ -309,6 +410,14 @@ export function initApp() {
     updateNotification.init();
     settingsManager.load();
     updateSteamRichPresence('In Main Menu');
+    initBootTerminal();
+    const bypassBtn = document.getElementById('calibrationBypass');
+    if (bypassBtn) {
+      bypassBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        calibrationMode.bypass();
+      });
+    }
 
     if (state.isTouchDevice && typeof document !== 'undefined' && document.body) {
       document.body.classList.add('touch-device');
@@ -333,6 +442,13 @@ if (typeof document !== 'undefined') {
 
 // Debug hooks for headless puppeteer test harness
 window.__dbg = {
+  cores: () => lobbyCoresManager,
+  calibration: () => calibrationMode,
+  bootTerminal: () => document.getElementById('bootTerminal'),
+  triggerBootClick: () => window.__tronTriggerBootClick && window.__tronTriggerBootClick(),
+  isCalibrated: () => storageManager.get('calibration_completed', false),
+  setCalibrated: (v) => storageManager.set('calibration_completed', Boolean(v), { immediate: true }),
+  initBootTerminal,
   THREE,
   renderer,
   renderCalls: () => renderer ? renderer.info.render.calls : 0,

@@ -421,10 +421,65 @@ export function playGuardCrushSound() {
   } catch (_) {}
 }
 
+export function playTerminalBootSound() {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  try {
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(55, now);
+    osc.frequency.exponentialRampToValueAtTime(120, now + 0.12);
+    osc.frequency.exponentialRampToValueAtTime(32, now + 0.75);
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.45, now + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
+    osc.connect(gain);
+    gain.connect(getSFXDestination(ctx));
+    osc.start(now);
+    osc.stop(now + 0.75);
+  } catch (_) {}
+}
+
+export function playCountdownLockSound() {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  try {
+    const now = ctx.currentTime;
+    const sweep = ctx.createOscillator();
+    const sweepGain = ctx.createGain();
+    sweep.type = 'sawtooth';
+    sweep.frequency.setValueAtTime(220, now);
+    sweep.frequency.exponentialRampToValueAtTime(880, now + 0.18);
+    sweepGain.gain.setValueAtTime(0.001, now);
+    sweepGain.gain.linearRampToValueAtTime(0.25, now + 0.05);
+    sweepGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    sweep.connect(sweepGain);
+    sweepGain.connect(getSFXDestination(ctx));
+    sweep.start(now);
+    sweep.stop(now + 0.18);
+
+    const snap = ctx.createOscillator();
+    const snapGain = ctx.createGain();
+    snap.type = 'triangle';
+    snap.frequency.setValueAtTime(1760, now + 0.15);
+    snap.frequency.exponentialRampToValueAtTime(440, now + 0.32);
+    snapGain.gain.setValueAtTime(0.35, now + 0.15);
+    snapGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+    snap.connect(snapGain);
+    snapGain.connect(getSFXDestination(ctx));
+    snap.start(now + 0.15);
+    snap.stop(now + 0.32);
+  } catch (_) {}
+}
+
 export const SFX = {
   catchDisc: (pitch = 1.0) => playCatchDiscSound(pitch),
   countdownTick: () => playCatchDiscSound(0.65), // pitched down
   fight: () => playCatchDiscSound(1.75), // higher pitch
+  terminalBoot: () => playTerminalBootSound(),
+  countdownLock: () => playCountdownLockSound(),
   terminalOpen: () => playTerminalOpenSound(),
   terminalKey: () => playTerminalKeySound(),
   accessGranted: () => playAccessGrantedSound(),

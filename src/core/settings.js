@@ -70,7 +70,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   particleBudget: 1.0,       // 0.25 - 1.00
   touchSensitivity: 1.0,     // 0.5 - 2.0
   touchInertia: 'smooth',    // 'smooth' | 'light' | 'off'
-  invertY: false
+  invertY: false,
+  slowMoEnabled: true
 });
 
 export class SettingsManager {
@@ -111,6 +112,8 @@ export class SettingsManager {
       const s = String(value).toLowerCase();
       normalized = (s === 'smooth' || s === 'light' || s === 'off') ? s : DEFAULT_SETTINGS.touchInertia;
     } else if (key === 'invertY') {
+      normalized = Boolean(value);
+    } else if (key === 'slowMoEnabled') {
       normalized = Boolean(value);
     } else if (key === 'renderScale') {
       const n = Number(value);
@@ -203,6 +206,12 @@ export class SettingsManager {
       setSFXVolume(value);
     } else if (key === 'invertY') {
       state.invertY = Boolean(value);
+    } else if (key === 'slowMoEnabled') {
+      state.slowMoEnabled = Boolean(value);
+      if (!state.slowMoEnabled && state.slowMoActive) {
+        state.slowMoActive = false;
+        state.timeScale = 1.0;
+      }
     }
   }
 
@@ -210,6 +219,11 @@ export class SettingsManager {
     setMasterVolume(this.settings.masterVolume);
     setSFXVolume(this.settings.sfxVolume);
     state.invertY = Boolean(this.settings.invertY);
+    state.slowMoEnabled = Boolean(this.settings.slowMoEnabled !== undefined ? this.settings.slowMoEnabled : true);
+    if (!state.slowMoEnabled && state.slowMoActive) {
+      state.slowMoActive = false;
+      state.timeScale = 1.0;
+    }
   }
 
   onChange(fn) {

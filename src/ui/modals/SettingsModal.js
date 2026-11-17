@@ -91,6 +91,7 @@ export class SettingsModal {
     const currentTouchSens = Math.round(Number(this.settings.get('touchSensitivity', 1.0)) * 100);
     const currentInertia = String(this.settings.get('touchInertia', 'smooth')).toLowerCase();
     const currentInvertY = Boolean(this.settings.get('invertY', false));
+    const currentSlowMo = Boolean(this.settings.get('slowMoEnabled', true));
 
     el.innerHTML = `
       <div class="card settings-card" style="max-width:540px; text-align:left; padding:28px 32px; border:1px solid rgba(79,242,255,0.6); box-shadow:0 0 35px rgba(79,242,255,0.22); background:rgba(2,16,24,0.95); color:var(--cyan); border-radius:8px;">
@@ -209,6 +210,14 @@ export class SettingsModal {
             <span>INVERT Y-AXIS</span>
             <button id="toggleInvertYBtn" class="btn" style="padding:4px 12px; font-size:11px; cursor:pointer;">${currentInvertY ? 'ENABLED' : 'DISABLED'}</button>
           </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; margin-top:10px;">
+            <div>
+              <span>CINEMATIC SLOW-MO (T KEY)</span>
+              <div style="font-size:9px; color:rgba(79,242,255,0.6); margin-top:2px;">CIRCUIT &amp; SURVIVAL</div>
+            </div>
+            <button id="toggleSlowMoBtn" class="btn" style="padding:4px 12px; font-size:11px; cursor:pointer;">${currentSlowMo ? 'ENABLED' : 'DISABLED'}</button>
+          </div>
         </div>
 
         <!-- Footer Actions -->
@@ -317,6 +326,11 @@ export class SettingsModal {
       if (particlesBtn) {
         particlesBtn.textContent = this.settings.get('particles', true) ? 'HIGH' : 'LOW';
       }
+
+      const slowMoBtn = el.querySelector('#toggleSlowMoBtn');
+      if (slowMoBtn) {
+        slowMoBtn.textContent = this.settings.get('slowMoEnabled', true) ? 'ENABLED' : 'DISABLED';
+      }
     };
 
     presetButtons.forEach((btn) => {
@@ -393,6 +407,15 @@ export class SettingsModal {
           authManager.recordSettings({ invertY: next });
         }
         invertYBtn.textContent = next ? 'ENABLED' : 'DISABLED';
+      };
+    }
+
+    const slowMoBtn = el.querySelector('#toggleSlowMoBtn');
+    if (slowMoBtn) {
+      slowMoBtn.onclick = () => {
+        const next = !this.settings.get('slowMoEnabled', true);
+        this.settings.set('slowMoEnabled', next);
+        slowMoBtn.textContent = next ? 'ENABLED' : 'DISABLED';
       };
     }
   }

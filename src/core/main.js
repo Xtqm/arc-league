@@ -349,6 +349,19 @@ window.__dbg = {
     state.slowMoActive = s < 1.0;
   },
   toggleSlowMo: () => {
+    if (state.slowMoEnabled === false) {
+      if (typeof window !== 'undefined' && typeof window.__arcMessage === 'function') {
+        window.__arcMessage('SLOW-MO DISABLED IN SETTINGS');
+      }
+      return state.timeScale;
+    }
+    const isAllowedMode = (state.gameMode === 'campaign' || state.gameMode === 'swarm');
+    if (!isAllowedMode && state.running) {
+      if (typeof window !== 'undefined' && typeof window.__arcMessage === 'function') {
+        window.__arcMessage('SLOW-MO UNAVAILABLE IN THIS MODE');
+      }
+      return state.timeScale;
+    }
     state.slowMoActive = !state.slowMoActive;
     state.timeScale = state.slowMoActive ? 0.2 : 1.0;
     if (typeof window !== 'undefined' && typeof window.__arcMessage === 'function') {

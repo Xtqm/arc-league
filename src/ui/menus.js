@@ -103,6 +103,8 @@ export function showModeSelect() {
   state.armoryModalOpen = false;
   state.paused = false;
   state.running = false;
+  state.slowMoActive = false;
+  state.timeScale = 1.0;
   resetTouchInputs();
   updateSteamRichPresence('In Main Menu');
   teardownMultiplayer();

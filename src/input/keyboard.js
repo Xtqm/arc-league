@@ -59,6 +59,24 @@ export function onDown(e) {
     if (m) m.style.display = m.style.display === 'block' ? 'none' : 'block';
   }
   if (c === 'KeyT') {
+    // Cinematic Slow-Motion: only active in League Circuit (campaign) and Survival (swarm)
+    if (!state.running) return;
+
+    if (state.slowMoEnabled === false) {
+      if (typeof window !== 'undefined' && typeof window.__arcMessage === 'function') {
+        window.__arcMessage('SLOW-MO DISABLED IN SETTINGS');
+      }
+      return;
+    }
+
+    const isAllowedMode = (state.gameMode === 'campaign' || state.gameMode === 'swarm');
+    if (!isAllowedMode) {
+      if (typeof window !== 'undefined' && typeof window.__arcMessage === 'function') {
+        window.__arcMessage('SLOW-MO UNAVAILABLE IN THIS MODE');
+      }
+      return;
+    }
+
     state.slowMoActive = !state.slowMoActive;
     state.timeScale = state.slowMoActive ? 0.2 : 1.0;
     if (typeof window !== 'undefined' && typeof window.__arcMessage === 'function') {

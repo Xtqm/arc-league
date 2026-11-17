@@ -93,6 +93,7 @@ export const state = {
   msgT: 0,
   timeScale: 1.0,
   slowMoActive: false,
+  slowMoEnabled: true,
   shakeAmt: 0,
   time: 0,
   keys: {},

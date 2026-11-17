@@ -540,6 +540,8 @@ export function damagePlayer(amount, from) {
 }
 
 export function resetRound(spawnX = 0, spawnZ = 14, yaw = Math.PI) {
+  state.slowMoActive = false;
+  state.timeScale = 1.0;
   state.multiplayerPayoutProcessed = false;
   state.player.hp = 100;
   state.player.energy = 100;

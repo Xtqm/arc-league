@@ -474,6 +474,26 @@ export function playCountdownLockSound() {
   } catch (_) {}
 }
 
+export function playHazardWarningSound() {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  try {
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(320, now);
+    osc.frequency.exponentialRampToValueAtTime(440, now + 0.12);
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.2, now + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+    osc.connect(gain);
+    gain.connect(getSFXDestination(ctx));
+    osc.start(now);
+    osc.stop(now + 0.22);
+  } catch (_) {}
+}
+
 export const SFX = {
   catchDisc: (pitch = 1.0) => playCatchDiscSound(pitch),
   countdownTick: () => playCatchDiscSound(0.65), // pitched down
@@ -494,7 +514,8 @@ export const SFX = {
   chargeBlast: (charge = 0) => playChargeBlastSound(charge),
   guardCrush: () => playGuardCrushSound(),
   parrySnap: () => playParrySnapSound(),
-  whiffFizzle: () => playWhiffFizzleSound()
+  whiffFizzle: () => playWhiffFizzleSound(),
+  hazardWarning: () => playHazardWarningSound()
 };
 
 if (typeof window !== 'undefined') {

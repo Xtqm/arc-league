@@ -1,32 +1,18 @@
 schema: spec-driven
 
-# Project context (optional)
-# Add only constraints that should guide OpenSpec artifacts and workflows.
-# Include constraints an agent cannot infer by reading the code.
-# Keep general project documentation and discoverable codebase facts out.
-# Example:
-#   context: |
-#     Designs and tasks must cover Windows, macOS, and Linux
-#     Write all artifacts in Spanish
+context: |
+  Git Branching Workflow:
+  - All changes must be developed in an isolated git branch named `change/<change-name>`.
+  - Never edit or implement code directly on `main`.
+  - When archiving, stage and commit the changes on the branch.
+  - Do NOT merge back to `main` unless the user explicitly asks to merge.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always state what is out of scope
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
-
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+operations:
+  apply:
+    guidance:
+      - Before modifying any files, verify the current branch is `change/<change-name>`. If on `main`, switch to or create the change branch first.
+      - Verify all tests pass on the branch before completing.
+  archive:
+    guidance:
+      - Commit all archived specs, changes, and modified code to the change branch.
+      - Do not merge to `main` without explicit user confirmation.

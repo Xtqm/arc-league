@@ -93,6 +93,7 @@ export const state = {
   gamepadCurveR: false,
   gamepadBlocking: false,
   gameOverReason: '',
+  lastCombatEvent: null,
   msgT: 0,
   timeScale: 1.0,
   slowMoActive: false,
@@ -170,7 +171,8 @@ export const player = {
   vy: 0, 
   grounded: true, 
   jumps: 0, 
-  jumpHeld: false
+  jumpHeld: false,
+  hazardActive: false
 };
 
 state.player = player;

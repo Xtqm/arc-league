@@ -5,7 +5,7 @@ import { scene, camera } from '../graphics/scene.js';
 import { makeDisc, tmp, _discMat, _fwd, _r0, _u0, _uBank, _rBank, _localX, _localY } from '../graphics/materials.js';
 import { RibbonTrail } from '../graphics/RibbonTrail.js';
 import { burst, isParticlesEnabled, trackFadingRibbon } from '../graphics/particles.js';
-import { shake, message } from '../ui/UIManager.js';
+import { shake } from '../ui/UIManager.js';
 import { lineOfSight } from '../physics/collision.js';
 import { getTileAt, triggerTileWarning, pillars, sectorHazardBuilder } from './Arena.js';
 import { onTileDestabilizedByHost } from '../network/sync.js';
@@ -24,7 +24,7 @@ export function applyDamageToTarget(f, dmg, D) {
       f.hp -= dmg;
       burst(D.pos.clone(), config.WHITE, 32, 12);
       shake(0.35);
-      message('GUARD CRUSH // SHIELD PIERCED!');
+      state.lastCombatEvent = 'GUARD_CRUSH';
       if (SFX.guardCrush) SFX.guardCrush();
       playGamepadHaptics({ duration: 180, weakMagnitude: 0.8, strongMagnitude: 1.0 });
       return f.hp <= 0;
@@ -33,7 +33,7 @@ export function applyDamageToTarget(f, dmg, D) {
     if (res.absorbed) {
       burst(D.pos.clone(), f.bossController.primaryColor || config.ORANGE, 24, 8);
       shake(0.2);
-      message(res.invulnerable ? 'EVADED // I-FRAME' : `SHIELD HIT // ${res.remainingShields} REMAINING`);
+      state.lastCombatEvent = res.invulnerable ? 'EVADED' : 'SHIELD_HIT';
       return f.hp <= 0;
     }
   } else {
@@ -355,7 +355,7 @@ export function updateDiscs(dt) {
               burst(f.pos.clone().setY(1.7 + (f.y || 0)), config.WHITE, 28, 11);
               burst(f.pos.clone().setY(1.7 + (f.y || 0)), config.ORANGE, 14, 7);
               shake(0.2);
-              message('RIVAL CAUGHT DISC!');
+              state.lastCombatEvent = 'RIVAL_CAUGHT_DISC';
               f.cd = 0.35 + Math.random() * 0.4;
               if (f.isBoss) f.state = 'ATTACK';
               discCaught = true;
@@ -368,7 +368,7 @@ export function updateDiscs(dt) {
               f.hurt = 0.8;
               f.cd = Math.max(f.cd, 0.8);
               state.score += 150;
-              message('DEFLECTION HIT!');
+              state.lastCombatEvent = 'DEFLECTION_HIT';
               burst(D.pos.clone(), config.WHITE, 32, 12);
               burst(D.pos.clone(), config.ORANGE, 20, 8);
               shake(0.25);
@@ -405,7 +405,7 @@ export function updateDiscs(dt) {
             f.hurt = 0.8;
             f.cd = Math.max(f.cd, 0.8);
             state.score += 150;
-            message('DEFLECTION HIT!');
+            state.lastCombatEvent = 'DEFLECTION_HIT';
             burst(D.pos.clone(), config.WHITE, 32, 12);
             burst(D.pos.clone(), config.ORANGE, 20, 8);
             shake(0.25);
@@ -448,7 +448,7 @@ export function updateDiscs(dt) {
           if (rear && D.bounces > 0) {
             dmg = (baseDmg + D.bounces * 18) * 2.0;
             state.score += 150;
-            message('REAR STRIKE  x2');
+            state.lastCombatEvent = 'REAR_STRIKE';
             burst(D.pos.clone(), config.WHITE, 34, 13);
             shake(.3);
           } else if (rear) {
@@ -587,10 +587,10 @@ export function updateDiscs(dt) {
             }
           }
           D.pos.addScaledVector(toDisc, 1.2);
-          message('DEFLECTED!');
+          state.lastCombatEvent = 'DEFLECTED';
         } else {
           if (isPlayerBlocking && isGuardCrush) {
-            message('GUARD CRUSH // SHIELD BROKEN!');
+            state.lastCombatEvent = 'GUARD_CRUSH';
             shake(0.35);
             burst(D.pos.clone(), config.WHITE, 32, 14);
             state.player.parryTimer = 0;
@@ -605,7 +605,6 @@ export function updateDiscs(dt) {
           const charge = D.charge || 0;
           const baseDmg = (16 + D.bounces * 6) * (1 + charge * 0.8);
           damagePlayer(baseDmg * (behind && D.bounces > 0 ? 1.8 : 1));
-          if (behind && D.bounces > 0) message('HIT FROM BEHIND');
           burst(D.pos.clone(), config.ORANGE, 18, 7);
           shake(0.18 + charge * 0.15);
 

@@ -490,7 +490,7 @@ export function updateDuelFoe(f, dt) {
   if (f.y < -18) {
     burst(f.pos.clone().setY(-18), config.ORANGE, 80, 16);
     state.score += 500;
-    message('PIT ELIMINATION +500');
+    state.lastCombatEvent = 'PIT_ELIMINATION';
     killFoe(f);
     return;
   }
@@ -881,7 +881,7 @@ export function updateFoes(dt) {
     if (f.y < -18) {
       burst(f.pos.clone().setY(-18), config.ORANGE, 70, 16);
       state.score += 200;
-      message('PIT ELIMINATION +200');
+      state.lastCombatEvent = 'PIT_ELIMINATION';
       killFoe(f);
       continue;
     }

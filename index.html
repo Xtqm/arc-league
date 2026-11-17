@@ -294,8 +294,38 @@
     letter-spacing:2px; opacity:.6; }
   #sens { position:absolute; left:50%; top:62%; transform:translateX(-50%); font-size:11px;
     letter-spacing:4px; opacity:0; transition:opacity .25s; }
-  #msg { position:absolute; left:50%; top:24%; transform:translateX(-50%); text-align:center;
-    font-size:38px; letter-spacing:10px; text-shadow:0 0 22px var(--cyan); opacity:0; transition:opacity .3s; z-index:200; }
+  #msg { position:absolute; left:50%; top:15%; transform:translateX(-50%); text-align:center;
+    font-size:clamp(16px, 3vw, 24px); letter-spacing:clamp(4px, 0.8vw, 8px); text-shadow:0 0 16px var(--cyan);
+    opacity:0; transition:opacity .25s ease; pointer-events:none; z-index:200; }
+  #hazardVignette {
+    position: fixed; inset: 0; pointer-events: none; z-index: 90; opacity: 0;
+    box-shadow: inset 0 0 40px 10px rgba(255, 106, 16, 0.6);
+    transition: opacity 0.2s ease;
+  }
+  #hazardVignette.active {
+    opacity: 1;
+    animation: hazardPulse 1.2s infinite alternate ease-in-out;
+  }
+  @keyframes hazardPulse {
+    0% { box-shadow: inset 0 0 30px 8px rgba(255, 106, 16, 0.45); }
+    100% { box-shadow: inset 0 0 55px 16px rgba(255, 106, 16, 0.8); }
+  }
+  #hazardAlert {
+    position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%);
+    font-size: 11px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase;
+    color: #ffb37a; background: rgba(30, 10, 0, 0.75);
+    border: 1px solid rgba(255, 106, 16, 0.6);
+    box-shadow: 0 0 12px rgba(255, 106, 16, 0.35);
+    padding: 4px 12px; border-radius: 4px;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
+    z-index: 95; white-space: nowrap;
+  }
+  #hazardAlert.active {
+    opacity: 1;
+  }
+  body.touch-device #hazardAlert {
+    bottom: calc(max(16px, env(safe-area-inset-bottom)) + 76px);
+  }
   #countdownText {
     position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
     font-size: 88px; font-weight: 800; letter-spacing: 8px; color: #fff;
@@ -2834,11 +2864,13 @@
   <span id="offlineBannerText">[GRID OFFLINE] SYNC BUFFER ACTIVE // PROGRESS SAFEGUARDED</span>
 </div>
 <div id="hud">
+  <div id="hazardVignette" aria-hidden="true"></div>
   <div id="calibrationBypass" style="display:none; position:fixed; top:max(16px, env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:100; padding:6px 14px; background:rgba(0,16,24,0.85); border:1px solid rgba(79,242,255,0.45); border-radius:4px; font-size:11px; letter-spacing:2px; color:var(--cyan); cursor:pointer; pointer-events:auto; text-shadow:0 0 8px var(--cyan); box-shadow:0 0 14px rgba(79,242,255,0.2);">[ESC / START] BYPASS TO LOBBY</div>
   <div id="arenaNameplates"></div>
   <div class="panel" id="tl" style="display:none;" aria-hidden="true">
     <div class="bar" id="discbar"><i style="width:100%"></i></div>
   </div>
+  <div id="hazardAlert" aria-live="assertive">SURFACE COLLAPSE // JUMP OR DASH</div>
   <div id="bottomDock" class="bottom-dock">
     <div class="dock-meter dock-meter-left">
       <div class="dock-label">Program Integrity</div>

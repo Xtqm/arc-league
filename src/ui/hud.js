@@ -48,6 +48,7 @@ let _lastSwHtml = null;
 let _lastSwDisplay = null;
 let _lastNpdHtml = null;
 let _lastNpdDisplay = null;
+let _lastHazardActive = null;
 
 export function resetHUDDirtyState() {
   _lastPlayerHp = -1;
@@ -67,6 +68,7 @@ export function resetHUDDirtyState() {
   _lastSwDisplay = null;
   _lastNpdHtml = null;
   _lastNpdDisplay = null;
+  _lastHazardActive = null;
 }
 
 export function message(t) {
@@ -74,20 +76,9 @@ export function message(t) {
   if (!msg) return;
   msg.textContent = t;
   msg.style.opacity = 1;
-  state.msgT = 2;
-  if (t === 'SURFACE COLLAPSE — JUMP / DASH!') {
-    msg.style.color = 'var(--orange)';
-    msg.style.textShadow = '0 0 28px var(--orange), 0 0 10px #ffffff';
-  } else if (t === 'RIVAL CAUGHT DISC!' || t === 'RIVAL COUNTER-CATCH!') {
-    msg.style.color = 'var(--orange)';
-    msg.style.textShadow = '0 0 28px var(--orange), 0 0 10px #ffffff';
-  } else if (t === 'DEFLECTED!') {
-    msg.style.color = '#ffffff';
-    msg.style.textShadow = '0 0 24px var(--cyan), 0 0 8px #ffffff';
-  } else {
-    msg.style.color = 'var(--cyan)';
-    msg.style.textShadow = '0 0 22px var(--cyan)';
-  }
+  state.msgT = 1.5;
+  msg.style.color = 'var(--cyan)';
+  msg.style.textShadow = '0 0 16px var(--cyan)';
 }
 
 export function getOrCreateNetPingDisplay() {
@@ -114,6 +105,21 @@ export function getOrCreateNetPingDisplay() {
 
 export function updateHUD() {
   if (typeof document === 'undefined') return;
+
+  const hazardActive = !!(state.player && state.player.hazardActive && state.player.alive);
+  if (hazardActive !== _lastHazardActive) {
+    const vignette = getCachedElement('hazardVignette');
+    const alert = getCachedElement('hazardAlert');
+    if (vignette) {
+      if (hazardActive) vignette.classList.add('active');
+      else vignette.classList.remove('active');
+    }
+    if (alert) {
+      if (hazardActive) alert.classList.add('active');
+      else alert.classList.remove('active');
+    }
+    _lastHazardActive = hazardActive;
+  }
 
   if (state.player.hp !== _lastPlayerHp) {
     const hpbFill = getCachedFill('hpbar', 'hpbFill');

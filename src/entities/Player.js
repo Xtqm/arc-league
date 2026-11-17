@@ -6,7 +6,7 @@ import { resolveCircle } from '../physics/collision.js';
 import { burst, emitHoverDashStreak } from '../graphics/particles.js';
 import { playDeRezSound, SFX } from '../audio/sfx.js';
 import { animateProgramKinematics } from '../graphics/materials.js';
-import { message, shake, showGameOver } from '../ui/UIManager.js';
+import { shake, showGameOver } from '../ui/UIManager.js';
 import { getTileAt, rebuildArenaTiles, pillars } from './Arena.js';
 import { spawnDisc, disposeDiscEntity } from './Disc.js';
 import { getPlayerCurveIntent, resetPlayerCurveIntent } from '../input/keyboard.js';
@@ -149,10 +149,14 @@ export function updatePlayer(dt) {
     state.player.grounded = false;
   }
 
-  const inRecoveryZone = state.player.y < 0 && state.player.y > -3.5;
-  if (inRecoveryZone && state.player.vy <= 0) {
-    message('SURFACE COLLAPSE — JUMP / DASH!');
-    state.msgT = Math.max(state.msgT, 0.4);
+  const inRecoveryZone = state.player.y < 0 && state.player.y > -3.5 && !state.player.grounded;
+  if (inRecoveryZone) {
+    if (!state.player.hazardActive && state.player.vy <= 0) {
+      state.player.hazardActive = true;
+      if (SFX.hazardWarning) SFX.hazardWarning();
+    }
+  } else {
+    state.player.hazardActive = false;
   }
 
   // Vertical physics: jump / double-jump / gravity
@@ -168,10 +172,8 @@ export function updatePlayer(dt) {
     state.player.jumpBuf = 0;
     if (inRecoveryZone) {
       state.player.vy = 12.0;
-      message('RECOVERY JUMP');
     } else {
       state.player.vy = state.player.jumps === 0 ? JUMP_V : JUMP_V * 0.88;
-      if (state.player.jumps === 1) message('AIR JUMP');
     }
     state.player.jumps++;
     state.player.grounded = false;
@@ -230,7 +232,6 @@ export function updatePlayer(dt) {
     shake(.18);
     burst(_playerBurstPos.copy(state.player.pos).setY(state.player.y + .4), config.CYAN, 14, 5);
     emitHoverDashStreak(_playerBurstPos.copy(state.player.pos).setY(state.player.y), dashDir, config.CYAN, scene);
-    if (inRecoveryZone) message('RECOVERY DASH');
     playGamepadHaptics({ duration: 110, weakMagnitude: 0.5, strongMagnitude: 0.7 });
   }
   state.touchDashRequested = false;
@@ -625,6 +626,7 @@ export function resetRound(spawnX = 0, spawnZ = 14, yaw = Math.PI) {
   state.player.vy = 0;
   state.player.grounded = true;
   state.player.jumps = 0;
+  state.player.hazardActive = false;
   resetTouchInputs();
   if (state.player.obj) {
     state.player.obj.position.copy(state.player.pos);

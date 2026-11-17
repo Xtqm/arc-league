@@ -571,6 +571,7 @@ window.__dbg = {
     owner: d.owner === 'player' ? 'player' : 'foe'
   })),
   lastMessage: () => (msgEl ? msgEl.textContent : ''),
+  lastCombatEvent: () => state.lastCombatEvent || '',
   score: () => state.score,
   simulatePath: (origin, vel, maxBounces, tMax, step, curve, charge) => simulatePath(origin, vel, maxBounces, tMax, step, curve, charge),
   throwDisc: (charge) => throwDisc(charge),

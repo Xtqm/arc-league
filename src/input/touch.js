@@ -7,7 +7,9 @@ export const MAX_TOUCH_DELTA = 240;
 export const MAX_FLICK_SPEED = 2200;
 export const VEL_EMA_ALPHA = 0.45;
 export const STALE_RELEASE_MS = 80;
-export const THROW_DRAG_SLOP = 4;
+export const THROW_DRAG_SLOP = 10;
+export const TOUCH_CURVE_THRESHOLD = 15;
+export const TOUCH_CURVE_MAX_DIST = 75.0;
 export const PITCH_TOUCH_SCALE = 0.75;
 export const INERTIA_DAMPING = Object.freeze({
   smooth: 10.5,
@@ -79,11 +81,7 @@ export function hideJoystick() {
 }
 
 export function updateCurveButtons() {
-  if (typeof document === 'undefined') return;
-  const btnCurveL = document.getElementById('btnCurveL');
-  const btnCurveR = document.getElementById('btnCurveR');
-  if (btnCurveL) btnCurveL.classList.toggle('active', state.touchCurveL);
-  if (btnCurveR) btnCurveR.classList.toggle('active', state.touchCurveR);
+  // Retired: #btnCurveL and #btnCurveR replaced by Hold-Throw + Swipe-Curve gesture
 }
 
 function nowMs() {
@@ -144,6 +142,7 @@ export function resetTouchInputs({ cancelThrow = true } = {}) {
   if (state.player && !state.keys?.KeyShift) {
     state.player.blocking = false;
   }
+  state.playerCurveIntent = 0.0;
   state.touchCurveL = false;
   state.touchCurveR = false;
   hideJoystick();
@@ -241,21 +240,37 @@ export function onTouchMove(e) {
         touchState.lastThrowY = t.clientY;
         continue;
       }
-      if (!touchState.throwDragActive) {
-        const totalDist = Math.hypot(t.clientX - touchState.throwStartX, t.clientY - touchState.throwStartY);
-        if (totalDist <= THROW_DRAG_SLOP) continue;
-        touchState.throwDragActive = true;
-        const scale = (totalDist - THROW_DRAG_SLOP) / totalDist;
-        const dX = THREE.MathUtils.clamp((t.clientX - touchState.lastThrowX) * scale, -MAX_TOUCH_DELTA, MAX_TOUCH_DELTA);
-        const dY = THREE.MathUtils.clamp((t.clientY - touchState.lastThrowY) * scale, -MAX_TOUCH_DELTA, MAX_TOUCH_DELTA);
+      const totalOffsetX = t.clientX - touchState.throwStartX;
+      const totalOffsetY = t.clientY - touchState.throwStartY;
+      const totalDist = Math.hypot(totalOffsetX, totalOffsetY);
+
+      // Central Deadzone (< 10px): retains camera micro-aim, resets curve to neutral
+      if (totalDist < THROW_DRAG_SLOP) {
+        state.playerCurveIntent = 0.0;
         touchState.lastThrowX = t.clientX;
         touchState.lastThrowY = t.clientY;
-        applyTouchLookDelta(dX, dY);
+        continue;
+      }
+
+      const scale = !touchState.throwDragActive ? (totalDist - THROW_DRAG_SLOP) / totalDist : 1.0;
+      touchState.throwDragActive = true;
+      const dX = THREE.MathUtils.clamp((t.clientX - touchState.lastThrowX) * scale, -MAX_TOUCH_DELTA, MAX_TOUCH_DELTA);
+      const dY = THREE.MathUtils.clamp((t.clientY - touchState.lastThrowY) * scale, -MAX_TOUCH_DELTA, MAX_TOUCH_DELTA);
+      touchState.lastThrowX = t.clientX;
+      touchState.lastThrowY = t.clientY;
+
+      const absX = Math.abs(totalOffsetX);
+      const absY = Math.abs(totalOffsetY);
+
+      if (absX >= TOUCH_CURVE_THRESHOLD && absX > absY * 0.8) {
+        // Horizontal Swipe Curve mode (> 15px threshold & |dX| > |dY| * 0.8)
+        state.playerCurveIntent = THREE.MathUtils.clamp(totalOffsetX / TOUCH_CURVE_MAX_DIST, -1.0, 1.0);
+        // Vertical drag continues to steer camera look
+        applyTouchLookDelta(0, dY);
       } else {
-        const dX = THREE.MathUtils.clamp(t.clientX - touchState.lastThrowX, -MAX_TOUCH_DELTA, MAX_TOUCH_DELTA);
-        const dY = THREE.MathUtils.clamp(t.clientY - touchState.lastThrowY, -MAX_TOUCH_DELTA, MAX_TOUCH_DELTA);
-        touchState.lastThrowX = t.clientX;
-        touchState.lastThrowY = t.clientY;
+        if (absX < TOUCH_CURVE_THRESHOLD) {
+          state.playerCurveIntent = 0.0;
+        }
         applyTouchLookDelta(dX, dY);
       }
     }
@@ -330,8 +345,6 @@ export function bindMobileButtons() {
   const btnJump = document.getElementById('btnJump');
   const btnDash = document.getElementById('btnDash');
   const btnBlock = document.getElementById('btnBlock');
-  const btnCurveL = document.getElementById('btnCurveL');
-  const btnCurveR = document.getElementById('btnCurveR');
 
   if (btnThrow) {
     const startThrow = (e) => {
@@ -431,28 +444,6 @@ export function bindMobileButtons() {
     btnBlock.addEventListener('touchend', endParry, { passive: false });
     btnBlock.addEventListener('touchcancel', endParry, { passive: false });
     btnBlock.addEventListener('click', doParry);
-  }
-
-  if (btnCurveL) {
-    const doCurveL = (e) => {
-      e.preventDefault(); e.stopPropagation();
-      state.touchCurveL = !state.touchCurveL;
-      if (state.touchCurveL) state.touchCurveR = false;
-      updateCurveButtons();
-    };
-    btnCurveL.addEventListener('touchstart', doCurveL, { passive: false });
-    btnCurveL.addEventListener('click', doCurveL);
-  }
-
-  if (btnCurveR) {
-    const doCurveR = (e) => {
-      e.preventDefault(); e.stopPropagation();
-      state.touchCurveR = !state.touchCurveR;
-      if (state.touchCurveR) state.touchCurveL = false;
-      updateCurveButtons();
-    };
-    btnCurveR.addEventListener('touchstart', doCurveR, { passive: false });
-    btnCurveR.addEventListener('click', doCurveR);
   }
 }
 

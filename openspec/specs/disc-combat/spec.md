@@ -38,15 +38,15 @@ The system SHALL compute aim trajectory predictions using the exact same discret
 - **THEN** the projectile launches with a downward velocity vector directed toward the targeted floor point, hover easing is suspended during downward ballistic travel, and the predicted trajectory traces to the contact tile without artificial horizontal glide.
 
 ### Requirement: Magnus Effect Curving
-The system SHALL apply lateral horizontal acceleration perpendicular to disc velocity when curve controls are engaged, conserve kinetic speed strictly within the horizontal plane, scale lateral acceleration inversely with throw charge due to gyroscopic rigidity, and provide active curve bracket feedback.
+The system SHALL apply continuous variable lateral horizontal acceleration perpendicular to disc velocity scaled by dialed curve intent, reduce launch velocity inversely with curve magnitude to trade speed for angle, retain dialed curve in memory upon control release until thrown or cancelled, and provide active dynamic widening curve bracket feedback.
 
 #### Scenario: Dedicated curve throw
-- **WHEN** the player activates hook left (Q, gamepad L1, or touch) or hook right (E, gamepad R1, or touch) during a throw
-- **THEN** the disc accelerates laterally in flight according to the curve input while character movement keys do not impart curve bias.
+- **WHEN** the player engages hook left (KeyQ or gamepad L1) or hook right (KeyE or gamepad R1)
+- **THEN** curve magnitude continuously ramps from 0.0 up to 1.0 over 0.40 seconds in the chosen direction without character movement keys imparting curve bias, and releasing locks the curve in memory until thrown or cancelled.
 
 #### Scenario: Crosshair curve indicator parity
 - **WHEN** curve intent is engaged on keyboard, touch, or gamepad controller
-- **THEN** the crosshair displays the active curve bracket indicator corresponding to the engaged hook direction.
+- **THEN** the crosshair displays the active curve bracket indicator widening outward and pulsing proportionally to the dialed curve magnitude.
 
 #### Scenario: Horizontal speed conservation
 - **WHEN** lateral Magnus acceleration curves a disc in flight
@@ -55,6 +55,10 @@ The system SHALL apply lateral horizontal acceleration perpendicular to disc vel
 #### Scenario: Gyroscopic curvature dampening under charge
 - **WHEN** a disc is thrown with a charge level greater than zero
 - **THEN** lateral Magnus acceleration is scaled down proportionally to the charge ratio, producing a flatter, more linear trajectory than an uncharged throw with the same curve input.
+
+#### Scenario: Inverse curve launch velocity trade-off
+- **WHEN** a disc is launched with a non-zero curve magnitude
+- **THEN** the launch velocity is reduced proportionally to curve magnitude, applying up to a 25% speed penalty at maximum curve (magnitude 1.0) compared to a straight throw at the same throw charge level.
 
 ### Requirement: Surface Ricochets and Restitution
 The system SHALL reflect discs specularly off vertical boundaries and pillars, trigger destructible floor tile degradation on a single contact tile upon floor collision, retain partial curve spin across floor impacts, and rebound the projectile upward away from the floor into stabilized combat cruise elevation.

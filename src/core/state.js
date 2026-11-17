@@ -81,6 +81,8 @@ export const state = {
   touchBlocking: false,
   touchCurveL: false,
   touchCurveR: false,
+  playerCurveIntent: 0.0,
+  curveNeutralizedOnPress: false,
   gamepadConnected: false,
   gamepadActive: false,
   gamepadDeadzone: 0.12,

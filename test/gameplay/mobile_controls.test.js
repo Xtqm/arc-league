@@ -39,8 +39,6 @@ async function runMobileTests() {
       document.getElementById('btnJump'),
       document.getElementById('btnDash'),
       document.getElementById('btnBlock'),
-      document.getElementById('btnCurveL'),
-      document.getElementById('btnCurveR'),
       document.getElementById('duelBtn'),
       document.getElementById('swarmBtn'),
       document.getElementById('resumeBtn')
@@ -445,21 +443,22 @@ async function runMobileTests() {
     dbg.resetTiles();
     dbg.setPlayerPos(0, 0, 0);
 
-    // 1. Test CURVE buttons
-    const btnCurveL = document.getElementById('btnCurveL');
+    // 1. Test CURVE via Hold-Throw + Swipe-Curve
+    const btnThrow = document.getElementById('btnThrow');
     const ch = document.getElementById('crosshair');
 
-    // Trigger touch on curve L
-    btnCurveL.dispatchEvent(new TouchEvent('touchstart', { cancelable: true, bubbles: true }));
+    // Trigger swipe-curve on throw (-80px left swipe reaches full -1.0 curve)
+    const tCurve = new Touch({ identifier: 777, target: btnThrow, clientX: 800, clientY: 500 });
+    btnThrow.dispatchEvent(new TouchEvent('touchstart', { changedTouches: [tCurve], touches: [tCurve], cancelable: true, bubbles: true }));
+    const tMoveCurve = new Touch({ identifier: 777, target: btnThrow, clientX: 720, clientY: 500 });
+    btnThrow.dispatchEvent(new TouchEvent('touchmove', { changedTouches: [tMoveCurve], touches: [tMoveCurve], cancelable: true, bubbles: true }));
     const curveIntentL = dbg.curve();
     dbg.step(0.016);
     const chHasCurveL = ch.classList.contains('curve-l');
 
-    // 2. Test THROW button
+    // 2. Test THROW release
     const initialDiscs = dbg.discs().length;
-    const btnThrow = document.getElementById('btnThrow');
-    btnThrow.dispatchEvent(new TouchEvent('touchstart', { cancelable: true, bubbles: true }));
-    btnThrow.dispatchEvent(new TouchEvent('touchend', { cancelable: true, bubbles: true }));
+    btnThrow.dispatchEvent(new TouchEvent('touchend', { changedTouches: [tMoveCurve], touches: [], cancelable: true, bubbles: true }));
     dbg.step(0.016);
     const discThrown = dbg.discs().length === initialDiscs + 1;
     // Check curve reset after throw
@@ -827,9 +826,9 @@ async function runMobileTests() {
     const throwHeldAcrossSecondary = dbg.state.player.chargingThrow === true && dbg.touchState().throwTouchId === 402;
 
     const pitchBeforeThrowDrag = dbg.pitch();
-    const moveAim = new Touch({ identifier: 402, target: btnThrow, clientX: 700, clientY: 460 });
-    btnThrow.dispatchEvent(new TouchEvent('touchmove', { changedTouches: [moveAim], touches: [moveAim], cancelable: true, bubbles: true }));
-    const dragSteeredAim = dbg.yaw() > 0.4 && dbg.pitch() > pitchBeforeThrowDrag && dbg.touchState().throwDragActive === true;
+    const moveAim = new Touch({ identifier: 402, target: btnThrow, clientX: 800, clientY: 440 });
+    window.dispatchEvent(new TouchEvent('touchmove', { changedTouches: [moveAim], touches: [moveAim], cancelable: true, bubbles: true }));
+    const dragSteeredAim = dbg.pitch() > pitchBeforeThrowDrag && dbg.touchState().throwDragActive === true;
 
     const discBeforeCharged = dbg.discs().length;
     const yawAtThrowRelease = dbg.yaw();

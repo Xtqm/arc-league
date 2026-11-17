@@ -9,7 +9,7 @@ import { animateProgramKinematics } from '../graphics/materials.js';
 import { message, shake, showGameOver } from '../ui/UIManager.js';
 import { getTileAt, rebuildArenaTiles, pillars } from './Arena.js';
 import { spawnDisc, disposeDiscEntity } from './Disc.js';
-import { getPlayerCurveIntent } from '../input/keyboard.js';
+import { getPlayerCurveIntent, resetPlayerCurveIntent } from '../input/keyboard.js';
 import { touchMove, updateCurveButtons, updateTouchMomentum, resetTouchInputs } from '../input/touch.js';
 import { getLeftStick, getRightStick, playGamepadHaptics } from '../input/gamepad.js';
 import { getRoomRef, roomUpdateDoc } from '../network/firebaseSetup.js';
@@ -324,7 +324,7 @@ export function throwDisc(customCharge = null) {
   const rawCurve = getPlayerCurveIntent();
   const gyroDamp = 1.0 - 0.65 * charge;
   const curve = rawCurve * gyroDamp;
-  const speed = 38.0 + 17.0 * charge;
+  const speed = (38.0 + 17.0 * charge) * (1.0 - 0.25 * Math.abs(curve));
   const vel = _throwVel.copy(dir).multiplyScalar(speed);
   spawnDisc(origin, vel, 'player', config.CYAN, curve, charge);
   if (typeof window !== 'undefined') {
@@ -342,6 +342,7 @@ export function throwDisc(customCharge = null) {
     strongMagnitude: 0.4 + 0.5 * charge
   });
 
+  resetPlayerCurveIntent();
   if (state.touchCurveL || state.touchCurveR) {
     state.touchCurveL = false;
     state.touchCurveR = false;

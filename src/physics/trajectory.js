@@ -290,11 +290,13 @@ export function updateTrajectory(aim, dt) {
   }
   const origin = _trajOrigin.copy(chest).addScaledVector(dir, 1.1);
   const charge = state.player.throwCharge || 0;
-  const curve = getPlayerCurveIntent();
-  const speed = 38.0 + 17.0 * charge;
+  const rawCurve = getPlayerCurveIntent();
+  const gyroDamp = 1.0 - 0.65 * charge;
+  const curve = rawCurve * gyroDamp;
+  const speed = (38.0 + 17.0 * charge) * (1.0 - 0.25 * Math.abs(curve));
   const simVel = _trajSimVel.copy(dir).multiplyScalar(speed);
   const arr = trajLine.geometry.attributes.position.array;
-  const sim = simulatePath(origin, simVel, 3, 1.5, 1 / 90, curve, charge, arr);
+  const sim = simulatePath(origin, simVel, 3, 1.5, 1 / 90, rawCurve, charge, arr);
 
   const willHit = !!sim.hitFoe;
   

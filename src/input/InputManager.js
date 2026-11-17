@@ -1,6 +1,17 @@
 import * as THREE from '../../vendor/three.module.js';
 import { state } from '../core/state.js';
-import { initKeyboard, onDown, onUp, codeOf, EAT, getPlayerCurveIntent } from './keyboard.js';
+import {
+  initKeyboard,
+  onDown,
+  onUp,
+  codeOf,
+  EAT,
+  getPlayerCurveIntent,
+  updateCurveAccumulator,
+  resetPlayerCurveIntent,
+  setPlayerCurveIntent,
+  CURVE_RAMP_RATE
+} from './keyboard.js';
 import { initMouse, tryLock, isLocked, lockFailed, setCursor, focusGame, look, showSens, sens } from './mouse.js';
 import { initTouch, touchMove, moveStartPos, lookLastPos, joyBase, joyThumb, R_STICK, showJoystick, updateJoystick, hideJoystick, updateCurveButtons, updateTouchMomentum, resetTouchInputs, bindMobileButtons } from './touch.js';
 import {
@@ -63,6 +74,18 @@ export class InputManager {
     return getPlayerCurveIntent();
   }
 
+  static updateCurveAccumulator(dt) {
+    updateCurveAccumulator(dt);
+  }
+
+  static resetPlayerCurveIntent() {
+    resetPlayerCurveIntent();
+  }
+
+  static setPlayerCurveIntent(val) {
+    setPlayerCurveIntent(val);
+  }
+
   static isLocked() {
     return isLocked();
   }
@@ -95,6 +118,10 @@ export class InputManager {
 export const initInput = InputManager.initInput;
 export {
   getPlayerCurveIntent,
+  updateCurveAccumulator,
+  resetPlayerCurveIntent,
+  setPlayerCurveIntent,
+  CURVE_RAMP_RATE,
   codeOf,
   EAT,
   onDown,

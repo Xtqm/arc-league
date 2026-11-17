@@ -67,15 +67,18 @@ const TEST_DOMAINS = {
   ],
   gameplay: [
     'gameplay/gamepad.test.js',
+    'gameplay/curve_accumulator.test.js',
     'gameplay/mouse_camera_input.test.js',
     'gameplay/timescale_slowmo.test.js',
     'gameplay/camera_combat_stability.test.js',
     'gameplay/physics_and_combat.test.js',
     'gameplay/fullscreen_mode.test.js',
     'gameplay/mobile_controls.test.js',
+    'gameplay/touch_curve.test.js',
     'gameplay/mobile_modal_scrolling.test.js',
     'gameplay/multiplayer.test.js',
     'gameplay/rematch.test.js',
+    'gameplay/variable_curving_e2e.test.js',
     'gameplay/unified_flow.test.js'
   ]
 };

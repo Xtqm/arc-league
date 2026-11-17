@@ -2,12 +2,46 @@ import { state } from '../core/state.js';
 
 export const EAT = ['Space','KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','KeyP','KeyT','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','F1'];
 
+export const CURVE_RAMP_RATE = 2.5; // Ramps 1.0 magnitude over 0.40s (1.0 / 0.40s)
+
+export function resetPlayerCurveIntent() {
+  state.playerCurveIntent = 0.0;
+  state.curveNeutralizedOnPress = false;
+}
+
+export function setPlayerCurveIntent(val) {
+  const num = typeof val === 'number' ? val : 0.0;
+  state.playerCurveIntent = Math.max(-1.0, Math.min(1.0, num));
+  state.curveNeutralizedOnPress = false;
+}
+
+export function updateCurveAccumulator(dt) {
+  if (!dt || dt <= 0) return;
+  state.curveNeutralizedOnPress = false;
+  const q = !!state.keys.KeyQ || !!state.gamepadCurveL;
+  const e = !!state.keys.KeyE || !!state.gamepadCurveR;
+
+  const current = typeof state.playerCurveIntent === 'number' ? state.playerCurveIntent : 0.0;
+  if (q && !e) {
+    state.playerCurveIntent = Math.max(-1.0, current - CURVE_RAMP_RATE * dt);
+  } else if (e && !q) {
+    state.playerCurveIntent = Math.min(1.0, current + CURVE_RAMP_RATE * dt);
+  }
+}
+
 export function getPlayerCurveIntent() {
-  const q = !!state.keys.KeyQ || state.touchCurveL || state.gamepadCurveL;
-  const e = !!state.keys.KeyE || state.touchCurveR || state.gamepadCurveR;
+  if (state.curveNeutralizedOnPress) {
+    return 0.0;
+  }
+  if (typeof state.playerCurveIntent === 'number' && Number.isFinite(state.playerCurveIntent) && state.playerCurveIntent !== 0) {
+    return state.playerCurveIntent;
+  }
+  // Fallback if keys/bumpers are held directly in tests without ticking accumulator
+  const q = !!state.keys.KeyQ || !!state.gamepadCurveL;
+  const e = !!state.keys.KeyE || !!state.gamepadCurveR;
   if (q && !e) return -1.0;
   if (e && !q) return 1.0;
-  return 0.0;
+  return typeof state.playerCurveIntent === 'number' ? state.playerCurveIntent : 0.0;
 }
 
 export function codeOf(e) {
@@ -53,6 +87,20 @@ export function onDown(e) {
 
   if (!c) return;
   state.keys[c] = true;
+
+  // Opposite-key curve neutralization
+  if (c === 'KeyQ') {
+    if ((state.playerCurveIntent || 0) > 0) {
+      state.playerCurveIntent = 0.0;
+      state.curveNeutralizedOnPress = true;
+    }
+  } else if (c === 'KeyE') {
+    if ((state.playerCurveIntent || 0) < 0) {
+      state.playerCurveIntent = 0.0;
+      state.curveNeutralizedOnPress = true;
+    }
+  }
+
   if (EAT.includes(c)) e.preventDefault();
   if (c === 'F1') {
     const m = document.getElementById('keymon');
@@ -107,7 +155,12 @@ export function onDown(e) {
 
 export function onUp(e) {
   const c = codeOf(e);
-  if (c) state.keys[c] = false;
+  if (c) {
+    state.keys[c] = false;
+    if (c === 'KeyQ' || c === 'KeyE') {
+      state.curveNeutralizedOnPress = false;
+    }
+  }
 }
 
 export function initKeyboard(target = window) {

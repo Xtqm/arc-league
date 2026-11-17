@@ -139,13 +139,17 @@ export function getRightStick() {
 
 /**
  * Get Magnus curve intent from bumpers (-1.0 for L1, +1.0 for R1, 0.0 if both or neither).
+ * Returns continuous curve accumulator if non-zero, or bumper state fallback.
  */
 export function getGamepadCurveIntent() {
+  if (typeof state.playerCurveIntent === 'number' && Number.isFinite(state.playerCurveIntent) && state.playerCurveIntent !== 0) {
+    return state.playerCurveIntent;
+  }
   const l1 = isButtonPressed(GAMEPAD_BUTTONS.L1);
   const r1 = isButtonPressed(GAMEPAD_BUTTONS.R1);
-  if (l1 && !r1) return -1.0;
-  if (r1 && !l1) return 1.0;
-  return 0.0;
+  if (l1 && !r1) return typeof state.playerCurveIntent === 'number' && state.playerCurveIntent !== 0 ? state.playerCurveIntent : -1.0;
+  if (r1 && !l1) return typeof state.playerCurveIntent === 'number' && state.playerCurveIntent !== 0 ? state.playerCurveIntent : 1.0;
+  return typeof state.playerCurveIntent === 'number' ? state.playerCurveIntent : 0.0;
 }
 
 /**
@@ -249,6 +253,19 @@ export function pollGamepads(deadzone = state.gamepadDeadzone || DEFAULT_DEADZON
       window.__tronTriggerPlayerParry();
     }
   }
+
+  // Opposite-bumper curve neutralization
+  if (isButtonJustPressed(GAMEPAD_BUTTONS.L1)) {
+    if ((state.playerCurveIntent || 0) > 0) {
+      state.playerCurveIntent = 0.0;
+    }
+  }
+  if (isButtonJustPressed(GAMEPAD_BUTTONS.R1)) {
+    if ((state.playerCurveIntent || 0) < 0) {
+      state.playerCurveIntent = 0.0;
+    }
+  }
+
   state.gamepadCurveL = isButtonPressed(GAMEPAD_BUTTONS.L1);
   state.gamepadCurveR = isButtonPressed(GAMEPAD_BUTTONS.R1);
   state.gamepadBlocking = isButtonPressed(GAMEPAD_BUTTONS.L2);

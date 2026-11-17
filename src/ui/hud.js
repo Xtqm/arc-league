@@ -521,10 +521,17 @@ export function updateCrosshair(aim, traj) {
     ch.classList.toggle('empty', !state.player.hasDisc);
     ch.classList.toggle('parry-active', (state.player.parryTimer || 0) > 0);
     ch.classList.toggle('parry-cooldown', (state.player.shieldCd || 0) > 0);
-    const qHeld = (!!state.keys.KeyQ || state.touchCurveL || state.gamepadCurveL) && !(!!state.keys.KeyE || state.touchCurveR || state.gamepadCurveR);
-    const eHeld = (!!state.keys.KeyE || state.touchCurveR || state.gamepadCurveR) && !(!!state.keys.KeyQ || state.touchCurveL || state.gamepadCurveL);
-    ch.classList.toggle('curve-l', qHeld);
-    ch.classList.toggle('curve-r', eHeld);
+    const curve = getPlayerCurveIntent();
+    const qHeld = ((!!state.keys.KeyQ || state.touchCurveL || state.gamepadCurveL) && !(!!state.keys.KeyE || state.touchCurveR || state.gamepadCurveR)) || curve < -0.01;
+    const eHeld = ((!!state.keys.KeyE || state.touchCurveR || state.gamepadCurveR) && !(!!state.keys.KeyQ || state.touchCurveL || state.gamepadCurveL)) || curve > 0.01;
+
+    let curveMagL = curve < -0.01 ? Math.min(1.0, Math.abs(curve)) : (qHeld ? 1.0 : 0.0);
+    let curveMagR = curve > 0.01 ? Math.min(1.0, Math.abs(curve)) : (eHeld ? 1.0 : 0.0);
+
+    ch.classList.toggle('curve-l', curveMagL > 0);
+    ch.classList.toggle('curve-r', curveMagR > 0);
+    ch.style.setProperty('--curve-mag-l', curveMagL.toFixed(3));
+    ch.style.setProperty('--curve-mag-r', curveMagR.toFixed(3));
 
     const charge = state.player.throwCharge || 0;
     const isCharging = state.player.chargingThrow && charge > 0;

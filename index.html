@@ -275,10 +275,18 @@
     border-top:1.5px solid rgba(79,242,255,.4); border-bottom:1.5px solid rgba(79,242,255,.4); border-radius:4px 0 0 4px; }
   #crosshair .cb-right { right:-15px; border-right-color:var(--cyan);
     border-top:1.5px solid rgba(79,242,255,.4); border-bottom:1.5px solid rgba(79,242,255,.4); border-radius:0 4px 4px 0; }
-  #crosshair.curve-l .cb-left { opacity:1; border-left-color:#fff; border-top-color:#fff; border-bottom-color:#fff;
-    box-shadow:-3px 0 10px var(--cyan), inset -1px 0 6px var(--cyan); transform:translateX(-2px) scale(1.15); }
-  #crosshair.curve-r .cb-right { opacity:1; border-right-color:#fff; border-top-color:#fff; border-bottom-color:#fff;
-    box-shadow:3px 0 10px var(--cyan), inset 1px 0 6px var(--cyan); transform:translateX(2px) scale(1.15); }
+  #crosshair.curve-l .cb-left {
+    opacity: calc(0.5 + 0.5 * var(--curve-mag-l, 1));
+    border-left-color: #fff; border-top-color: #fff; border-bottom-color: #fff;
+    box-shadow: -3px 0 calc(6px + 8px * var(--curve-mag-l, 1)) var(--cyan), inset -1px 0 6px var(--cyan);
+    transform: translateX(calc(var(--curve-mag-l, 1) * -16px)) scale(calc(1.0 + 0.25 * var(--curve-mag-l, 1)));
+  }
+  #crosshair.curve-r .cb-right {
+    opacity: calc(0.5 + 0.5 * var(--curve-mag-r, 1));
+    border-right-color: #fff; border-top-color: #fff; border-bottom-color: #fff;
+    box-shadow: 3px 0 calc(6px + 8px * var(--curve-mag-r, 1)) var(--cyan), inset 1px 0 6px var(--cyan);
+    transform: translateX(calc(var(--curve-mag-r, 1) * 16px)) scale(calc(1.0 + 0.25 * var(--curve-mag-r, 1)));
+  }
   #lockstate { position:absolute; left:50%; bottom:54px; transform:translateX(-50%);
     font-size:10px; letter-spacing:3px; padding:6px 14px; text-transform:uppercase;
     border:1px solid rgba(255,106,16,.5); color:#ffb37a; background:rgba(30,10,0,.5); display:none; }
@@ -764,24 +772,6 @@
   .btn-throw:active, .btn-throw.pressed {
     background: rgba(79, 242, 255, 0.4);
     box-shadow: 0 0 28px rgba(79, 242, 255, 0.8), inset 0 0 18px rgba(255, 255, 255, 0.6);
-  }
-
-  /* CURVE Buttons (L and R) */
-  .btn-curve {
-    width: 46px;
-    height: 46px;
-    font-size: 11px;
-    letter-spacing: 1px;
-    background: rgba(0, 20, 28, 0.6);
-    border: 1.5px solid rgba(79, 242, 255, 0.5);
-    color: var(--cyan);
-    box-shadow: 0 0 10px rgba(79, 242, 255, 0.2), inset 0 0 6px rgba(79, 242, 255, 0.1);
-  }
-  .btn-curve.active {
-    background: rgba(79, 242, 255, 0.35);
-    border-color: #fff;
-    color: #fff;
-    box-shadow: 0 0 18px var(--cyan), inset 0 0 10px var(--cyan);
   }
 
   /* JUMP Button */
@@ -2849,9 +2839,7 @@
   </div>
   <div id="actionCluster">
     <div class="cluster-row top-row">
-      <button id="btnCurveL" class="touch-btn btn-curve" aria-label="Hook Left">↶ L</button>
       <button id="btnThrow" class="touch-btn btn-throw" aria-label="Throw Disc">THROW</button>
-      <button id="btnCurveR" class="touch-btn btn-curve" aria-label="Hook Right">R ↷</button>
     </div>
     <div class="cluster-row bottom-row">
       <button id="btnBlock" class="touch-btn btn-block" aria-label="Block Shield">SHIELD</button>

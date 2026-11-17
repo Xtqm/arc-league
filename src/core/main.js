@@ -9,7 +9,7 @@ import { updatePlayer, throwDisc, startChargingThrow, releaseChargingThrow, trig
 import { updateFoes, spawnDuelBoss, spawnWave, killFoe } from '../entities/Bot.js';
 import { updateDiscs, spawnDisc, applyDamageToTarget } from '../entities/Disc.js';
 import { simulatePath, trajLine, updateThreatPaths, updateTrajectory } from '../physics/trajectory.js';
-import { InputManager, initInput, isLocked, getPlayerCurveIntent, sens, touchMove, updateCurveButtons, resetTouchInputs } from '../input/InputManager.js';
+import { InputManager, initInput, isLocked, getPlayerCurveIntent, updateCurveAccumulator, resetPlayerCurveIntent, sens, touchMove, updateCurveButtons, resetTouchInputs } from '../input/InputManager.js';
 import { pollGamepads, isButtonPressed, isButtonJustPressed, isButtonJustReleased, GAMEPAD_BUTTONS, updateGamepadUINavigation } from '../input/gamepad.js';
 import { initNetwork, initMockNetwork, getRoomRef, roomGetDoc } from '../network/firebaseSetup.js';
 import { onClickCreateRoom, onClickConfirmJoin, copyRoomCode, teardownMultiplayer, startMultiplayerDuel } from '../network/roomManager.js';
@@ -125,6 +125,9 @@ export function handleGamepadInput(dt) {
 export function update(dt) {
   state.time += dt;
   handleGamepadInput(dt);
+  if (state.running && !state.paused) {
+    updateCurveAccumulator(dt);
+  }
 
   // Countdown & Freeze logic
   if (state.countdownTimer > 0) {
@@ -409,12 +412,16 @@ window.__dbg = {
   grounded: () => state.player.grounded,
   jumps: () => state.player.jumps,
   curve: () => getPlayerCurveIntent(),
+  updateCurve: dt => updateCurveAccumulator(dt),
+  resetCurve: () => resetPlayerCurveIntent(),
   traj: () => {
     const a = aimTarget();
     const chest = state.player.pos.clone().setY(1.7 + state.player.y);
     const dir = a.point.clone().sub(chest).normalize();
     const origin = chest.clone().addScaledVector(dir, 1.1);
-    const sim = simulatePath(origin, dir.clone().multiplyScalar(38), 3, 1.5, 1 / 90, getPlayerCurveIntent());
+    const rawCurve = getPlayerCurveIntent();
+    const speed = 38 * (1.0 - 0.25 * Math.abs(rawCurve));
+    const sim = simulatePath(origin, dir.clone().multiplyScalar(speed), 3, 1.5, 1 / 90, rawCurve);
     return {
       points: sim.pts.length,
       bounces: sim.bounceAt.length,

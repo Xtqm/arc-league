@@ -16,6 +16,8 @@ import { cosmeticMaterialEngine, disposeHierarchy } from '../armory/CosmeticMate
 import { duelEconomyBridge } from '../modes/DuelEconomyBridge.js';
 import { playGamepadHaptics } from '../input/gamepad.js';
 import { campaignManager } from '../campaign/CampaignManager.js';
+import { BotCombatBrain } from '../ai/BotCombatBrain.js';
+import { dynamicDirector } from '../ai/DynamicDirector.js';
 
 export function applyDamageToTarget(f, dmg, D) {
   const isGuardCrush = D && (D.charge || 0) >= 0.85;
@@ -326,22 +328,96 @@ export function updateDiscs(dt) {
         const fCenter = tmp.copy(f.pos).setY(1.5 + (f.y || 0));
         const dist = D.pos.distanceTo(fCenter);
 
-        // AI Threat Detection & Catch Window for deflected discs
-        if (D.isDeflected && dist <= 2.2) {
+        // AI Threat Detection, Parry Defense & Catch Window
+        if (dist <= 2.2) {
           const toFoe = fCenter.clone().sub(D.pos);
           const movingToward = D.vel.dot(toFoe) > 0;
+          const rotY = (f.obj && f.obj.rotation) ? f.obj.rotation.y : 0;
           const fwd = new THREE.Vector3(
-            Math.sin(f.obj.rotation.y),
+            Math.sin(rotY),
             0,
-            Math.cos(f.obj.rotation.y)
+            Math.cos(rotY)
           ).normalize();
           const toDisc = D.pos.clone().sub(f.pos).setY(0);
           const toDiscLen = toDisc.length();
-          const facingDot = toDiscLen > 1e-4 ? fwd.dot(toDisc.normalize()) : 1;
+          const facingDot = toDiscLen > 1e-4 ? fwd.dot(toDisc.clone().normalize()) : 1;
           const hasLos = lineOfSight(f.pos, D.pos);
 
-          if (movingToward && facingDot > 0.2 && hasLos) {
-            const isGuardCrush = (D.charge || 0) >= 0.85;
+          const canBotParry = BotCombatBrain.canParry(f);
+          const isGuardCrush = (D.charge || 0) >= 0.85;
+
+          if (canBotParry && movingToward && hasLos && (f.shieldCd || 0) <= 0 && f.alive !== false && (f.hurt || 0) <= 0) {
+            if (facingDot > 0.35) {
+              if (isGuardCrush) {
+                // Guard Crush against bot parry!
+                f.shieldCd = 1.2;
+                f.hurt = 0.8;
+                f.isStaggered = true;
+                f.blocking = false;
+                state.lastCombatEvent = 'GUARD_CRUSH';
+                burst(D.pos.clone(), config.WHITE, 34, 15);
+                burst(f.pos.clone().setY(1.5 + (f.y || 0)), config.ORANGE, 25, 10);
+                shake(0.35);
+                if (SFX && SFX.guardCrush) SFX.guardCrush();
+                playGamepadHaptics({ duration: 180, weakMagnitude: 0.8, strongMagnitude: 1.0 });
+
+                if (!D.hitFoes) D.hitFoes = new Set();
+                D.hitFoes.add(f);
+                const baseDmg = 55 + 40 * (D.charge || 0);
+                const dmg = baseDmg + (D.bounces || 0) * 18;
+                const isDead = applyDamageToTarget(f, dmg, D);
+                if (isDead) {
+                  if (typeof window !== 'undefined' && window.__tronKillFoe) {
+                    window.__tronKillFoe(f);
+                  }
+                } else {
+                  D.vel.multiplyScalar(-0.4);
+                  D.vel.x += (Math.random() - 0.5) * 4;
+                  D.vel.z += (Math.random() - 0.5) * 4;
+                  D.vel.y = Math.random() * 2 + 1;
+                  D.returning = true;
+                }
+                discCaught = true;
+                break;
+              } else {
+                // Successful Bot Parry! Deflect with 1.25x speed escalation
+                D.originalOwner = (D.owner !== 'player') ? D.owner : (D.originalOwner || 'player');
+                D.owner = f;
+                D.color = config.ORANGE;
+                D.isDeflected = true;
+                D.returning = false;
+                D.bounces = 0;
+                D.deflectBounces = 0;
+                D.rallyHits = (D.rallyHits || 0) + 1;
+                D.deflectTime = 0;
+                D.t = 0;
+                D.curve = 0;
+                if (D.hitFoes) D.hitFoes.clear();
+                setDiscVisualColor(D, config.ORANGE, 0xff9900);
+
+                const incomingSpd = D.vel.length();
+                const spd = Math.max(36, incomingSpd * 1.25);
+                const pTarget = (state.player && state.player.pos) ? state.player.pos : { x: 0, y: 0, z: 0 };
+                const pTargetY = (state.player && state.player.y) ? state.player.y : 0;
+                const dirToPlayer = new THREE.Vector3(pTarget.x, 1.5 + pTargetY, pTarget.z).sub(D.pos).normalize();
+                D.vel.copy(dirToPlayer).multiplyScalar(spd);
+                D.pos.addScaledVector(toDiscLen > 1e-4 ? toDisc.normalize() : fwd, 0.8);
+
+                f.shieldCd = 0.8;
+                f.blocking = true;
+                f.parryActive = true;
+                state.lastCombatEvent = 'DEFLECTED';
+                burst(D.pos.clone(), config.WHITE, 30, 12);
+                burst(D.pos.clone(), config.ORANGE, 20, 8);
+                shake(0.25);
+                discCaught = true;
+                break;
+              }
+            } else {
+              // Outside frontal cone (struck side or rear) -> trigger 0.8s whiff window!
+              f.shieldCd = 0.8;
+            }
+          } else if (D.isDeflected && movingToward && facingDot > 0.2 && hasLos) {
             const catchChance = isGuardCrush ? 0 : (((state.gameMode === 'duel' || state.gameMode === 'duel_ai') && f.isBoss)
               ? Math.min(0.85, 0.75 + ((state.tier || state.duelTier) - 1) * 0.03)
               : 0.35);
@@ -546,6 +622,7 @@ export function updateDiscs(dt) {
           D.returning = false;
           D.bounces = 0;
           D.deflectBounces = 0;
+          D.rallyHits = (D.rallyHits || 0) + 1;
           D.deflectTime = 0;
           D.t = 0;
           D.curve = 0;
@@ -588,6 +665,9 @@ export function updateDiscs(dt) {
           }
           D.pos.addScaledVector(toDisc, 1.2);
           state.lastCombatEvent = 'DEFLECTED';
+          if (typeof dynamicDirector !== 'undefined' && dynamicDirector.recordParry) {
+            dynamicDirector.recordParry();
+          }
         } else {
           if (isPlayerBlocking && isGuardCrush) {
             state.lastCombatEvent = 'GUARD_CRUSH';

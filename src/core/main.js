@@ -33,6 +33,7 @@ import { getAudioCtx } from '../audio/synth.js';
 import { tryLock } from '../input/mouse.js';
 import { calibrationMode } from '../modes/CalibrationMode.js';
 import { lobbyCoresManager } from '../ui/lobbyCores.js';
+import { dynamicDirector } from '../ai/DynamicDirector.js';
 
 
 export const clock = new THREE.Clock();
@@ -243,6 +244,9 @@ export function update(dt) {
   updateDiscs(dt);
   calibrationMode.update(dt);
   lobbyCoresManager.update(dt);
+  if (state.gameMode === 'swarm' && state.isHardcoreSurvival) {
+    dynamicDirector.update(dt);
+  }
 
   // Rematch / Wave spawn timer
   if (state.spawnTimer > 0) {

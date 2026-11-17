@@ -18,6 +18,8 @@ import { syncGameStateRichPresence } from '../core/steamTelemetry.js';
 import { campaignManager } from '../campaign/CampaignManager.js';
 import { campaignRegistry } from '../campaign/CampaignRegistry.js';
 import { trialDebriefModal } from '../ui/campaign/TrialDebriefModal.js';
+import { BotCombatBrain } from '../ai/BotCombatBrain.js';
+import { dynamicDirector } from '../ai/DynamicDirector.js';
 export { ArbiterBossController, ARBITER_CONFIGS };
 
 export function getPillarCoverPoint(pillar, playerPos, out) {
@@ -150,29 +152,121 @@ export function spawnArbiterBoss(levelId = 'level_01_06') {
   return boss;
 }
 
+export function promoteToCommander(bot) {
+  if (!bot) return null;
+  bot.isCommander = true;
+  bot.maxHp = Math.round(Math.max(bot.maxHp || 100, (bot.hp || 100) * 1.5));
+  bot.hp = bot.maxHp;
+  bot.difficultyLevel = Math.max(bot.difficultyLevel || 1, 7);
+  bot.canParry = true;
+  bot.canCharge = true;
+  bot.commandTimer = 3.5;
+  bot.disarrayTimer = 0;
+
+  if (bot.obj) {
+    if (!bot.beaconLight) {
+      const beaconLight = new THREE.PointLight(0xff0055, 3.2, 14);
+      beaconLight.position.y = 2.3;
+      bot.obj.add(beaconLight);
+      bot.beaconLight = beaconLight;
+
+      const beaconMesh = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.22, 0),
+        new THREE.MeshBasicMaterial({ color: 0xff0055, wireframe: true })
+      );
+      beaconMesh.position.y = 2.3;
+      bot.obj.add(beaconMesh);
+      bot.beaconMesh = beaconMesh;
+    }
+    burst(bot.pos.clone().setY(2.2 + (bot.y || 0)), 0xff0055, 45, 12);
+  }
+  return bot;
+}
+
+export function electNewCommander() {
+  const candidates = state.foes.filter(m => m.alive && m.hp > 0 && !m.isCommander);
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.hp - a.hp);
+  const elected = candidates[0];
+  promoteToCommander(elected);
+  message('NEW COMMANDER DESIGNATED');
+  return elected;
+}
+
 export function spawnWave() {
   const n = Math.min(2 + Math.floor(state.wave * 0.8), 8);
+  const hasCommander = state.wave >= 4 || !!state.isHardcoreSurvival;
+
   for (let i = 0; i < n; i++) {
+    const isCommander = hasCommander && (i === 0);
     const a = Math.random() * Math.PI * 2, r = 24 + Math.random() * 14;
-    const obj = makeProgram(config.ORANGE, { archetype: 'drone' });
+    const color = isCommander ? 0xff0055 : config.ORANGE;
+    const archetype = isCommander ? 'sentinel' : 'drone';
+    const obj = makeProgram(color, { archetype });
+
+    let beaconLight = null;
+    let beaconMesh = null;
+    if (isCommander) {
+      beaconLight = new THREE.PointLight(0xff0055, 3.2, 14);
+      beaconLight.position.y = 2.3;
+      obj.add(beaconLight);
+
+      beaconMesh = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.22, 0),
+        new THREE.MeshBasicMaterial({ color: 0xff0055, wireframe: true })
+      );
+      beaconMesh.position.y = 2.3;
+      obj.add(beaconMesh);
+    }
     scene.add(obj);
+
+    const baseHp = 100 + state.wave * 12;
+    const hp = isCommander ? Math.round(baseHp * 1.6) : baseHp;
+    let diff;
+    if (state.isHardcoreSurvival) {
+      const baseDiff = isCommander
+        ? Math.max(6, Math.min(10, 6 + Math.floor(state.wave / 2)))
+        : Math.max(5, Math.min(10, 5 + Math.floor(state.wave / 3)));
+      const bonus = (typeof dynamicDirector !== 'undefined' && dynamicDirector.getDifficultyModifier)
+        ? dynamicDirector.getDifficultyModifier()
+        : 0;
+      diff = Math.min(10, baseDiff + bonus);
+    } else {
+      diff = isCommander
+        ? Math.max(5, Math.min(10, 4 + Math.floor(state.wave / 2)))
+        : Math.max(1, Math.min(8, 1 + Math.floor(state.wave / 3)));
+    }
+    const skill = state.isHardcoreSurvival
+      ? Math.min(0.75 + state.wave * 0.05, 0.98)
+      : Math.min(0.3 + state.wave * 0.08, 0.95);
+
     state.foes.push({
       obj,
       pos: new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r),
       vel: new THREE.Vector3(),
-      hp: 100 + state.wave * 12,
+      hp,
+      maxHp: hp,
       hasDisc: true,
       cd: 1.4 + Math.random() * 2.2,
       strafe: Math.random() < .5 ? 1 : -1,
       strafeT: 1 + Math.random() * 2,
       hurt: 0,
-      skill: Math.min(.3 + state.wave * .08, .95),
+      skill,
+      difficultyLevel: diff,
+      isCommander,
+      commandTimer: isCommander ? 3.5 : 0,
+      beaconLight,
+      beaconMesh,
+      disarrayTimer: 0,
+      pincerActive: 0,
+      tacticalOrder: null,
       y: 0,
       vy: 0,
       grounded: true,
       jumps: 0,
       dashCd: 0,
-      didRecover: false
+      didRecover: false,
+      alive: true
     });
   }
 }
@@ -387,6 +481,45 @@ export function killFoe(f) {
 
   if (state.gameMode === 'swarm') {
     state.score += 100 + state.wave * 10;
+
+    if (f && f.isCommander) {
+      if (state.wave >= 4 && state.wave <= 7) {
+        // Tier 1 (Waves 4-7): Instant Swarm Collapse!
+        message('COMMANDER DEFEATED - SWARM COLLAPSED');
+        state.lastCombatEvent = 'SWARM_COLLAPSE';
+        const peripherals = state.foes.filter(m => m !== f);
+        for (const p of peripherals) {
+          p.alive = false;
+          p.hp = 0;
+          burst(p.pos.clone().setY(1.5 + (p.y || 0)), config.CYAN, 40, 10);
+          if (p.obj) scene.remove(p.obj);
+        }
+        state.foes = [];
+      } else if (state.wave >= 8 && state.wave <= 12) {
+        // Tier 2 (Waves 8-12): 2.5s Glitch Disarray
+        message('COMMANDER NEUTRALIZED - NETWORK DISARRAY');
+        state.lastCombatEvent = 'SWARM_DISARRAY';
+        for (const minion of state.foes) {
+          if (minion !== f && minion.alive) {
+            minion.disarrayTimer = 2.5;
+            minion.hurt = 0.5;
+            burst(minion.pos.clone().setY(2.0 + (minion.y || 0)), config.ORANGE, 15, 6);
+          }
+        }
+      } else if (state.wave >= 13) {
+        // Tier 3 (Waves 13+): Disarray followed by Automated Commander Re-election
+        message('COMMANDER NEUTRALIZED - ELECTING NEW LEADER');
+        state.lastCombatEvent = 'COMMANDER_ELECTION';
+        for (const minion of state.foes) {
+          if (minion !== f && minion.alive) {
+            minion.disarrayTimer = 2.0;
+            minion.hurt = 0.4;
+            burst(minion.pos.clone().setY(2.0 + (minion.y || 0)), config.ORANGE, 15, 6);
+          }
+        }
+      }
+    }
+
     if (state.foes.length === 0) {
       const completedWave = state.wave;
       swarmEconomyBridge.processWaveCompletion(completedWave);
@@ -427,6 +560,11 @@ if (typeof window !== 'undefined') {
 }
 
 export function updateDuelFoe(f, dt) {
+  if (f.hurt > 0 && f.isChargingThrow) {
+    f.isChargingThrow = false;
+    f.throwCharge = 0;
+    f.chargeDuration = 0;
+  }
   const GRAV_FOE = 30;
   const prevY = f.y;
   const wasGrounded = f.grounded;
@@ -755,21 +893,76 @@ export function updateDuelFoe(f, dt) {
       _duelWant.add({ x: sideX * 1.1, y: 0, z: sideZ * 1.1 });
       if (_duelWant.lengthSq() > 0) _duelWant.normalize();
 
+      if (f.isChargingThrow) {
+        if (f.hurt > 0) {
+          f.isChargingThrow = false;
+          f.throwCharge = 0;
+          f.chargeDuration = 0;
+        } else {
+          f.chargeDuration = (f.chargeDuration || 0) + dt;
+          f.throwCharge = Math.min(1.0, f.chargeDuration / (f.targetChargeTime || 0.85));
+          if (f.throwCharge >= 0.85 || f.chargeDuration >= (f.maxChargeDuration || 1.0)) {
+            const charge = f.throwCharge;
+            f.isChargingThrow = false;
+            f.throwCharge = 0;
+            f.chargeDuration = 0;
+
+            const leadX = state.player.pos.x + state.player.vel.x * (0.28 * f.skill);
+            const leadZ = state.player.pos.z + state.player.vel.z * (0.28 * f.skill);
+            _duelAimDir.set(leadX - f.pos.x, 0, leadZ - f.pos.z);
+            _duelAimDir.x += (Math.random() - .5) * (1 - f.skill) * .18;
+            _duelAimDir.z += (Math.random() - .5) * (1 - f.skill) * .18;
+            _duelAimDir.normalize();
+
+            const curveDir = -f.peekDir;
+            const curvePower = (Math.random() < 0.75) ? curveDir * (0.85 + Math.random() * 0.4) : 0;
+            _duelOrigin.copy(f.pos).setY(1.7 + f.y).addScaledVector(_duelAimDir, 1.2);
+
+            const launchSpd = (28 + (state.tier || state.duelTier || 1) * 2) * (1.0 + charge * 0.35);
+            spawnDisc(_duelOrigin.clone(), _duelAimDir.clone().multiplyScalar(launchSpd), f, config.ORANGE, curvePower, charge);
+
+            f.hasDisc = false;
+            f.state = 'SEEK_COVER';
+            f.cd = (f.baseCd !== undefined ? f.baseCd : 0.8) + Math.random() * 0.4;
+            f.coverPillar = null;
+            f.peekDir = -f.peekDir;
+          }
+        }
+      }
+
       f.cd -= dt;
-      if (f.cd <= 0 && f.hasDisc && state.player.alive) {
-        if (f.grounded && Math.random() < (f.jumpChance || 0.35) && pDist >= 8) {
+      if (f.cd <= 0 && f.hasDisc && state.player.alive && !f.isChargingThrow) {
+        if (BotCombatBrain.canCharge(f) && (state.player.blocking || (state.player.parryTimer || 0) > 0 || Math.random() < 0.5)) {
+          f.isChargingThrow = true;
+          f.throwCharge = 0;
+          f.chargeDuration = 0;
+          f.targetChargeTime = 0.85 + Math.random() * 0.15;
+          f.maxChargeDuration = 1.0;
+        } else if (f.grounded && Math.random() < (f.jumpChance || 0.35) && pDist >= 8) {
           f.vy = 11.5;
           f.grounded = false;
           f.jumps = 1;
           f.aerialThrow = true;
           burst(tmp.copy(f.pos).setY(f.y + 0.2), config.ORANGE, 14, 5);
         } else {
-          const leadX = state.player.pos.x + state.player.vel.x * (0.28 * f.skill);
-          const leadZ = state.player.pos.z + state.player.vel.z * (0.28 * f.skill);
-          _duelAimDir.set(leadX - f.pos.x, 0, leadZ - f.pos.z);
-          _duelAimDir.x += (Math.random() - .5) * (1 - f.skill) * .18;
-          _duelAimDir.z += (Math.random() - .5) * (1 - f.skill) * .18;
-          _duelAimDir.normalize();
+          let usedBank = false;
+          if (!see && BotCombatBrain.canBank(f)) {
+            const bankOut = {};
+            BotCombatBrain.calculateBankShot(f.pos, state.player.pos, bankOut, { obstacles: pillars });
+            if (bankOut.valid) {
+              _duelAimDir.copy(bankOut.aimDir);
+              usedBank = true;
+            }
+          }
+
+          if (!usedBank) {
+            const leadX = state.player.pos.x + state.player.vel.x * (0.28 * f.skill);
+            const leadZ = state.player.pos.z + state.player.vel.z * (0.28 * f.skill);
+            _duelAimDir.set(leadX - f.pos.x, 0, leadZ - f.pos.z);
+            _duelAimDir.x += (Math.random() - .5) * (1 - f.skill) * .18;
+            _duelAimDir.z += (Math.random() - .5) * (1 - f.skill) * .18;
+            _duelAimDir.normalize();
+          }
 
           const curveDir = -f.peekDir;
           const curvePower = (Math.random() < 0.75) ? curveDir * (0.85 + Math.random() * 0.4) : 0;
@@ -798,14 +991,18 @@ export function updateDuelFoe(f, dt) {
   f.obj.position.y = f.y + (f.grounded ? Math.sin(state.time * 11) * 0.05 * Math.min(f.vel.length() / 8, 1) : 0);
   f.obj.rotation.x = THREE.MathUtils.clamp(-f.vy * 0.018, -0.22, 0.22);
   f.obj.userData.backDisc.visible = f.hasDisc;
+  if (f.shieldCd > 0) f.shieldCd -= dt;
+  if (f.shieldCd <= 0) { f.blocking = false; f.parryActive = false; }
   animateProgramKinematics(f.obj, dt, {
     speed: f.vel.length(),
     vy: f.vy || 0,
     grounded: f.grounded,
-    blocking: false,
+    blocking: !!(f.blocking && f.shieldCd > 0.2),
     hurt: f.hurt || 0,
     time: state.time,
-    hasDisc: f.hasDisc
+    hasDisc: f.hasDisc,
+    chargingThrow: !!f.isChargingThrow,
+    throwCharge: f.throwCharge || 0
   });
   if (f.hurt > 0) { f.hurt -= dt; f.obj.position.x += Math.sin(state.time * 60) * 0.05; }
 }
@@ -815,8 +1012,14 @@ export function updateFoes(dt) {
 
   for (let fi = state.foes.length - 1; fi >= 0; fi--) {
     const f = state.foes[fi];
+    if (f.hurt > 0 && f.isChargingThrow) {
+      f.isChargingThrow = false;
+      f.throwCharge = 0;
+      f.chargeDuration = 0;
+    }
     if (f.isArbiter && f.bossController) {
       f.bossController.update(dt, state.player, state.discs, spawnDisc);
+      continue;
     }
     if (((state.gameMode === 'duel' || state.gameMode === 'duel_ai') && f.isBoss) || (state.gameMode === 'campaign' && f.isBoss)) {
       updateDuelFoe(f, dt);
@@ -892,15 +1095,88 @@ export function updateFoes(dt) {
     toP.normalize();
     const see = lineOfSight(f.pos, state.player.pos) && state.player.alive;
 
-    f.strafeT -= dt;
-    if (f.strafeT <= 0) { f.strafe *= -1; f.strafeT = .9 + Math.random() * 1.8; }
+    if (f.isCommander && f.alive) {
+      f.commandTimer = (f.commandTimer || 3.5) - dt;
+      if (f.commandTimer <= 0 && state.player.alive) {
+        f.commandTimer = 3.5 + Math.random() * 1.5;
+        let order;
+        if (state.isHardcoreSurvival && dynamicDirector && dynamicDirector.isCounteringParry()) {
+          order = 'CHARGE';
+        } else if (state.isHardcoreSurvival && dynamicDirector && dynamicDirector.isCounteringCamping()) {
+          order = 'PINCER';
+        } else {
+          order = Math.random() < 0.5 ? 'PINCER' : 'STAGGER';
+        }
+        const wingmen = state.foes.filter(m => m !== f && m.alive && (m.disarrayTimer || 0) <= 0);
+        if (order === 'CHARGE') {
+          wingmen.forEach(m => {
+            if (BotCombatBrain.canCharge(m) && m.hasDisc && !m.isChargingThrow) {
+              m.isChargingThrow = true;
+              m.throwCharge = 0;
+              m.chargeDuration = 0;
+              m.targetChargeTime = 0.85;
+              m.maxChargeDuration = 1.0;
+            }
+          });
+          state.lastSquadOrder = 'CHARGE';
+          burst(f.pos.clone().setY(2.2 + (f.y || 0)), 0xff00ff, 20, 6);
+        } else if (order === 'PINCER') {
+          if (wingmen.length >= 2) {
+            wingmen[0].strafe = -1;
+            wingmen[0].strafeRate = 2.2;
+            wingmen[0].pincerActive = 3.5;
+            wingmen[0].tacticalOrder = 'PINCER';
+            wingmen[1].strafe = 1;
+            wingmen[1].strafeRate = 2.2;
+            wingmen[1].pincerActive = 3.5;
+            wingmen[1].tacticalOrder = 'PINCER';
+          } else if (wingmen.length === 1) {
+            wingmen[0].strafeRate = 2.2;
+            wingmen[0].pincerActive = 3.5;
+            wingmen[0].tacticalOrder = 'PINCER';
+          }
+          state.lastSquadOrder = 'PINCER';
+          burst(f.pos.clone().setY(2.2 + (f.y || 0)), 0xff0055, 18, 6);
+        } else {
+          wingmen.forEach((m, idx) => {
+            m.tacticalOrder = 'STAGGER';
+            m.cd = 0.35 * (idx + 1);
+          });
+          state.lastSquadOrder = 'STAGGER';
+          burst(f.pos.clone().setY(2.2 + (f.y || 0)), 0xffaa00, 16, 5);
+        }
+      }
+    }
+
+    if (f.disarrayTimer > 0) {
+      f.disarrayTimer -= dt;
+      f.obj.position.x += Math.sin(state.time * 40) * 0.06;
+      if (f.disarrayTimer <= 0) {
+        f.tacticalOrder = null;
+        if (state.wave >= 13 && !state.foes.some(x => x.isCommander && x.alive)) {
+          electNewCommander();
+        }
+      }
+    }
+
+    if (f.pincerActive > 0) {
+      f.pincerActive -= dt;
+      if (f.pincerActive <= 0) {
+        f.strafeRate = 1.0;
+        f.tacticalOrder = null;
+      }
+    }
+
+    f.strafeT -= dt * (f.strafeRate || 1.0);
+    if (f.strafeT <= 0) { f.strafe *= -1; f.strafeT = (.9 + Math.random() * 1.8) / (f.strafeRate || 1.0); }
     const side = new THREE.Vector3(toP.z, 0, -toP.x).multiplyScalar(f.strafe);
 
     const want = new THREE.Vector3();
     const ideal = 15;
     if (dist > ideal + 3) want.add(toP);
     else if (dist < ideal - 5) want.sub(toP);
-    want.addScaledVector(side, .85);
+    const strafeMult = f.pincerActive > 0 ? 1.6 : 0.85;
+    want.addScaledVector(side, strafeMult);
     if (!see) want.add(toP).multiplyScalar(1.2);
 
     for (const o of state.foes) if (o !== f) {
@@ -911,7 +1187,7 @@ export function updateFoes(dt) {
     }
     if (want.lengthSq() > 0) want.normalize();
 
-    const moveSpeed = 8.2 + state.wave * .25;
+    const moveSpeed = (8.2 + state.wave * .25) * (f.disarrayTimer > 0 ? 0.5 : 1.0);
     const inVoid = !isSTileSolid && f.y < 0;
     const lerpRate = inVoid ? 0 : (1 - Math.pow(.002, dt));
     f.vel.lerp(want.multiplyScalar(moveSpeed), lerpRate);
@@ -948,29 +1224,91 @@ export function updateFoes(dt) {
       const turnRate = 6 * dt;
       f.obj.rotation.y += THREE.MathUtils.clamp(((face - f.obj.rotation.y + Math.PI * 3) % (Math.PI * 2)) - Math.PI, -turnRate, turnRate);
     }
+    if (f.shieldCd > 0) f.shieldCd -= dt;
+    if (f.shieldCd <= 0) { f.blocking = false; f.parryActive = false; }
     f.obj.userData.backDisc.visible = f.hasDisc;
     animateProgramKinematics(f.obj, dt, {
       speed: f.vel.length(),
       vy: f.vy || 0,
       grounded: f.grounded,
-      blocking: false,
+      blocking: !!(f.blocking && f.shieldCd > 0.2),
       hurt: f.hurt || 0,
       time: state.time,
-      hasDisc: f.hasDisc
+      hasDisc: f.hasDisc,
+      chargingThrow: !!f.isChargingThrow,
+      throwCharge: f.throwCharge || 0
     });
     if (f.hurt > 0) { f.hurt -= dt; f.obj.position.x += Math.sin(state.time * 60) * .05; }
 
+    if (f.isChargingThrow) {
+      if (f.hurt > 0) {
+        f.isChargingThrow = false;
+        f.throwCharge = 0;
+        f.chargeDuration = 0;
+      } else {
+        f.chargeDuration = (f.chargeDuration || 0) + dt;
+        f.throwCharge = Math.min(1.0, f.chargeDuration / (f.targetChargeTime || 0.85));
+        if (f.throwCharge >= 0.85 || f.chargeDuration >= (f.maxChargeDuration || 1.0)) {
+          const charge = f.throwCharge;
+          f.isChargingThrow = false;
+          f.throwCharge = 0;
+          f.chargeDuration = 0;
+          f.hasDisc = false;
+          f.cd = Math.max(1.1, 3.4 - state.wave * .18) + Math.random();
+
+          const lead = state.player.pos.clone().addScaledVector(state.player.vel, 0.22 * f.skill);
+          const dir = lead.sub(f.pos).setY(0).normalize();
+          dir.x += (Math.random() - .5) * (1 - f.skill) * .45;
+          dir.z += (Math.random() - .5) * (1 - f.skill) * .45;
+          dir.normalize();
+          const origin = f.pos.clone().setY(1.7 + (f.y || 0)).addScaledVector(dir, 1.2);
+          const launchSpd = (26 + state.wave) * (1.0 + charge * 0.35);
+          spawnDisc(origin, dir.multiplyScalar(launchSpd), f, config.ORANGE, 0, charge);
+        }
+      }
+    }
+
     f.cd -= dt;
-    if (f.cd <= 0 && f.hasDisc && see && state.player.alive) {
-      f.hasDisc = false;
-      f.cd = Math.max(1.1, 3.4 - state.wave * .18) + Math.random();
-      const lead = state.player.pos.clone().addScaledVector(state.player.vel, 0.22 * f.skill);
-      const dir = lead.sub(f.pos).setY(0).normalize();
-      dir.x += (Math.random() - .5) * (1 - f.skill) * .45;
-      dir.z += (Math.random() - .5) * (1 - f.skill) * .45;
-      dir.normalize();
-      const origin = f.pos.clone().setY(1.7 + (f.y || 0)).addScaledVector(dir, 1.2);
-      spawnDisc(origin, dir.multiplyScalar(26 + state.wave), f, config.ORANGE);
+    if (f.cd <= 0 && f.hasDisc && state.player.alive && !f.isChargingThrow) {
+      const isCounteringParry = state.isHardcoreSurvival && dynamicDirector && dynamicDirector.isCounteringParry();
+      const isCounteringCamping = state.isHardcoreSurvival && dynamicDirector && dynamicDirector.isCounteringCamping();
+
+      if (BotCombatBrain.canCharge(f) && (isCounteringParry || state.player.blocking || (state.player.parryTimer || 0) > 0 || Math.random() < 0.45)) {
+        f.isChargingThrow = true;
+        f.throwCharge = 0;
+        f.chargeDuration = 0;
+        f.targetChargeTime = 0.85 + Math.random() * 0.15;
+        f.maxChargeDuration = 1.0;
+      } else if ((!see || isCounteringCamping) && BotCombatBrain.canBank(f)) {
+        const bankOut = { direction: new THREE.Vector3(), bouncePoint: new THREE.Vector3(), wall: null, distance: 0 };
+        const foundBank = BotCombatBrain.calculateBankShot(f.pos, state.player.pos, bankOut, { obstacles: pillars });
+        if (foundBank) {
+          f.hasDisc = false;
+          f.cd = Math.max(1.1, 3.4 - state.wave * .18) + Math.random();
+          const origin = f.pos.clone().setY(1.7 + (f.y || 0)).addScaledVector(bankOut.direction, 1.2);
+          spawnDisc(origin, bankOut.direction.multiplyScalar(28 + state.wave), f, config.ORANGE);
+        } else if (see) {
+          f.hasDisc = false;
+          f.cd = Math.max(1.1, 3.4 - state.wave * .18) + Math.random();
+          const lead = state.player.pos.clone().addScaledVector(state.player.vel, 0.22 * f.skill);
+          const dir = lead.sub(f.pos).setY(0).normalize();
+          dir.x += (Math.random() - .5) * (1 - f.skill) * .45;
+          dir.z += (Math.random() - .5) * (1 - f.skill) * .45;
+          dir.normalize();
+          const origin = f.pos.clone().setY(1.7 + (f.y || 0)).addScaledVector(dir, 1.2);
+          spawnDisc(origin, dir.multiplyScalar(26 + state.wave), f, config.ORANGE);
+        }
+      } else if (see) {
+        f.hasDisc = false;
+        f.cd = Math.max(1.1, 3.4 - state.wave * .18) + Math.random();
+        const lead = state.player.pos.clone().addScaledVector(state.player.vel, 0.22 * f.skill);
+        const dir = lead.sub(f.pos).setY(0).normalize();
+        dir.x += (Math.random() - .5) * (1 - f.skill) * .45;
+        dir.z += (Math.random() - .5) * (1 - f.skill) * .45;
+        dir.normalize();
+        const origin = f.pos.clone().setY(1.7 + (f.y || 0)).addScaledVector(dir, 1.2);
+        spawnDisc(origin, dir.multiplyScalar(26 + state.wave), f, config.ORANGE);
+      }
     }
   }
 }

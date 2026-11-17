@@ -10,6 +10,7 @@ import { achievementsModal } from './modals/AchievementsModal.js';
 import { settingsModal } from './modals/SettingsModal.js';
 import { updateSteamRichPresence, syncGameStateRichPresence } from '../core/steamTelemetry.js';
 import { lobbyCoresManager } from './lobbyCores.js';
+import { storageManager } from '../core/storage/StorageManager.js';
 
 // Setup Campaign UI navigation transitions
 gridSelectorModal.setOnSelectGrid((gridId) => levelSelectView.show(gridId));
@@ -52,14 +53,16 @@ export function startMode(mode) {
   } else if (state.gameMode === 'duel_ai' && state.activeGridId) {
     applySectorArena(state.activeGridId);
   }
-  const overlay = document.getElementById('overlay');
-  if (overlay) overlay.style.display = 'none';
-  const hm = document.getElementById('hostModal');
-  if (hm) hm.style.display = 'none';
-  const rm = document.getElementById('roomModal');
-  if (rm) rm.style.display = 'none';
-  const am = document.getElementById('authModal');
-  if (am) am.style.display = 'none';
+  if (typeof document !== 'undefined') {
+    const overlay = document.getElementById('overlay');
+    if (overlay) overlay.style.display = 'none';
+    const hm = document.getElementById('hostModal');
+    if (hm) hm.style.display = 'none';
+    const rm = document.getElementById('roomModal');
+    if (rm) rm.style.display = 'none';
+    const am = document.getElementById('authModal');
+    if (am) am.style.display = 'none';
+  }
   armoryModal.hide();
   achievementsModal.hide();
   state.authModalOpen = false;
@@ -118,7 +121,18 @@ export function showModeSelect() {
   showModeSelectMenu();
 }
 
+export function isHardcoreUnlocked(storage = storageManager) {
+  if (!storage || typeof storage.get !== 'function') return false;
+  const maxWave = Math.max(
+    Number(storage.get('stats.swarmMaxWave', 0)) || 0,
+    Number(storage.get('stats.swarmHighestWave', 0)) || 0,
+    Number(storage.get('stats.highestWave', 0)) || 0
+  );
+  return maxWave >= 10;
+}
+
 export function getMainMenuHtml() {
+  const isUnlocked = isHardcoreUnlocked();
   return `<div id="identityHeader" class="identity-header"></div>
 <div class="card" id="mainMenu">
   <h1>ARC</h1><h2>L E A G U E</h2>
@@ -146,7 +160,13 @@ export function getMainMenuHtml() {
   </div>
   <div class="mode-select" id="mainMenuButtons">
     <button id="campaignBtn" class="mode-btn campaign-btn">LEAGUE CIRCUIT</button>
-    <button id="swarmBtn" class="mode-btn swarm-btn">ENTER ARCFIELD (SURVIVAL)</button>
+    <div id="survivalModeContainer" class="survival-mode-container" style="display:flex;flex-direction:column;gap:6px;width:100%;">
+      <button id="swarmBtn" class="mode-btn swarm-btn">${state.isHardcoreSurvival ? 'ENTER ARCFIELD (HARDCORE)' : 'ENTER ARCFIELD (SURVIVAL)'}</button>
+      <div id="survivalVariantToggle" class="survival-variant-toggle" style="display:${isUnlocked ? 'flex' : 'none'};gap:8px;justify-content:center;margin-top:2px;">
+        <button id="btnSurvivalStandard" class="btn variant-btn ${!state.isHardcoreSurvival ? 'hot active' : ''}" data-variant="standard" style="padding:4px 10px;font-size:11px;min-width:90px;letter-spacing:1px;">STANDARD</button>
+        <button id="btnSurvivalHardcore" class="btn variant-btn ${state.isHardcoreSurvival ? 'hot active' : ''}" data-variant="hardcore" style="padding:4px 10px;font-size:11px;min-width:90px;letter-spacing:1px;border-color:var(--orange);color:#ff7b1a;">HARDCORE [LVL 5+]</button>
+      </div>
+    </div>
     <button id="hostMatchBtn" class="mode-btn multi-btn">HOST ARCFIELD MATCH</button>
     <button id="joinOnlineBtn" class="mode-btn multi-btn">JOIN ARCFIELD MATCH</button>
     <!-- Legacy compatibility elements for tests & programmatic navigation -->
@@ -199,7 +219,10 @@ export function showModeSelectMenu() {
   bindMainMenuEvents();
 }
 
-export function startSoloSwarm() {
+export function startSoloSwarm(options = {}) {
+  if (options && options.hardcore !== undefined) {
+    state.isHardcoreSurvival = Boolean(options.hardcore);
+  }
   teardownSectorArena();
   startMode('swarm');
 }
@@ -303,6 +326,31 @@ export function bindMainMenuEvents() {
     startSoloDuel();
   });
   bind('joinRoomBtn', openJoinModal);
+
+  const btnStandard = document.getElementById('btnSurvivalStandard');
+  const btnHardcore = document.getElementById('btnSurvivalHardcore');
+  if (btnStandard) {
+    btnStandard.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (e.cancelable) e.preventDefault();
+      state.isHardcoreSurvival = false;
+      btnStandard.classList.add('hot', 'active');
+      if (btnHardcore) btnHardcore.classList.remove('hot', 'active');
+      const swarmBtn = document.getElementById('swarmBtn');
+      if (swarmBtn) swarmBtn.textContent = 'ENTER ARCFIELD (SURVIVAL)';
+    });
+  }
+  if (btnHardcore) {
+    btnHardcore.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (e.cancelable) e.preventDefault();
+      state.isHardcoreSurvival = true;
+      btnHardcore.classList.add('hot', 'active');
+      if (btnStandard) btnStandard.classList.remove('hot', 'active');
+      const swarmBtn = document.getElementById('swarmBtn');
+      if (swarmBtn) swarmBtn.textContent = 'ENTER ARCFIELD (HARDCORE)';
+    });
+  }
 
   // Host setup modal bindings
   const hm = document.getElementById('hostModal');

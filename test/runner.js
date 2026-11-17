@@ -65,6 +65,16 @@ const TEST_DOMAINS = {
   desktop: [
     'ui/update_notification.test.js'
   ],
+  ai: [
+    'ai/bot_combat_brain.test.js',
+    'ai/arbiter_personalities.test.js',
+    'ai/swarm_squad_coordinator.test.js',
+    'modes/survival_hardcore.test.js'
+  ],
+  combat: [
+    'combat/bot_parry_guard_crush.test.js',
+    'combat/bot_charged_throws.test.js'
+  ],
   gameplay: [
     'gameplay/gamepad.test.js',
     'gameplay/curve_accumulator.test.js',
@@ -79,7 +89,8 @@ const TEST_DOMAINS = {
     'gameplay/multiplayer.test.js',
     'gameplay/rematch.test.js',
     'gameplay/variable_curving_e2e.test.js',
-    'gameplay/unified_flow.test.js'
+    'gameplay/unified_flow.test.js',
+    'gameplay/bot_combat_e2e_simulation.test.js'
   ]
 };
 

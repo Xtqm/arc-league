@@ -15,6 +15,8 @@
     "test:campaign": "node test/runner.js campaign",
     "test:achievements": "node test/runner.js achievements",
     "test:desktop": "node test/runner.js desktop",
+    "test:ai": "node test/runner.js ai",
+    "test:combat": "node test/runner.js combat",
     "test:network": "node test/runner.js network",
     "test:gameplay": "node test/runner.js gameplay",
     "desktop:dev": "electron .",

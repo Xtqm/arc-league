@@ -6,6 +6,7 @@ export const state = {
     (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches),
   orientationPaused: false,
   gameMode: 'swarm',
+  isHardcoreSurvival: false,
   tier: 1,
   duelTier: 1,
   countdownTimer: 0,

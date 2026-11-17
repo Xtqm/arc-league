@@ -19,6 +19,7 @@ import { swarmEconomyBridge } from '../modes/SwarmEconomyBridge.js';
 import { campaignManager } from '../campaign/CampaignManager.js';
 import { campaignHUD } from '../ui/campaign/CampaignHUD.js';
 import { trialDebriefModal } from '../ui/campaign/TrialDebriefModal.js';
+import { dynamicDirector } from '../ai/DynamicDirector.js';
 
 const _playerFwd = new THREE.Vector3();
 const _playerRight = new THREE.Vector3();
@@ -652,6 +653,9 @@ export function resetRound(spawnX = 0, spawnZ = 14, yaw = Math.PI) {
 export function resetGame(options = {}) {
   const preserveTier = !!(options && options.preserveTier);
   swarmEconomyBridge.resetStreak();
+  if (dynamicDirector && typeof dynamicDirector.reset === 'function') {
+    dynamicDirector.reset();
+  }
   if (!preserveTier) {
     state.score = 0;
   }

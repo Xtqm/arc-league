@@ -5,6 +5,7 @@ import { scene } from '../graphics/scene.js';
 import { burst } from '../graphics/particles.js';
 import { SFX } from '../audio/sfx.js';
 import { settingsManager } from '../core/settings.js';
+import { storageManager } from '../core/storage/StorageManager.js';
 
 export const ENERGY_CORES_CONFIG = [
   {
@@ -98,6 +99,61 @@ export class LobbyCoresManager {
 
     if (title) title.textContent = `INITIALIZE ${core.name}?`;
     if (desc) desc.textContent = `ENGAGE ARCFIELD MODE: ${core.id.toUpperCase()}`;
+
+    let variantContainer = document.getElementById('coreVariantSelector');
+    if (!variantContainer && typeof document !== 'undefined') {
+      variantContainer = document.createElement('div');
+      variantContainer.id = 'coreVariantSelector';
+      variantContainer.className = 'core-variant-selector';
+      variantContainer.style.cssText = 'display:flex; justify-content:center; gap:12px; margin: 12px 0 18px;';
+      const card = modal.querySelector('.card');
+      const actions = card ? card.querySelector('div[style*="display:flex"]') : null;
+      if (card && actions) {
+        card.insertBefore(variantContainer, actions);
+      }
+    }
+
+    const isUnlocked = Math.max(
+      Number(storageManager?.get?.('stats.swarmMaxWave', 0)) || 0,
+      Number(storageManager?.get?.('stats.swarmHighestWave', 0)) || 0,
+      Number(storageManager?.get?.('stats.highestWave', 0)) || 0
+    ) >= 10;
+
+    if (variantContainer) {
+      if (core.id === 'survival' && isUnlocked) {
+        variantContainer.style.display = 'flex';
+        variantContainer.innerHTML = `
+          <button id="btnCoreSurvivalStandard" class="btn ${!state.isHardcoreSurvival ? 'hot' : ''}" style="font-size:12px; padding:6px 14px; min-width:100px;">STANDARD</button>
+          <button id="btnCoreSurvivalHardcore" class="btn ${state.isHardcoreSurvival ? 'hot' : ''}" style="font-size:12px; padding:6px 14px; min-width:100px; border-color:var(--orange); color:#ff7b1a;">HARDCORE [LVL 5+]</button>
+        `;
+        const btnStd = document.getElementById('btnCoreSurvivalStandard');
+        const btnHc = document.getElementById('btnCoreSurvivalHardcore');
+        if (btnStd) {
+          btnStd.onclick = (e) => {
+            e.stopPropagation();
+            state.isHardcoreSurvival = false;
+            btnStd.classList.add('hot');
+            if (btnHc) btnHc.classList.remove('hot');
+            if (desc) desc.textContent = 'ENGAGE ARCFIELD MODE: SURVIVAL (STANDARD)';
+          };
+        }
+        if (btnHc) {
+          btnHc.onclick = (e) => {
+            e.stopPropagation();
+            state.isHardcoreSurvival = true;
+            btnHc.classList.add('hot');
+            if (btnStd) btnStd.classList.remove('hot');
+            if (desc) desc.textContent = 'ENGAGE ARCFIELD MODE: SURVIVAL (HARDCORE)';
+          };
+        }
+        if (desc) {
+          desc.textContent = state.isHardcoreSurvival ? 'ENGAGE ARCFIELD MODE: SURVIVAL (HARDCORE)' : 'ENGAGE ARCFIELD MODE: SURVIVAL (STANDARD)';
+        }
+      } else {
+        variantContainer.style.display = 'none';
+      }
+    }
+
     modal.style.display = 'flex';
   }
 

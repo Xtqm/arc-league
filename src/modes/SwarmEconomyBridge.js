@@ -141,9 +141,13 @@ export class SwarmEconomyBridge {
     let newRecord = false;
     let previousRecord = 1;
     if (this.storage && typeof this.storage.get === 'function' && typeof this.storage.set === 'function') {
-      previousRecord = this.storage.get('stats.swarmHighestWave', 1) || 1;
+      previousRecord = Math.max(
+        this.storage.get('stats.swarmMaxWave', 1) || 1,
+        this.storage.get('stats.swarmHighestWave', 1) || 1
+      );
       if (w > previousRecord) {
         this.storage.set('stats.swarmHighestWave', w);
+        this.storage.set('stats.swarmMaxWave', w);
         this.storage.set('stats.highestWave', w);
         newRecord = true;
         this.emit(SwarmEconomyEvents.SURVIVAL_RECORD_UPDATED, {

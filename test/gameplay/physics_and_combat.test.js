@@ -410,6 +410,7 @@ async function runTests() {
     boss.maxHp = 100;
     boss.state = 'IDLE';
     boss.cd = 999;
+    boss.difficultyLevel = 1;
     boss.pos.set(0, 0, -10);
     boss.obj.position.copy(boss.pos);
     dbg.setPlayerPos(0, 0, 0);

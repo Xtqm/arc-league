@@ -68,6 +68,7 @@ const TEST_DOMAINS = {
   gameplay: [
     'gameplay/gamepad.test.js',
     'gameplay/mouse_camera_input.test.js',
+    'gameplay/timescale_slowmo.test.js',
     'gameplay/camera_combat_stability.test.js',
     'gameplay/physics_and_combat.test.js',
     'gameplay/fullscreen_mode.test.js',

@@ -1,0 +1,105 @@
+name: Deploy to itch.io
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      itch_target:
+        description: 'itch.io target game (e.g. username/game-slug)'
+        required: true
+        default: 'theqmechanic/arc-league'
+      build_windows:
+        description: 'Build and push Windows desktop binary'
+        type: boolean
+        default: true
+      build_web:
+        description: 'Package and push HTML5 web version'
+        type: boolean
+        default: true
+
+concurrency:
+  group: itch-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-web:
+    name: Package & Deploy HTML5 Web
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'release' || inputs.build_web != false }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Butler CLI
+        run: |
+          curl -L -o butler.zip https://broth.itch.ovh/butler/linux-amd64/LATEST/archive/default
+          unzip -q butler.zip -d /usr/local/bin
+          chmod +x /usr/local/bin/butler
+          butler -V
+
+      - name: Package HTML5 distribution bundle
+        run: |
+          mkdir -p build-web
+          cp index.html build-web/
+          cp style.css build-web/
+          cp -r src build-web/
+          cp -r vendor build-web/
+          cp -r assets build-web/
+          cp -r audio build-web/
+          [ -f favicon.ico ] && cp favicon.ico build-web/ || true
+          [ -f manifest.json ] && cp manifest.json build-web/ || true
+          cd build-web
+          zip -q -r ../arc-league-html5.zip .
+          cd ..
+
+      - name: Deploy HTML5 to itch.io
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+        run: |
+          TARGET="${{ inputs.itch_target || vars.ITCH_TARGET || 'theqmechanic/arc-league' }}"
+          VERSION="${{ github.ref_name || github.sha }}"
+          echo "Deploying HTML5 bundle to $TARGET:html5 (version $VERSION)..."
+          butler push arc-league-html5.zip "$TARGET:html5" --userversion "$VERSION"
+
+  deploy-windows:
+    name: Build & Deploy Windows Desktop Binary
+    runs-on: windows-latest
+    if: ${{ github.event_name == 'release' || inputs.build_windows != false }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows desktop installer
+        run: npm run desktop:build
+
+      - name: Set up Butler CLI (Windows)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://broth.itch.ovh/butler/windows-amd64/LATEST/archive/default" -OutFile "butler.zip"
+          Expand-Archive -Path "butler.zip" -DestinationPath "$env:USERPROFILE\butler" -Force
+          "$env:USERPROFILE\butler" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Deploy Windows Installer to itch.io
+        shell: pwsh
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+        run: |
+          $target = "${{ inputs.itch_target || vars.ITCH_TARGET || 'theqmechanic/arc-league' }}"
+          $version = "${{ github.ref_name || github.sha }}"
+          $installer = Get-ChildItem -Path dist/*.exe | Select-Object -First 1
+          if (-not $installer) {
+            Write-Error "No Windows installer executable found in dist/"
+            exit 1
+          }
+          Write-Host "Deploying $($installer.Name) to $target:windows (version $version)..."
+          butler push $installer.FullName "$target:windows" --userversion "$version"

@@ -91,6 +91,8 @@ export const state = {
   gamepadBlocking: false,
   gameOverReason: '',
   msgT: 0,
+  timeScale: 1.0,
+  slowMoActive: false,
   shakeAmt: 0,
   time: 0,
   keys: {},

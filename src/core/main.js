@@ -56,6 +56,7 @@ export function startCountdown(duration = 3.0, onComplete = null) {
 
 if (typeof window !== 'undefined') {
   window.__tronStartCountdown = startCountdown;
+  window.__arcMessage = message;
 }
 
 export function handleGamepadInput(dt) {
@@ -272,6 +273,9 @@ export function loop() {
     state.justResumed = false;
   }
   dt = Math.min(dt, 0.05);
+  if (state.timeScale !== undefined && state.timeScale !== 1.0) {
+    dt *= state.timeScale;
+  }
 
   if (state.running && !state.paused) {
     update(dt);
@@ -339,6 +343,19 @@ window.__dbg = {
   wave: () => state.wave,
   running: () => state.running,
   paused: () => state.paused,
+  timescale: () => state.timeScale,
+  setTimescale: (s) => {
+    state.timeScale = s;
+    state.slowMoActive = s < 1.0;
+  },
+  toggleSlowMo: () => {
+    state.slowMoActive = !state.slowMoActive;
+    state.timeScale = state.slowMoActive ? 0.2 : 1.0;
+    if (typeof window !== 'undefined' && typeof window.__arcMessage === 'function') {
+      window.__arcMessage(state.slowMoActive ? 'CINEMATIC SLOW-MO: 0.2x' : 'NORMAL SPEED: 1.0x');
+    }
+    return state.timeScale;
+  },
   mode: () => state.gameMode,
   tier: () => state.tier || state.duelTier,
   duelTier: () => state.tier || state.duelTier,
@@ -665,6 +682,7 @@ window.__dbg = {
 };
 
 window.__TRON__ = window.__dbg;
+window.gameDebug = window.__dbg;
 
 export {
   requestFullScreen,

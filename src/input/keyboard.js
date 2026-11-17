@@ -1,6 +1,6 @@
 import { state } from '../core/state.js';
 
-export const EAT = ['Space','KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','KeyP','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','F1'];
+export const EAT = ['Space','KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','KeyP','KeyT','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','F1'];
 
 export function getPlayerCurveIntent() {
   const q = !!state.keys.KeyQ || state.touchCurveL || state.gamepadCurveL;
@@ -57,6 +57,13 @@ export function onDown(e) {
   if (c === 'F1') {
     const m = document.getElementById('keymon');
     if (m) m.style.display = m.style.display === 'block' ? 'none' : 'block';
+  }
+  if (c === 'KeyT') {
+    state.slowMoActive = !state.slowMoActive;
+    state.timeScale = state.slowMoActive ? 0.2 : 1.0;
+    if (typeof window !== 'undefined' && typeof window.__arcMessage === 'function') {
+      window.__arcMessage(state.slowMoActive ? 'CINEMATIC SLOW-MO: 0.2x' : 'NORMAL SPEED: 1.0x');
+    }
   }
   if (c === 'KeyP' || c === 'Escape') {
     if (state.running) {

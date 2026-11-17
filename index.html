@@ -8,7 +8,11 @@
 <title>ARC LEAGUE</title>
 <style>
   :root { --cyan:#4ff2ff; --orange:#ff7b1a; --star-gold:#ffd700; }
-  * { box-sizing:border-box; }
+  * {
+    box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: var(--cyan) rgba(0, 15, 20, 0.6);
+  }
   html,body { margin:0; height:100%; background:#000; overflow:hidden;
     font-family: "Segoe UI", Helvetica, Arial, sans-serif; color:var(--cyan); }
   html, body, canvas, #hud, .touch-btn, .touch-zone, #mobileControls, #orientationOverlay {
@@ -40,17 +44,31 @@
     -webkit-overflow-scrolling: touch; /* Momentum scrolling on iOS Safari */
     pointer-events: auto;
   }
-  .card::-webkit-scrollbar {
+  /* Universal Custom Scrollbars */
+  ::-webkit-scrollbar {
     width: 6px;
+    height: 6px;
   }
-  .card::-webkit-scrollbar-track {
-    background: rgba(0, 15, 20, 0.5);
+  ::-webkit-scrollbar-track {
+    background: rgba(0, 15, 20, 0.6);
     border-radius: 4px;
   }
-  .card::-webkit-scrollbar-thumb {
+  ::-webkit-scrollbar-thumb {
     background: var(--cyan);
     border-radius: 4px;
     box-shadow: 0 0 8px var(--cyan);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #a6f9ff;
+    box-shadow: 0 0 12px #a6f9ff;
+  }
+  ::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+  ::-webkit-scrollbar-corner {
+    background: rgba(0, 15, 20, 0.6);
   }
   .card * {
     touch-action: pan-y;

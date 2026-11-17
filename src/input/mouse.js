@@ -171,7 +171,8 @@ export function initMouse(targetCanvas) {
   });
 
   window.addEventListener('mousedown', e => {
-    if (state.isTouchDevice || !state.running || state.paused) return;
+    if (state.isTouchDevice || !state.running || state.paused || state.authModalOpen || state.armoryModalOpen) return;
+    if (e.target && typeof e.target.closest === 'function' && e.target.closest('button, input, select, textarea, .modal, .modal-overlay, .card, #authModal, #coreConfirmModal')) return;
     setLastInputDevice('kbm');
     if (e.button === 0) {
       if (typeof window !== 'undefined' && window.__tronStartChargingThrow) {
@@ -194,7 +195,8 @@ export function initMouse(targetCanvas) {
   });
 
   window.addEventListener('mouseup', e => {
-    if (state.isTouchDevice) return;
+    if (state.isTouchDevice || state.authModalOpen || state.armoryModalOpen) return;
+    if (e.target && typeof e.target.closest === 'function' && e.target.closest('button, input, select, textarea, .modal, .modal-overlay, .card, #authModal, #coreConfirmModal')) return;
     if (e.button === 0) {
       if (typeof window !== 'undefined' && window.__tronReleaseChargingThrow) {
         window.__tronReleaseChargingThrow();

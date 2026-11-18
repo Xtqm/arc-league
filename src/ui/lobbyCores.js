@@ -92,6 +92,7 @@ export class LobbyCoresManager {
     this.cores = [];
     this.activeModalCore = null;
     this.initialized = false;
+    this.duelLaunchMode = 'quick';
   }
 
   init() {
@@ -185,6 +186,44 @@ export class LobbyCoresManager {
         }
         if (desc) {
           desc.textContent = state.isHardcoreSurvival ? 'ENGAGE ARCFIELD MODE: SURVIVAL (HARDCORE)' : 'ENGAGE ARCFIELD MODE: SURVIVAL (STANDARD)';
+        }
+      } else if (core.id === 'duels') {
+        this.duelLaunchMode = 'quick';
+        variantContainer.style.display = 'flex';
+        variantContainer.innerHTML = `
+          <button id="btnCoreDuelQuick" class="btn hot" style="font-size:12px; padding:6px 14px; min-width:110px; border-color:var(--cyan); color:#fff; background:rgba(79,242,255,0.25);">QUICK MATCH</button>
+          <button id="btnCoreDuelFriendly" class="btn" style="font-size:12px; padding:6px 14px; min-width:110px; border-color:#d896ff; color:#d896ff;">FRIENDLY ROOM</button>
+        `;
+        const btnQuick = document.getElementById('btnCoreDuelQuick');
+        const btnFriendly = document.getElementById('btnCoreDuelFriendly');
+        if (btnQuick) {
+          btnQuick.onclick = (e) => {
+            e.stopPropagation();
+            this.duelLaunchMode = 'quick';
+            btnQuick.classList.add('hot');
+            btnQuick.style.background = 'rgba(79,242,255,0.25)';
+            if (btnFriendly) {
+              btnFriendly.classList.remove('hot');
+              btnFriendly.style.background = '';
+            }
+            if (desc) desc.textContent = 'ENGAGE AUTOMATED QUICK MATCH WITH WARM-UP';
+          };
+        }
+        if (btnFriendly) {
+          btnFriendly.onclick = (e) => {
+            e.stopPropagation();
+            this.duelLaunchMode = 'friendly';
+            btnFriendly.classList.add('hot');
+            btnFriendly.style.background = 'rgba(216,150,255,0.25)';
+            if (btnQuick) {
+              btnQuick.classList.remove('hot');
+              btnQuick.style.background = '';
+            }
+            if (desc) desc.textContent = 'HOST CUSTOM FRIENDLY DUEL (ROOM CODE)';
+          };
+        }
+        if (desc) {
+          desc.textContent = 'ENGAGE AUTOMATED QUICK MATCH WITH WARM-UP';
         }
       } else {
         variantContainer.style.display = 'none';
@@ -384,8 +423,15 @@ export class LobbyCoresManager {
         const btn = document.getElementById('swarmBtn');
         if (btn) { btn.click(); return; }
       } else if (mode === 'duels') {
-        const btn = document.getElementById('hostMatchBtn');
-        if (btn) { btn.click(); return; }
+        if (this.duelLaunchMode === 'friendly') {
+          const btn = document.getElementById('hostMatchBtn');
+          if (btn) { btn.click(); return; }
+        } else {
+          const quickBtn = document.getElementById('quickMatchBtn');
+          if (quickBtn) { quickBtn.click(); return; }
+          const hostBtn = document.getElementById('hostMatchBtn');
+          if (hostBtn) { hostBtn.click(); return; }
+        }
       } else if (mode === 'armory') {
         const btn = document.getElementById('armoryBtn');
         if (btn) { btn.click(); return; }

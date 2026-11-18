@@ -3382,8 +3382,8 @@
     <div class="host-brand-header" style="margin-bottom:8px;">
       <img src="assets/branding/arc_league_championship_crest.png" alt="Arc League Championship Crest" class="league-crest-img" />
     </div>
-    <h1>HOST MATCH</h1>
-    <h2>SELECT COMBAT MODE</h2>
+    <h1>HOST FRIENDLY MATCH</h1>
+    <h2>CREATE PRIVATE ROOM CODE</h2>
     <div class="menu-actions" style="max-width:340px;margin:20px auto 0;gap:12px;">
       <div id="arenaSelectContainer" class="arena-select-container" style="text-align:left;width:100%;">
         <label for="arenaSelect" style="display:block;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:6px;">SELECT ARENA SECTOR</label>
@@ -3392,8 +3392,6 @@
         </select>
         <div id="duelMapCardMount" class="duel-map-card-mount" style="margin-top:8px;"></div>
       </div>
-      <button id="quickMatchBtn" class="mode-btn multi-btn" style="width:100%;border-color:#00ffff;color:#00ffff;box-shadow:0 0 10px rgba(0,255,255,0.3);margin-bottom:8px;">[ QUICK MATCH // WARM-UP QUEUE ]</button>
-      <button id="practiceBtn" class="mode-btn duel-btn" style="width:100%;">PRACTICE (SOLO AI)</button>
       <div id="seriesSelectContainer" style="text-align:left;width:100%;margin-top:4px;">
         <div style="display:block;font-size:10px;letter-spacing:2px;color:#d896ff;margin-bottom:6px;">ONLINE SERIES LENGTH (1v1 / 2v2)</div>
         <div id="seriesFormatSelect" style="display:flex;gap:8px;">
@@ -3405,6 +3403,7 @@
       </div>
       <button id="host1v1Btn" class="mode-btn multi-btn" style="width:100%;">1v1 DUEL (ONLINE)</button>
       <button id="host2v2Btn" class="mode-btn multi-btn" style="width:100%;">2v2 DUOS (ONLINE)</button>
+      <button id="modalPracticeBtn" class="mode-btn duel-btn" data-alias="practiceBtn" style="display:none;width:100%;" aria-hidden="true">PRACTICE (SOLO AI)</button>
       <button id="cancelHostBtn" class="btn" style="margin-top:8px;border-color:var(--orange);color:#ffb37a;width:100%;">RETURN TO MENU</button>
     </div>
   </div>
@@ -3656,8 +3655,12 @@
     <button id="btnEnter3DLobby" class="mode-btn" style="width:100%;margin-bottom:14px;border-color:var(--cyan);color:#fff;background:rgba(79,242,255,0.22);box-shadow:0 0 16px rgba(79,242,255,0.4);letter-spacing:3px;">[ ENTER 3D PLAYABLE LOBBY ]</button>
     <button id="campaignBtn" class="mode-btn campaign-btn">LEAGUE CIRCUIT</button>
     <button id="swarmBtn" class="mode-btn swarm-btn">ENTER ARCFIELD (SURVIVAL)</button>
-    <button id="hostMatchBtn" class="mode-btn multi-btn">HOST ARCFIELD MATCH</button>
-    <button id="joinOnlineBtn" class="mode-btn multi-btn">JOIN ARCFIELD MATCH</button>
+    <button id="practiceBtn" class="mode-btn duel-btn" style="width:100%;">PRACTICE (SOLO AI)</button>
+    <button id="quickMatchBtn" class="mode-btn multi-btn quick-match-primary" style="width:100%;border-color:#00ffff;color:#00ffff;box-shadow:0 0 10px rgba(0,255,255,0.3);letter-spacing:2px;">[ QUICK MATCH // PLAY NOW ]</button>
+    <div class="friendly-duels-row" style="display:flex;gap:8px;width:100%;">
+      <button id="hostMatchBtn" class="mode-btn multi-btn" style="flex:1;">HOST FRIENDLY MATCH</button>
+      <button id="joinOnlineBtn" class="mode-btn multi-btn" style="flex:1;">JOIN FRIENDLY MATCH</button>
+    </div>
     <!-- Legacy compatibility elements for tests & programmatic navigation -->
     <button id="armoryBtn" class="mode-btn armory-btn" style="display:none;min-width:44px;min-height:44px;" aria-hidden="true">OUTFITTING</button>
     <button id="achievementsBtn" class="mode-btn achievements-btn" style="display:none;min-width:44px;min-height:44px;" aria-hidden="true">TROPHY MATRIX</button>

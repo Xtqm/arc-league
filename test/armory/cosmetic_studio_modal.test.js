@@ -143,6 +143,10 @@ assert(initialMarkup.includes('studioColorSecondary'), 'Must render secondary em
 assert(initialMarkup.includes('studioSliderGlow'), 'Must render glow slider');
 assert(initialMarkup.includes('studioSliderTrail'), 'Must render flight trail opacity slider');
 assert(initialMarkup.includes('studioCheckWireframe'), 'Must render wireframe overlay toggle');
+assert(initialMarkup.includes('studioSelectShape'), 'Must render procedural shape selector');
+assert(initialMarkup.includes('studioCheckParticles'), 'Must render ricochet particles toggle');
+assert(initialMarkup.includes('studioColorSpark'), 'Must render spark color picker');
+assert(initialMarkup.includes('studioSliderSparkCount'), 'Must render spark count slider');
 
 // Switch to Athlete Rigs
 modal.switchCategory(ARMORY_CATEGORIES.CHASSIS_SKINS);
@@ -194,6 +198,35 @@ assert(discCode.includes("secondaryEmissiveHex: '#0033aa'"), 'Must serialize sec
 assert(discCode.includes("glowIntensity: 2.4"), 'Must serialize glow intensity');
 assert(discCode.includes("wireframeToggle: true"), 'Must serialize wireframe boolean');
 assert(discCode.includes("Object.freeze("), 'Must wrap with Object.freeze');
+
+const shapedDiscConfig = {
+  id: 'disc_custom_triangle',
+  displayName: 'Delta Triad Custom',
+  category: ARMORY_CATEGORIES.DISC_SKINS,
+  description: 'Custom tri-blade prototype.',
+  shape: 'triangle',
+  unlockType: UNLOCK_TYPES.BITS,
+  cost: 950,
+  achievementId: null,
+  shader: {
+    primaryHex: '#00f3ff',
+    secondaryEmissiveHex: '#0066ff',
+    trailOpacity: 0.9,
+    wireframeToggle: true,
+    glowIntensity: 2.2
+  },
+  particles: {
+    ricochetSparks: true,
+    sparkColorHex: '#ff0055',
+    sparkCount: 24
+  }
+};
+const shapedCode = formatCatalogCode(shapedDiscConfig);
+assert(shapedCode.includes("shape: 'triangle'"), 'Must serialize shape property');
+assert(shapedCode.includes("particles: Object.freeze("), 'Must serialize particles object');
+assert(shapedCode.includes("ricochetSparks: true"), 'Must serialize ricochetSparks boolean');
+assert(shapedCode.includes("sparkColorHex: '#ff0055'"), 'Must serialize spark color hex');
+assert(shapedCode.includes("sparkCount: 24"), 'Must serialize spark count');
 
 const sampleChassisConfig = {
   id: 'chassis_stealth_ninja',
@@ -286,7 +319,13 @@ const mockElements = {
   '#studioHexPrimary': { textContent: '' },
   '#studioSliderGlow': { value: '3.5' },
   '#studioValGlow': { textContent: '' },
-  '#studioCheckWireframe': { checked: true }
+  '#studioCheckWireframe': { checked: true },
+  '#studioSelectShape': { value: 'shuriken_4' },
+  '#studioCheckParticles': { checked: true },
+  '#studioColorSpark': { value: '#ff00aa' },
+  '#studioHexSpark': { textContent: '' },
+  '#studioSliderSparkCount': { value: '28' },
+  '#studioValSparkCount': { textContent: '' }
 };
 const mockRoot = {
   querySelector: (sel) => mockElements[sel] || null,
@@ -306,6 +345,20 @@ assert.strictEqual(mockElements['#studioValGlow'].textContent, '3.5');
 
 mockElements['#studioCheckWireframe'].onchange({ target: { checked: true } });
 assert.strictEqual(modal.currentConfig.shader.wireframeToggle, true);
+
+mockElements['#studioSelectShape'].onchange({ target: { value: 'shuriken_4' } });
+assert.strictEqual(modal.currentConfig.shape, 'shuriken_4', 'Shape change must update currentConfig.shape');
+
+mockElements['#studioCheckParticles'].onchange({ target: { checked: true } });
+assert.strictEqual(modal.currentConfig.particles.ricochetSparks, true, 'Particle checkbox must update ricochetSparks');
+
+mockElements['#studioColorSpark'].oninput({ target: { value: '#ff00aa' } });
+assert.strictEqual(modal.currentConfig.particles.sparkColorHex, '#ff00aa', 'Spark color input must update sparkColorHex');
+assert.strictEqual(mockElements['#studioHexSpark'].textContent, '#FF00AA');
+
+mockElements['#studioSliderSparkCount'].oninput({ target: { value: '28' } });
+assert.strictEqual(modal.currentConfig.particles.sparkCount, 28, 'Spark count slider must update sparkCount');
+assert.strictEqual(mockElements['#studioValSparkCount'].textContent, '28');
 console.log('✓ 3D turntable preview staging and zero-delay in-place mutation verified.');
 
 // =========================================================================

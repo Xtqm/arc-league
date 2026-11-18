@@ -57,6 +57,7 @@ export function getDefaultConfig(category) {
     displayName: 'Custom Kinetic Disc',
     category: ARMORY_CATEGORIES.DISC_SKINS,
     description: 'Custom prototype kinetic disc created in developer studio.',
+    shape: 'circle',
     unlockType: UNLOCK_TYPES.FREE,
     cost: 0,
     achievementId: null,
@@ -66,6 +67,11 @@ export function getDefaultConfig(category) {
       trailOpacity: 0.85,
       wireframeToggle: false,
       glowIntensity: 1.5
+    },
+    particles: {
+      ricochetSparks: false,
+      sparkColorHex: '#00f3ff',
+      sparkCount: 16
     }
   };
 }
@@ -85,7 +91,14 @@ export function formatCatalogCode(config) {
     `      id: '${config.id || (isChassis ? 'chassis_custom' : 'disc_custom')}',`,
     `      displayName: '${(config.displayName || '').replace(/'/g, "\\'")}',`,
     `      category: ${isChassis ? 'ARMORY_CATEGORIES.CHASSIS_SKINS' : 'ARMORY_CATEGORIES.DISC_SKINS'},`,
-    `      description: '${(config.description || '').replace(/'/g, "\\'")}',`,
+    `      description: '${(config.description || '').replace(/'/g, "\\'")}',`
+  ];
+
+  if (!isChassis && config.shape) {
+    lines.push(`      shape: '${config.shape}',`);
+  }
+
+  lines.push(
     `      unlockType: ${config.unlockType === UNLOCK_TYPES.BITS ? 'UNLOCK_TYPES.BITS' : config.unlockType === UNLOCK_TYPES.ACHIEVEMENT ? 'UNLOCK_TYPES.ACHIEVEMENT' : 'UNLOCK_TYPES.FREE'},`,
     `      cost: ${typeof config.cost === 'number' ? config.cost : 0},`,
     `      achievementId: ${config.achievementId ? `'${config.achievementId}'` : 'null'},`,
@@ -95,7 +108,7 @@ export function formatCatalogCode(config) {
     `        trailOpacity: ${typeof shader.trailOpacity === 'number' ? shader.trailOpacity : 0.85},`,
     `        wireframeToggle: ${Boolean(shader.wireframeToggle)},`,
     `        glowIntensity: ${typeof shader.glowIntensity === 'number' ? shader.glowIntensity : 1.5}${isChassis ? ',' : ''}`
-  ];
+  );
 
   if (isChassis) {
     lines.push(`        suitHex: '${shader.suitHex || '#1e2631'}',`);
@@ -103,7 +116,16 @@ export function formatCatalogCode(config) {
     lines.push(`        metalness: ${typeof shader.metalness === 'number' ? shader.metalness : 0.78}`);
   }
 
-  lines.push(`      })`);
+  lines.push(`      })` + (!isChassis && config.particles?.ricochetSparks ? ',' : ''));
+
+  if (!isChassis && config.particles?.ricochetSparks) {
+    lines.push(`      particles: Object.freeze({`);
+    lines.push(`        ricochetSparks: true,`);
+    lines.push(`        sparkColorHex: '${config.particles.sparkColorHex || shader.primaryHex || '#00f3ff'}',`);
+    lines.push(`        sparkCount: ${config.particles.sparkCount || 16}`);
+    lines.push(`      })`);
+  }
+
   lines.push(`    })`);
 
   return lines.join('\n');
@@ -547,6 +569,67 @@ export class CosmeticStudioModal {
       };
     }
 
+    // Disc Specific: Shape Selector
+    const selectShape = root.querySelector('#studioSelectShape');
+    if (selectShape) {
+      selectShape.onchange = (e) => {
+        this.currentConfig.shape = e.target.value;
+        this.updateMaterial();
+      };
+    }
+
+    // Disc Specific: Particle Spark Controls
+    const checkParticles = root.querySelector('#studioCheckParticles');
+    const colorSpark = root.querySelector('#studioColorSpark');
+    const hexSpark = root.querySelector('#studioHexSpark');
+    const sliderSparkCount = root.querySelector('#studioSliderSparkCount');
+    const valSparkCount = root.querySelector('#studioValSparkCount');
+
+    if (checkParticles) {
+      checkParticles.onchange = (e) => {
+        if (!this.currentConfig.particles) {
+          this.currentConfig.particles = {
+            ricochetSparks: false,
+            sparkColorHex: this.currentConfig.shader?.primaryHex || '#00f3ff',
+            sparkCount: 16
+          };
+        }
+        this.currentConfig.particles.ricochetSparks = e.target.checked;
+        this.updateMaterial();
+      };
+    }
+
+    if (colorSpark) {
+      colorSpark.oninput = (e) => {
+        if (!this.currentConfig.particles) {
+          this.currentConfig.particles = {
+            ricochetSparks: true,
+            sparkColorHex: e.target.value,
+            sparkCount: 16
+          };
+        }
+        this.currentConfig.particles.sparkColorHex = e.target.value;
+        if (hexSpark) hexSpark.textContent = e.target.value.toUpperCase();
+        this.updateMaterial();
+      };
+    }
+
+    if (sliderSparkCount) {
+      sliderSparkCount.oninput = (e) => {
+        const val = parseInt(e.target.value, 10) || 16;
+        if (!this.currentConfig.particles) {
+          this.currentConfig.particles = {
+            ricochetSparks: true,
+            sparkColorHex: this.currentConfig.shader?.primaryHex || '#00f3ff',
+            sparkCount: val
+          };
+        }
+        this.currentConfig.particles.sparkCount = val;
+        if (valSparkCount) valSparkCount.textContent = String(val);
+        this.updateMaterial();
+      };
+    }
+
     // Chassis Specific: Suit Plating Color
     const colorSuit = root.querySelector('#studioColorSuit');
     const hexSuit = root.querySelector('#studioHexSuit');
@@ -657,6 +740,47 @@ export class CosmeticStudioModal {
           <input type="checkbox" id="studioCheckWireframe" ${shader.wireframeToggle ? 'checked' : ''} style="cursor:pointer;" />
         </div>
       </div>
+
+      ${!isChassis ? `
+      <!-- Procedural Shape & Geometry Group -->
+      <div class="studio-control-group">
+        <h3>Procedural Shape & Geometry</h3>
+        <div class="studio-field-row">
+          <label for="studioSelectShape">Disc Shape:</label>
+          <select id="studioSelectShape" class="studio-select">
+            <option value="circle" ${this.currentConfig.shape === 'circle' ? 'selected' : ''}>Classic Torus (Circle)</option>
+            <option value="triangle" ${this.currentConfig.shape === 'triangle' ? 'selected' : ''}>Delta Triad (Triangle)</option>
+            <option value="square" ${this.currentConfig.shape === 'square' ? 'selected' : ''}>Quantum Quad (Square)</option>
+            <option value="hexagon" ${this.currentConfig.shape === 'hexagon' ? 'selected' : ''}>Nanite Hex (Hexagon)</option>
+            <option value="shuriken_3" ${this.currentConfig.shape === 'shuriken_3' ? 'selected' : ''}>Void Shuriken (3-Blade)</option>
+            <option value="shuriken_4" ${this.currentConfig.shape === 'shuriken_4' ? 'selected' : ''}>Void Shuriken (4-Blade)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Ricochet Particle Spark Burst Group -->
+      <div class="studio-control-group">
+        <h3>Ricochet Particle Sparks</h3>
+        <div class="studio-field-row">
+          <label for="studioCheckParticles">Ricochet Sparks:</label>
+          <input type="checkbox" id="studioCheckParticles" ${this.currentConfig.particles?.ricochetSparks ? 'checked' : ''} style="cursor:pointer;" />
+        </div>
+        <div class="studio-field-row">
+          <label for="studioColorSpark">Spark Color:</label>
+          <div class="studio-input-color-wrap">
+            <input type="color" id="studioColorSpark" class="studio-input-color" value="${this.currentConfig.particles?.sparkColorHex || shader.primaryHex || '#00f3ff'}" />
+            <span id="studioHexSpark" class="studio-hex-code">${(this.currentConfig.particles?.sparkColorHex || shader.primaryHex || '#00f3ff').toUpperCase()}</span>
+          </div>
+        </div>
+        <div class="studio-field-row">
+          <label for="studioSliderSparkCount">Spark Count:</label>
+          <div class="studio-slider-wrapper">
+            <input type="range" id="studioSliderSparkCount" class="studio-slider" min="8" max="40" step="2" value="${this.currentConfig.particles?.sparkCount ?? 16}" />
+            <span id="studioValSparkCount" class="studio-slider-val">${Number(this.currentConfig.particles?.sparkCount ?? 16)}</span>
+          </div>
+        </div>
+      </div>
+      ` : ''}
 
       ${isChassis ? `
       <!-- PBR Armor Plating Group (Athlete Rigs) -->

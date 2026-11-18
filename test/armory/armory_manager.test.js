@@ -102,6 +102,24 @@ assert.ok(voidDisc);
 assert.strictEqual(voidDisc.unlockType, UNLOCK_TYPES.ACHIEVEMENT);
 assert.strictEqual(voidDisc.achievementId, 'corrupted_void_mastery');
 
+const deltaTriad = getCatalogItem('disc_delta_triad');
+assert.ok(deltaTriad, 'disc_delta_triad must be present in catalog');
+assert.strictEqual(deltaTriad.shape, 'triangle', 'disc_delta_triad must have triangle shape');
+assert.strictEqual(deltaTriad.particles?.ricochetSparks, true, 'disc_delta_triad must define ricochetSparks');
+assert.strictEqual(deltaTriad.particles?.sparkCount, 16);
+
+const quantumQuad = getCatalogItem('disc_quantum_quad');
+assert.ok(quantumQuad, 'disc_quantum_quad must be present in catalog');
+assert.strictEqual(quantumQuad.shape, 'square', 'disc_quantum_quad must have square shape');
+assert.strictEqual(quantumQuad.particles?.ricochetSparks, true, 'disc_quantum_quad must define ricochetSparks');
+assert.strictEqual(quantumQuad.particles?.sparkCount, 20);
+
+const voidShuriken = getCatalogItem('disc_shuriken_void');
+assert.ok(voidShuriken, 'disc_shuriken_void must be present in catalog');
+assert.strictEqual(voidShuriken.shape, 'shuriken_4', 'disc_shuriken_void must have shuriken_4 shape');
+assert.strictEqual(voidShuriken.particles?.ricochetSparks, true, 'disc_shuriken_void must define ricochetSparks');
+assert.strictEqual(voidShuriken.particles?.sparkCount, 24);
+
 const arbiterChassis = getCatalogItem('chassis_arbiter');
 assert.ok(arbiterChassis);
 assert.strictEqual(arbiterChassis.unlockType, UNLOCK_TYPES.ACHIEVEMENT);

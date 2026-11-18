@@ -233,6 +233,18 @@ assert.strictEqual(trailPlasmaViolet.primaryHex, '#bd00ff');
 assert.strictEqual(trailPlasmaViolet.secondaryEmissiveHex, '#7700ff');
 assert.strictEqual(trailPlasmaViolet.opacity, 0.95);
 
+const trailDeltaTriad = engine.getTrailConfig('disc_delta_triad');
+assert.strictEqual(trailDeltaTriad.shape, 'triangle');
+assert.strictEqual(trailDeltaTriad.particles?.ricochetSparks, true);
+assert.strictEqual(trailDeltaTriad.particles?.sparkColorHex, '#00f3ff');
+assert.strictEqual(trailDeltaTriad.particles?.sparkCount, 16);
+
+const trailShurikenVoid = engine.getTrailConfig('disc_shuriken_void');
+assert.strictEqual(trailShurikenVoid.shape, 'shuriken_4');
+assert.strictEqual(trailShurikenVoid.particles?.ricochetSparks, true);
+assert.strictEqual(trailShurikenVoid.particles?.sparkColorHex, '#ff0055');
+assert.strictEqual(trailShurikenVoid.particles?.sparkCount, 24);
+
 console.log('✓ Group 5: Flight trail parameters and interpolation configurations verified.');
 
 // =========================================================================
@@ -319,6 +331,183 @@ assert.strictEqual(preview.pivot, null);
 assert.strictEqual(preview.scene, null);
 
 console.log('✓ Group 7: ArmoryPreviewScene staging, swap disposal, and destruction lifecycle verified.');
+
+// =========================================================================
+// Test Group 8: Procedural Shape Swapping, Wireframe Matching & Palm Disc Sync
+// =========================================================================
+console.log('\n[Group 8] Testing Procedural Shape Swapping, Wireframe Shape Matching & Palm Disc Sync...');
+
+const shapedDisc = makeDisc(0x00f3ff);
+assert.strictEqual(shapedDisc.userData.currentShape, 'circle');
+
+// 8.1 Geometry Swapping with Clean Buffer Disposal
+let oldOuterDisposed = false;
+let oldFaceDisposed = false;
+let oldHubDisposed = false;
+
+shapedDisc.userData.outerMesh.geometry.dispose = () => { oldOuterDisposed = true; };
+shapedDisc.userData.faceMesh.geometry.dispose = () => { oldFaceDisposed = true; };
+shapedDisc.userData.hubMesh.geometry.dispose = () => { oldHubDisposed = true; };
+
+engine.applyDiscSkin(shapedDisc, {
+  id: 'disc_test_triad',
+  shape: 'triangle',
+  shader: {
+    primaryHex: '#00ffcc',
+    secondaryEmissiveHex: '#0033aa',
+    wireframeToggle: false
+  }
+});
+
+assert.strictEqual(shapedDisc.userData.currentShape, 'triangle');
+assert.strictEqual(oldOuterDisposed, true, 'Prior outer geometry must be disposed on shape swap');
+assert.strictEqual(oldFaceDisposed, true, 'Prior face geometry must be disposed on shape swap');
+assert.strictEqual(oldHubDisposed, true, 'Prior hub geometry must be disposed on shape swap');
+
+// 8.2 Shape-Conforming Retro Wireframe Overlay
+engine.applyDiscSkin(shapedDisc, {
+  id: 'disc_test_triad_wf',
+  shape: 'triangle',
+  shader: {
+    primaryHex: '#00ffcc',
+    secondaryEmissiveHex: '#0033aa',
+    wireframeToggle: true
+  }
+});
+
+const triadWf = shapedDisc.userData.wireframeOverlay;
+assert.ok(triadWf, 'Wireframe overlay must be attached');
+assert.strictEqual(triadWf.userData.currentShape, 'triangle', 'Wireframe must conform to triangle shape');
+
+let oldWfDisposed = false;
+triadWf.geometry.dispose = () => { oldWfDisposed = true; };
+
+// Swap to hexagon while wireframe remains active
+engine.applyDiscSkin(shapedDisc, {
+  id: 'disc_test_hex_wf',
+  shape: 'hexagon',
+  shader: {
+    primaryHex: '#ff00aa',
+    secondaryEmissiveHex: '#550033',
+    wireframeToggle: true
+  }
+});
+
+assert.strictEqual(shapedDisc.userData.currentShape, 'hexagon');
+assert.strictEqual(oldWfDisposed, true, 'Prior wireframe geometry must be disposed on shape swap');
+assert.strictEqual(shapedDisc.userData.wireframeOverlay.userData.currentShape, 'hexagon', 'Wireframe must conform to hexagon shape');
+
+// 8.3 Hover-Palm Disc Synchronization on Player Construct Rig
+const testRigPalm = makeProgram(0x00f3ff);
+const palmDisc = testRigPalm.userData.backDisc;
+assert.ok(palmDisc, 'Construct rig must feature backDisc');
+assert.strictEqual(palmDisc.userData.currentShape, 'circle');
+
+let oldPalmOuterDisposed = false;
+let oldPalmFaceDisposed = false;
+palmDisc.geometry.dispose = () => { oldPalmOuterDisposed = true; };
+palmDisc.userData.faceMesh.geometry.dispose = () => { oldPalmFaceDisposed = true; };
+
+engine.applyDiscSkin(palmDisc, {
+  id: 'disc_test_shuriken_palm',
+  shape: 'shuriken_4',
+  shader: {
+    primaryHex: '#ff5500',
+    secondaryEmissiveHex: '#aa2200'
+  }
+});
+
+assert.strictEqual(palmDisc.userData.currentShape, 'shuriken_4', 'Palm disc must mirror equipped shuriken_4 shape');
+assert.strictEqual(oldPalmOuterDisposed, true, 'Prior palm rim geometry must be disposed');
+assert.strictEqual(oldPalmFaceDisposed, true, 'Prior palm face geometry must be disposed');
+
+// 8.4 Revert to legacy / circle shape
+let prevHexOuterDisposed = false;
+shapedDisc.userData.outerMesh.geometry.dispose = () => { prevHexOuterDisposed = true; };
+
+engine.applyDiscSkin(shapedDisc, {
+  id: 'disc_test_default',
+  shape: 'circle',
+  shader: {
+    primaryHex: '#00f3ff',
+    secondaryEmissiveHex: '#0066ff',
+    wireframeToggle: false
+  }
+});
+
+assert.strictEqual(shapedDisc.userData.currentShape, 'circle');
+assert.strictEqual(prevHexOuterDisposed, true, 'Hexagon outer geometry must be disposed when reverting to circle');
+
+console.log('✓ Group 8: Procedural shape swapping, conforming wireframe, palm disc sync, and zero WebGL leaks verified.');
+
+// =========================================================================
+// Test Group 9: Catalog Ricochet Particles & Surface Impact Sparks
+// =========================================================================
+console.log('\n[Group 9] Testing Catalog Ricochet Particles & Surface Impact Sparks...');
+
+// 9.1 Catalog-Defined Particle Trait Extraction
+const triadConfig = engine.getTrailConfig('disc_delta_triad');
+assert.strictEqual(triadConfig.shape, 'triangle');
+assert.strictEqual(triadConfig.particles?.ricochetSparks, true);
+assert.strictEqual(triadConfig.particles?.sparkColorHex, '#00f3ff');
+assert.strictEqual(triadConfig.particles?.sparkCount, 16);
+
+const shurikenConfig = engine.getTrailConfig('disc_shuriken_void');
+assert.strictEqual(shurikenConfig.shape, 'shuriken_4');
+assert.strictEqual(shurikenConfig.particles?.ricochetSparks, true);
+assert.strictEqual(shurikenConfig.particles?.sparkColorHex, '#ff0055');
+assert.strictEqual(shurikenConfig.particles?.sparkCount, 24);
+
+const legacyConfig = engine.getTrailConfig('disc_default');
+assert.strictEqual(legacyConfig.shape, 'circle');
+assert.strictEqual(legacyConfig.particles, null);
+
+// 9.2 Ricochet Spark Resolution Simulation
+function resolveRicochetSparks(disc) {
+  if (disc.cosmetics?.particles?.ricochetSparks) {
+    const p = disc.cosmetics.particles;
+    return {
+      color: p.sparkColorHex || disc.cosmetics.primaryHex || disc.color,
+      count: p.sparkCount || 16,
+      power: 8,
+      custom: true
+    };
+  }
+  return {
+    color: (disc.cosmetics && disc.cosmetics.primaryHex) ? disc.cosmetics.primaryHex : disc.color,
+    count: 10,
+    power: 6,
+    custom: false
+  };
+}
+
+const triadDisc = {
+  color: 0x00f3ff,
+  cosmetics: triadConfig
+};
+const triadSparks = resolveRicochetSparks(triadDisc);
+assert.strictEqual(triadSparks.custom, true);
+assert.strictEqual(triadSparks.color, '#00f3ff');
+assert.strictEqual(triadSparks.count, 16);
+
+const voidDisc = {
+  color: 0xff0055,
+  cosmetics: shurikenConfig
+};
+const voidSparks = resolveRicochetSparks(voidDisc);
+assert.strictEqual(voidSparks.custom, true);
+assert.strictEqual(voidSparks.color, '#ff0055');
+assert.strictEqual(voidSparks.count, 24);
+
+const standardDisc = {
+  color: 0x00f3ff,
+  cosmetics: legacyConfig
+};
+const standardSparks = resolveRicochetSparks(standardDisc);
+assert.strictEqual(standardSparks.custom, false);
+assert.strictEqual(standardSparks.count, 10);
+
+console.log('✓ Group 9: Catalog ricochet particles, custom spark traits, and fallback behavior verified.');
 
 console.log('\n=================================================================');
 console.log('ALL COSMETIC MATERIAL ENGINE & PREVIEW SCENE TESTS PASSED (100% SUCCESS)');

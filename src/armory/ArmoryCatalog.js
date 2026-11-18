@@ -100,6 +100,7 @@ export const ARMORY_CATALOG = Object.freeze({
       displayName: 'Void Core',
       category: ARMORY_CATEGORIES.DISC_SKINS,
       description: 'Obsidian frame forged from unallocated sectors of the deep void.',
+      shape: 'circle',
       unlockType: UNLOCK_TYPES.ACHIEVEMENT,
       cost: 0,
       achievementId: 'corrupted_void_mastery',
@@ -109,6 +110,73 @@ export const ARMORY_CATALOG = Object.freeze({
         trailOpacity: 0.9,
         wireframeToggle: true,
         glowIntensity: 2.2
+      }),
+      particles: null
+    }),
+    Object.freeze({
+      id: 'disc_delta_triad',
+      displayName: 'Delta Triad',
+      category: ARMORY_CATEGORIES.DISC_SKINS,
+      description: 'Aerodynamic tri-blade kinetic disc with high-frequency particle emission.',
+      shape: 'triangle',
+      unlockType: UNLOCK_TYPES.BITS,
+      cost: 900,
+      achievementId: null,
+      shader: Object.freeze({
+        primaryHex: '#00f3ff',
+        secondaryEmissiveHex: '#0066ff',
+        trailOpacity: 0.9,
+        wireframeToggle: false,
+        glowIntensity: 2.2
+      }),
+      particles: Object.freeze({
+        ricochetSparks: true,
+        sparkColorHex: '#00f3ff',
+        sparkCount: 16
+      })
+    }),
+    Object.freeze({
+      id: 'disc_quantum_quad',
+      displayName: 'Quantum Quad',
+      category: ARMORY_CATEGORIES.DISC_SKINS,
+      description: 'Diamond rotor disc generating balanced 4-pole quantum ionization fields.',
+      shape: 'square',
+      unlockType: UNLOCK_TYPES.BITS,
+      cost: 1100,
+      achievementId: null,
+      shader: Object.freeze({
+        primaryHex: '#00ffcc',
+        secondaryEmissiveHex: '#0088aa',
+        trailOpacity: 0.9,
+        wireframeToggle: false,
+        glowIntensity: 2.0
+      }),
+      particles: Object.freeze({
+        ricochetSparks: true,
+        sparkColorHex: '#00ffcc',
+        sparkCount: 20
+      })
+    }),
+    Object.freeze({
+      id: 'disc_shuriken_void',
+      displayName: 'Void Shuriken',
+      category: ARMORY_CATEGORIES.DISC_SKINS,
+      description: 'Aggressive multi-bladed energy star forging intense crimson ricochet sparks.',
+      shape: 'shuriken_4',
+      unlockType: UNLOCK_TYPES.ACHIEVEMENT,
+      cost: 0,
+      achievementId: 'corrupted_void_mastery',
+      shader: Object.freeze({
+        primaryHex: '#ff0055',
+        secondaryEmissiveHex: '#660022',
+        trailOpacity: 0.95,
+        wireframeToggle: true,
+        glowIntensity: 2.4
+      }),
+      particles: Object.freeze({
+        ricochetSparks: true,
+        sparkColorHex: '#ff0055',
+        sparkCount: 24
       })
     })
   ]),

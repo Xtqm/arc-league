@@ -1,5 +1,12 @@
 import * as THREE from '../../vendor/three.module.js';
 import { config } from '../core/config.js';
+import {
+  DISC_SHAPES,
+  normalizeShapeName,
+  createOuterGeometry,
+  createFaceGeometry,
+  createHubGeometry
+} from './DiscGeometryFactory.js';
 
 // Shared environment materials
 export const wallMat = new THREE.MeshStandardMaterial({ color: 0x04141c, roughness: .4, metalness: .9 });
@@ -7,13 +14,18 @@ export const glowMat = new THREE.MeshBasicMaterial({ color: config.CYAN });
 export const tileMatIntact = new THREE.MeshStandardMaterial({ color: 0x07202c, roughness: .28, metalness: .8 });
 export const tileEdgeMatIntact = new THREE.LineBasicMaterial({ color: 0x187588, transparent: true, opacity: .75, depthWrite: false });
 
-export function discGeo(radius = config.DISC_R, tube = 0.085) {
-  return new THREE.TorusGeometry(radius, tube, 8, 40);
+export function discGeo(radius = config.DISC_R, tube = 0.085, shape = DISC_SHAPES.CIRCLE) {
+  return createOuterGeometry(shape, { radius, tube });
 }
 
-export function makeDisc(color) {
+export function makeDisc(color, options = {}) {
+  const opts = typeof options === 'string' ? { shape: options } : (options || {});
+  const shape = normalizeShapeName(opts.shape || DISC_SHAPES.CIRCLE);
+  const radius = opts.radius ?? (config.DISC_R || 0.6);
+
   const g = new THREE.Group();
   g.userData.part = 'disc_root';
+  g.userData.currentShape = shape;
 
   const baseColor = new THREE.Color(color);
   const outerMat = new THREE.MeshStandardMaterial({
@@ -23,18 +35,18 @@ export function makeDisc(color) {
     roughness: 0.16,
     metalness: 0.1
   });
-  const outer = new THREE.Mesh(discGeo(), outerMat);
+  const outer = new THREE.Mesh(createOuterGeometry(shape, { radius, ...opts }), outerMat);
   outer.userData.part = 'disc_outer';
 
   const face = new THREE.Mesh(
-    new THREE.CircleGeometry(config.DISC_R - .06, 32),
+    createFaceGeometry(shape, { radius, ...opts }),
     new THREE.MeshBasicMaterial({ color: baseColor.clone(), transparent: true, opacity: .24, side: THREE.DoubleSide })
   );
   face.userData.part = 'disc_face';
 
   const hubColor = new THREE.Color(config.WHITE);
   const hub = new THREE.Mesh(
-    new THREE.TorusGeometry(.2, .05, 6, 20),
+    createHubGeometry(shape, { radius, ...opts }),
     new THREE.MeshStandardMaterial({
       color: hubColor,
       emissive: hubColor.clone(),
@@ -524,17 +536,20 @@ export function makeProgram(color, options = {}) {
 
   // 8. Hover-Palm Telekinetic Kinetic Disc (parented to rightHand, floating above upturned open palm)
   const palmDiscRadius = config.DISC_R * 0.46;
-  const disc = new THREE.Mesh(discGeo(palmDiscRadius, 0.042), lit.clone());
+  const palmShape = normalizeShapeName(options.discShape || DISC_SHAPES.CIRCLE);
+  const disc = new THREE.Mesh(createOuterGeometry(palmShape, { radius: palmDiscRadius, tube: 0.042 }), lit.clone());
   disc.position.set(0, -0.06, 0.18);
   disc.rotation.set(-0.04, 0, 0);
   disc.userData.part = 'chassis_back_disc';
+  disc.userData.currentShape = palmShape;
 
   const discFace = new THREE.Mesh(
-    new THREE.CircleGeometry(palmDiscRadius - 0.035, 24),
+    createFaceGeometry(palmShape, { radius: palmDiscRadius, margin: 0.035 }),
     new THREE.MeshBasicMaterial({ color: baseColor.clone(), transparent: true, opacity: 0.28, side: THREE.DoubleSide })
   );
   discFace.userData.part = 'chassis_back_disc_face';
   disc.add(discFace);
+  disc.userData.faceMesh = discFace;
 
   limbs.rightHand.add(disc);
   g.userData.backDisc = disc;

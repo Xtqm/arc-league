@@ -10,6 +10,14 @@ import * as THREE from '../../vendor/three.module.js';
 import { ARMORY_CATEGORIES, getCatalogItem } from './ArmoryCatalog.js';
 import { armoryManager as defaultArmoryManager, ArmoryEvents } from './ArmoryManager.js';
 import { config } from '../core/config.js';
+import {
+  DISC_SHAPES,
+  normalizeShapeName,
+  createOuterGeometry,
+  createFaceGeometry,
+  createHubGeometry,
+  createWireframeGeometry
+} from '../graphics/DiscGeometryFactory.js';
 
 /**
  * PBR surface presets for Athlete Rig armor plating.
@@ -240,9 +248,37 @@ export class CosmeticMaterialEngine {
     const primaryColor = new THREE.Color(shader.primaryHex);
     const secondaryColor = new THREE.Color(shader.secondaryEmissiveHex);
     const glowScale = typeof shader.glowIntensity === 'number' ? shader.glowIntensity : 1.5;
+    const targetShape = normalizeShapeName(item?.shape || shader?.shape || 'circle');
 
     // Direct single mesh case (Hover-Palm held construct disc)
     if (discMesh.isMesh && discMesh.material && discMesh.userData.part === 'chassis_back_disc') {
+      const palmRadius = (config.DISC_R || 0.6) * 0.46;
+
+      // Synchronize palm disc geometry shape if changed
+      if (discMesh.userData.currentShape !== targetShape) {
+        const oldRimGeo = discMesh.geometry;
+        discMesh.geometry = createOuterGeometry(targetShape, { radius: palmRadius, tube: 0.042 });
+        if (oldRimGeo && typeof oldRimGeo.dispose === 'function') {
+          oldRimGeo.dispose();
+        }
+
+        let palmFace = discMesh.userData.faceMesh;
+        if (!palmFace) {
+          discMesh.traverse((child) => {
+            if (child !== discMesh && child.userData?.part === 'chassis_back_disc_face') palmFace = child;
+          });
+        }
+        if (palmFace) {
+          const oldFaceGeo = palmFace.geometry;
+          palmFace.geometry = createFaceGeometry(targetShape, { radius: palmRadius, margin: 0.035 });
+          if (oldFaceGeo && typeof oldFaceGeo.dispose === 'function') {
+            oldFaceGeo.dispose();
+          }
+          discMesh.userData.faceMesh = palmFace;
+        }
+        discMesh.userData.currentShape = targetShape;
+      }
+
       if (discMesh.material.color) {
         discMesh.material.color.copy(primaryColor);
       }
@@ -271,9 +307,37 @@ export class CosmeticMaterialEngine {
         else if (child.userData?.part === 'disc_face') faceMesh = child;
         else if (child.userData?.part === 'disc_hub') hubMesh = child;
         else if (child.userData?.part === 'disc_light' || child.isPointLight) pointLight = child;
-        else if (!outerMesh && child.isMesh && child.geometry?.type === 'TorusGeometry') outerMesh = child;
-        else if (!faceMesh && child.isMesh && child.geometry?.type === 'CircleGeometry') faceMesh = child;
+        else if (!outerMesh && child.isMesh && (child.geometry?.type === 'TorusGeometry' || child.geometry?.type === 'ExtrudeGeometry')) outerMesh = child;
+        else if (!faceMesh && child.isMesh && (child.geometry?.type === 'CircleGeometry' || child.geometry?.type === 'ShapeGeometry')) faceMesh = child;
       });
+    }
+
+    // Geometry shape swapping with clean buffer disposal
+    const currentDiscShape = discMesh.userData.currentShape;
+    const discRadius = config.DISC_R || 0.6;
+    if (currentDiscShape !== targetShape) {
+      if (outerMesh) {
+        const oldOuter = outerMesh.geometry;
+        outerMesh.geometry = createOuterGeometry(targetShape, { radius: discRadius });
+        if (oldOuter && typeof oldOuter.dispose === 'function') {
+          oldOuter.dispose();
+        }
+      }
+      if (faceMesh) {
+        const oldFace = faceMesh.geometry;
+        faceMesh.geometry = createFaceGeometry(targetShape, { radius: discRadius });
+        if (oldFace && typeof oldFace.dispose === 'function') {
+          oldFace.dispose();
+        }
+      }
+      if (hubMesh) {
+        const oldHub = hubMesh.geometry;
+        hubMesh.geometry = createHubGeometry(targetShape, { radius: discRadius });
+        if (oldHub && typeof oldHub.dispose === 'function') {
+          oldHub.dispose();
+        }
+      }
+      discMesh.userData.currentShape = targetShape;
     }
 
     // 1. Outer rim emissive update
@@ -314,8 +378,7 @@ export class CosmeticMaterialEngine {
     if (shouldHaveWireframe) {
       if (!wireframeMesh) {
         // Instantiate auxiliary wireframe overlay geometry and material
-        const radius = config.DISC_R || 0.6;
-        const wfGeo = new THREE.TorusGeometry(radius, 0.088, 8, 20);
+        const wfGeo = createWireframeGeometry(targetShape, { radius: discRadius });
         const wfMat = new THREE.MeshBasicMaterial({
           color: secondaryColor,
           wireframe: true,
@@ -325,9 +388,19 @@ export class CosmeticMaterialEngine {
         wireframeMesh = new THREE.Mesh(wfGeo, wfMat);
         wireframeMesh.userData.isWireframeOverlay = true;
         wireframeMesh.userData.part = 'disc_wireframe_overlay';
+        wireframeMesh.userData.currentShape = targetShape;
         discMesh.add(wireframeMesh);
         discMesh.userData.wireframeOverlay = wireframeMesh;
       } else {
+        // Swap wireframe geometry if shape changed
+        if (wireframeMesh.userData?.currentShape !== targetShape) {
+          const oldWfGeo = wireframeMesh.geometry;
+          wireframeMesh.geometry = createWireframeGeometry(targetShape, { radius: discRadius });
+          if (oldWfGeo && typeof oldWfGeo.dispose === 'function') {
+            oldWfGeo.dispose();
+          }
+          wireframeMesh.userData.currentShape = targetShape;
+        }
         // Mutate existing wireframe overlay color in-place
         if (wireframeMesh.material && wireframeMesh.material.color) {
           wireframeMesh.material.color.copy(secondaryColor);
@@ -456,7 +529,9 @@ export class CosmeticMaterialEngine {
       primaryColor: new THREE.Color(shader.primaryHex),
       secondaryColor: new THREE.Color(shader.secondaryEmissiveHex),
       opacity: typeof shader.trailOpacity === 'number' ? shader.trailOpacity : 0.85,
-      glowIntensity: typeof shader.glowIntensity === 'number' ? shader.glowIntensity : 1.5
+      glowIntensity: typeof shader.glowIntensity === 'number' ? shader.glowIntensity : 1.5,
+      particles: item?.particles || null,
+      shape: item?.shape || 'circle'
     };
   }
 

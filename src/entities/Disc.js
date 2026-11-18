@@ -264,8 +264,15 @@ export function updateDiscs(dt) {
           if (significant && !D.returning) {
             D.bounces++;
             if (D.hitFoes) D.hitFoes.clear();
-            const burstColor = (D.cosmetics && D.cosmetics.primaryHex) ? D.cosmetics.primaryHex : D.color;
-            burst(D.pos.clone(), burstColor, 10, 6);
+            if (D.cosmetics?.particles?.ricochetSparks) {
+              const p = D.cosmetics.particles;
+              const sparkColor = p.sparkColorHex || D.cosmetics.primaryHex || D.color;
+              const sparkCount = p.sparkCount || 16;
+              burst(D.pos.clone(), sparkColor, sparkCount, 8);
+            } else {
+              const burstColor = (D.cosmetics && D.cosmetics.primaryHex) ? D.cosmetics.primaryHex : D.color;
+              burst(D.pos.clone(), burstColor, 10, 6);
+            }
             shake(.06);
           }
         }
@@ -311,8 +318,15 @@ export function updateDiscs(dt) {
         D.bounces++;
         if (D.hitFoes) D.hitFoes.clear();
         D.curve = -D.curve * 0.5;
-        const burstColor = (D.cosmetics && D.cosmetics.primaryHex) ? D.cosmetics.primaryHex : D.color;
-        burst(D.pos.clone(), burstColor, 10, 6);
+        if (D.cosmetics?.particles?.ricochetSparks) {
+          const p = D.cosmetics.particles;
+          const sparkColor = p.sparkColorHex || D.cosmetics.primaryHex || D.color;
+          const sparkCount = p.sparkCount || 16;
+          burst(D.pos.clone(), sparkColor, sparkCount, 8);
+        } else {
+          const burstColor = (D.cosmetics && D.cosmetics.primaryHex) ? D.cosmetics.primaryHex : D.color;
+          burst(D.pos.clone(), burstColor, 10, 6);
+        }
         shake(.06);
       }
     }

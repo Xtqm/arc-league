@@ -117,5 +117,62 @@ assert.ok(recoveredUser, 'Fallback provider must recover and provision user');
 assert.strictEqual(recoveredUser.isAnonymous, true);
 console.log('✓ Resilient fallback provisions guest when remote cluster errors');
 
+// Test 12: Desktop native auth session persistence & re-hydration
+let desktopSessionStorage = null;
+let desktopClearInvoked = false;
+
+global.window = {
+  electronDesktop: {
+    isDesktop: true,
+    loadAuthSession: async () => ({ success: true, data: desktopSessionStorage }),
+    saveAuthSession: async (payload) => {
+      desktopSessionStorage = payload;
+      return { success: true };
+    },
+    clearAuthSession: async () => {
+      desktopSessionStorage = null;
+      desktopClearInvoked = true;
+      return { success: true };
+    }
+  }
+};
+
+// Sign in with credentials in desktop mode to persist to desktop storage
+const desktopSupabase1 = new SupabaseAuthProvider();
+await desktopSupabase1.init();
+const credUser = await desktopSupabase1.signInWithCredentials('kevin.flynn@grid.sys', 'MasterControl1982', 'FLYNN_DEV');
+assert.strictEqual(credUser.isAnonymous, false);
+assert.notStrictEqual(desktopSessionStorage, null);
+assert.strictEqual(desktopSessionStorage.handle, 'FLYNN_DEV');
+assert.strictEqual(desktopSessionStorage.isAnonymous, false);
+console.log('✓ SupabaseAuthProvider persisted authenticated session to electronDesktop');
+
+// Initialize a second instance without a web session, verifying desktop session is rehydrated and suppresses guest fallback
+const emptyWebClient = {
+  auth: {
+    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+    getSession: async () => ({ data: { session: null } }),
+    signInAnonymously: async () => { throw new Error('signInGuest should NOT be called when desktop session exists'); },
+    signOut: async () => ({ error: null })
+  }
+};
+const desktopSupabase2 = new SupabaseAuthProvider({ client: emptyWebClient });
+await desktopSupabase2.init();
+const restoredDesktopUser = desktopSupabase2.getCurrentUser();
+assert.notStrictEqual(restoredDesktopUser, null);
+assert.strictEqual(restoredDesktopUser.isAnonymous, false, 'Desktop session must restore authenticated state');
+assert.strictEqual(restoredDesktopUser.handle, 'FLYNN_DEV', 'Desktop session must restore callsign');
+assert.strictEqual(restoredDesktopUser.uid, credUser.uid, 'Desktop session must restore UID');
+console.log('✓ SupabaseAuthProvider restored authenticated desktop session, suppressing guest provisioning');
+
+// Test 13: Desktop sign-out cleans desktop session
+await desktopSupabase2.signOut();
+assert.strictEqual(desktopSupabase2.getCurrentUser(), null);
+assert.strictEqual(desktopSessionStorage, null);
+assert.strictEqual(desktopClearInvoked, true);
+console.log('✓ SupabaseAuthProvider.signOut cleanly purged desktop auth session');
+
+delete global.window;
+
 unsub();
 console.log('--- SupabaseAuthProvider Test Suite PASSED ---\n');

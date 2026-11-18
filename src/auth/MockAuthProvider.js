@@ -82,33 +82,88 @@ export class MockAuthProvider extends IAuthProvider {
     return 'mock';
   }
 
+  _isDesktop() {
+    return typeof window !== 'undefined' && !!(window.electronDesktop?.isDesktop);
+  }
+
+  async _loadSessionPayload() {
+    if (this._isDesktop() && typeof window.electronDesktop.loadAuthSession === 'function') {
+      try {
+        const res = await window.electronDesktop.loadAuthSession();
+        if (res && res.success && res.data) {
+          return res.data.user || res.data;
+        }
+      } catch (desktopErr) {
+        console.warn('MockAuthProvider: Failed reading desktop auth session:', desktopErr);
+      }
+    }
+
+    try {
+      const raw = storage.getItem(STORAGE_KEY);
+      if (raw) {
+        return JSON.parse(raw);
+      }
+    } catch (err) {
+      console.warn('MockAuthProvider: Failed reading local storage auth session:', err);
+    }
+    return null;
+  }
+
+  async _persistSession(identity) {
+    try {
+      if (identity) {
+        storage.setItem(STORAGE_KEY, JSON.stringify(identity));
+      } else {
+        storage.removeItem(STORAGE_KEY);
+      }
+    } catch (err) {
+      console.warn('MockAuthProvider: Failed persisting identity to storage:', err);
+    }
+
+    if (this._isDesktop()) {
+      try {
+        if (identity && !identity.isAnonymous && typeof window.electronDesktop.saveAuthSession === 'function') {
+          await window.electronDesktop.saveAuthSession(identity);
+        } else if ((!identity || identity.isAnonymous) && typeof window.electronDesktop.clearAuthSession === 'function') {
+          await window.electronDesktop.clearAuthSession();
+        }
+      } catch (err) {
+        console.warn('MockAuthProvider: Failed updating desktop auth session:', err);
+      }
+    }
+  }
+
   /**
-   * Initializes the mock provider, loading an existing guest session or provisioning a new one.
+   * Initializes the mock provider, loading an existing session or provisioning a new one.
    * @returns {Promise<void>}
    */
   async init() {
     if (this._initialized) return;
 
     try {
-      const raw = storage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.uid) {
-          this._currentUser = {
-            uid: parsed.uid,
-            handle: parsed.handle || generateGuestHandle(parsed.uid),
-            isAnonymous: true,
-            providerId: this.providerId,
-            token: parsed.token || `mock_token_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-            createdAt: parsed.createdAt || Date.now(),
-            lastLoginAt: Date.now()
-          };
-          // Update lastLoginAt
-          storage.setItem(STORAGE_KEY, JSON.stringify(this._currentUser));
-        }
+      const parsed = await this._loadSessionPayload();
+      if (parsed && parsed.uid) {
+        const isAnon = typeof parsed.isAnonymous === 'boolean'
+          ? parsed.isAnonymous
+          : (typeof parsed.is_anonymous === 'boolean' ? parsed.is_anonymous : true);
+        const provId = parsed.providerId || (isAnon ? this.providerId : 'password');
+        const defaultHandle = isAnon ? generateGuestHandle(parsed.uid) : 'PROGRAM';
+
+        this._currentUser = {
+          uid: parsed.uid,
+          handle: parsed.handle || defaultHandle,
+          isAnonymous: isAnon,
+          providerId: provId,
+          email: parsed.email || null,
+          token: parsed.token || `mock_token_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+          createdAt: parsed.createdAt || Date.now(),
+          lastLoginAt: Date.now()
+        };
+        // Update lastLoginAt
+        await this._persistSession(this._currentUser);
       }
     } catch (err) {
-      console.warn('MockAuthProvider: Failed reading existing guest identity, re-provisioning:', err);
+      console.warn('MockAuthProvider: Failed reading existing identity, re-provisioning:', err);
     }
 
     if (!this._currentUser) {
@@ -149,7 +204,7 @@ export class MockAuthProvider extends IAuthProvider {
     };
 
     try {
-      storage.setItem(STORAGE_KEY, JSON.stringify(identity));
+      await this._persistSession(identity);
     } catch (err) {
       console.warn('MockAuthProvider: Failed persisting guest identity:', err);
     }
@@ -173,9 +228,7 @@ export class MockAuthProvider extends IAuthProvider {
       createdAt: this._currentUser?.createdAt || Date.now(),
       lastLoginAt: Date.now()
     };
-    try {
-      storage.setItem(STORAGE_KEY, JSON.stringify(identity));
-    } catch (_) {}
+    await this._persistSession(identity);
     this._currentUser = identity;
     this._notify();
     return identity;
@@ -195,9 +248,7 @@ export class MockAuthProvider extends IAuthProvider {
       createdAt: this._currentUser?.createdAt || Date.now(),
       lastLoginAt: Date.now()
     };
-    try {
-      storage.setItem(STORAGE_KEY, JSON.stringify(identity));
-    } catch (_) {}
+    await this._persistSession(identity);
     this._currentUser = identity;
     this._notify();
     return identity;
@@ -209,15 +260,14 @@ export class MockAuthProvider extends IAuthProvider {
       await this.signInGuest();
     }
     this._currentUser.handle = newHandle;
-    try {
-      storage.setItem(STORAGE_KEY, JSON.stringify(this._currentUser));
-    } catch (_) {}
+    await this._persistSession(this._currentUser);
     this._notify();
     return this._currentUser;
   }
 
   async signOut() {
     this._currentUser = null;
+    await this._persistSession(null);
     this._notify();
   }
 

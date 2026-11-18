@@ -63,6 +63,10 @@ class InMemorySupabaseAuth {
     this._loadPersistedSession();
   }
 
+  _isDesktop() {
+    return typeof window !== 'undefined' && !!(window.electronDesktop?.isDesktop);
+  }
+
   _loadPersistedSession() {
     try {
       if (typeof localStorage !== 'undefined') {
@@ -78,6 +82,42 @@ class InMemorySupabaseAuth {
     } catch (_) {}
   }
 
+  async loadDesktopSession() {
+    if (!this._isDesktop() || typeof window.electronDesktop.loadAuthSession !== 'function') {
+      return false;
+    }
+    try {
+      const res = await window.electronDesktop.loadAuthSession();
+      if (res && res.success && res.data) {
+        const data = res.data;
+        if (data.user) {
+          this._user = data.user;
+          this._session = data.session || { access_token: data.user.token || `mock_jwt_${data.user.id}`, user: data.user };
+          return true;
+        } else if (data.uid || data.id) {
+          const id = data.uid || data.id;
+          const isAnon = typeof data.isAnonymous === 'boolean'
+            ? data.isAnonymous
+            : (typeof data.is_anonymous === 'boolean' ? data.is_anonymous : false);
+          this._user = {
+            id,
+            email: data.email || null,
+            is_anonymous: isAnon,
+            user_metadata: data.userMetadata || data.user_metadata || { handle: data.handle }
+          };
+          this._session = {
+            access_token: data.token || `mock_jwt_${id}`,
+            user: this._user
+          };
+          return true;
+        }
+      }
+    } catch (err) {
+      console.warn('InMemorySupabaseAuth: Error loading desktop session:', err);
+    }
+    return false;
+  }
+
   _persistSession() {
     try {
       if (typeof localStorage !== 'undefined') {
@@ -88,6 +128,16 @@ class InMemorySupabaseAuth {
         }
       }
     } catch (_) {}
+
+    if (this._isDesktop()) {
+      try {
+        if (this._session && this._user && !this._user.is_anonymous && typeof window.electronDesktop.saveAuthSession === 'function') {
+          window.electronDesktop.saveAuthSession({ user: this._user, session: this._session });
+        } else if ((!this._user || this._user.is_anonymous) && typeof window.electronDesktop.clearAuthSession === 'function') {
+          window.electronDesktop.clearAuthSession();
+        }
+      } catch (_) {}
+    }
   }
 
   onAuthStateChange(callback) {
@@ -271,6 +321,84 @@ export class SupabaseAuthProvider extends IAuthProvider {
     return this._client;
   }
 
+  _isDesktop() {
+    return typeof window !== 'undefined' && !!(window.electronDesktop?.isDesktop);
+  }
+
+  async _loadDesktopSession() {
+    if (!this._isDesktop() || typeof window.electronDesktop.loadAuthSession !== 'function') {
+      return null;
+    }
+    try {
+      const res = await window.electronDesktop.loadAuthSession();
+      if (res && res.success && res.data) {
+        const d = res.data;
+        const userObj = d.user || d;
+        const isAnon = typeof userObj.isAnonymous === 'boolean'
+          ? userObj.isAnonymous
+          : (typeof userObj.is_anonymous === 'boolean' ? userObj.is_anonymous : false);
+        const uid = userObj.id || userObj.uid;
+        if (uid) {
+          const userForMapping = {
+            id: uid,
+            email: userObj.email || null,
+            is_anonymous: isAnon,
+            user_metadata: userObj.userMetadata || userObj.user_metadata || { handle: userObj.handle }
+          };
+          const sessionObj = d.session || { access_token: userObj.token || '' };
+          return { user: userForMapping, session: sessionObj, isAnonymous: isAnon };
+        }
+      }
+    } catch (err) {
+      console.warn('SupabaseAuthProvider: Failed reading desktop auth session:', err);
+    }
+    return null;
+  }
+
+  async _persistDesktopSession(user, session) {
+    if (!this._isDesktop()) return;
+    try {
+      if (user && !user.isAnonymous && typeof window.electronDesktop.saveAuthSession === 'function') {
+        await window.electronDesktop.saveAuthSession({
+          user: {
+            id: user.uid,
+            email: user.email,
+            is_anonymous: false,
+            user_metadata: user.userMetadata || { handle: user.handle }
+          },
+          session: session ? {
+            access_token: session.access_token || user.token,
+            user: {
+              id: user.uid,
+              email: user.email,
+              is_anonymous: false,
+              user_metadata: user.userMetadata || { handle: user.handle }
+            }
+          } : { access_token: user.token },
+          uid: user.uid,
+          handle: user.handle,
+          isAnonymous: false,
+          providerId: user.providerId || 'supabase',
+          token: user.token,
+          email: user.email
+        });
+      } else if ((!user || user.isAnonymous) && typeof window.electronDesktop.clearAuthSession === 'function') {
+        await window.electronDesktop.clearAuthSession();
+      }
+    } catch (err) {
+      console.warn('SupabaseAuthProvider: Failed persisting desktop session:', err);
+    }
+  }
+
+  async _clearDesktopSession() {
+    if (!this._isDesktop() || typeof window.electronDesktop.clearAuthSession !== 'function') return;
+    try {
+      await window.electronDesktop.clearAuthSession();
+    } catch (err) {
+      console.warn('SupabaseAuthProvider: Failed clearing desktop session:', err);
+    }
+  }
+
   /**
    * Initializes the Supabase client and verifies the existing session.
    * @returns {Promise<void>}
@@ -307,6 +435,10 @@ export class SupabaseAuthProvider extends IAuthProvider {
       }
     }
 
+    if (this._client?.auth && typeof this._client.auth.loadDesktopSession === 'function') {
+      await this._client.auth.loadDesktopSession();
+    }
+
     // Subscribe to Supabase auth state change events
     if (this._client && this._client.auth) {
       const { data } = this._client.auth.onAuthStateChange((event, session) => {
@@ -320,10 +452,22 @@ export class SupabaseAuthProvider extends IAuthProvider {
         if (sessionData?.session?.user) {
           this._currentUser = this._mapSupabaseUser(sessionData.session.user, sessionData.session);
           cleanAuthUrlHash();
+          await this._persistDesktopSession(this._currentUser, sessionData.session);
         } else {
           cleanAuthUrlHash();
-          // Automatically provision native anonymous user if no session exists
-          await this.signInGuest();
+          // Check desktop session before falling back to guest provisioning
+          const desktopData = await this._loadDesktopSession();
+          if (desktopData && !desktopData.isAnonymous && desktopData.user) {
+            this._currentUser = this._mapSupabaseUser(desktopData.user, desktopData.session);
+            if (this._client.auth instanceof InMemorySupabaseAuth) {
+              this._client.auth._user = desktopData.user;
+              this._client.auth._session = desktopData.session;
+            }
+            this._notifyListeners(this._currentUser);
+          } else {
+            // Automatically provision native anonymous user if no session exists
+            await this.signInGuest();
+          }
         }
       } catch (sessionErr) {
         console.warn('SupabaseAuthProvider: Session check or guest sign-in encountered error, falling back to simulated client:', sessionErr);
@@ -363,6 +507,7 @@ export class SupabaseAuthProvider extends IAuthProvider {
       }
 
       this._currentUser = this._mapSupabaseUser(data.user, data.session);
+      await this._persistDesktopSession(this._currentUser, data.session);
       this._notifyListeners(this._currentUser);
       return this._currentUser;
     } catch (err) {
@@ -417,6 +562,7 @@ export class SupabaseAuthProvider extends IAuthProvider {
       if (error) throw new Error(`Supabase updateUser link failed: ${error.message}`);
       if (data?.user) {
         this._currentUser = this._mapSupabaseUser(data.user, null);
+        await this._persistDesktopSession(this._currentUser, null);
         this._notifyListeners(this._currentUser);
       }
       return this._currentUser;
@@ -459,7 +605,9 @@ export class SupabaseAuthProvider extends IAuthProvider {
     // If OAuth returns a user/session synchronously (such as in tests/mock mode)
     if (data?.session?.user || this._client.auth._user) {
       const u = data?.session?.user || this._client.auth._user;
-      this._currentUser = this._mapSupabaseUser(u, data?.session || this._client.auth._session);
+      const s = data?.session || this._client.auth._session;
+      this._currentUser = this._mapSupabaseUser(u, s);
+      await this._persistDesktopSession(this._currentUser, s);
       this._notifyListeners(this._currentUser);
       return this._currentUser;
     }
@@ -497,6 +645,7 @@ export class SupabaseAuthProvider extends IAuthProvider {
           });
           if (!updateError && updateData?.user) {
             this._currentUser = this._mapSupabaseUser(updateData.user, null);
+            await this._persistDesktopSession(this._currentUser, null);
             this._notifyListeners(this._currentUser);
             return this._currentUser;
           }
@@ -512,6 +661,7 @@ export class SupabaseAuthProvider extends IAuthProvider {
         if (handle && this._currentUser.handle !== handle) {
           await this.updateHandle(handle);
         }
+        await this._persistDesktopSession(this._currentUser, data.session);
         this._notifyListeners(this._currentUser);
         return this._currentUser;
       }
@@ -533,6 +683,7 @@ export class SupabaseAuthProvider extends IAuthProvider {
 
       if (signData?.user) {
         this._currentUser = this._mapSupabaseUser(signData.user, signData.session);
+        await this._persistDesktopSession(this._currentUser, signData.session);
         this._notifyListeners(this._currentUser);
         return this._currentUser;
       }
@@ -573,6 +724,7 @@ export class SupabaseAuthProvider extends IAuthProvider {
 
     if (this._currentUser) {
       this._currentUser.handle = sanitized;
+      await this._persistDesktopSession(this._currentUser, null);
       this._notifyListeners(this._currentUser);
     }
 
@@ -584,10 +736,11 @@ export class SupabaseAuthProvider extends IAuthProvider {
    * @returns {Promise<void>}
    */
   async signOut() {
-    if (this._client?.auth) {
+    if (typeof this._client?.auth?.signOut === 'function') {
       await this._client.auth.signOut();
     }
     this._currentUser = null;
+    await this._clearDesktopSession();
     this._notifyListeners(null);
   }
 
@@ -616,8 +769,10 @@ export class SupabaseAuthProvider extends IAuthProvider {
   _handleSupabaseAuthEvent(event, session) {
     if (session?.user) {
       this._currentUser = this._mapSupabaseUser(session.user, session);
+      this._persistDesktopSession(this._currentUser, session);
     } else {
       this._currentUser = null;
+      this._clearDesktopSession();
     }
     this._notifyListeners(this._currentUser);
   }

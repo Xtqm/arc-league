@@ -13,6 +13,7 @@ const TEST_DOMAINS = {
     'auth/auth_save_state.test.js',
     'auth/auth_sfx.test.js',
     'auth/supabase_auth_provider.test.js',
+    'auth/desktop_auth_persistence.test.js',
     'auth/auth_terminal_integration.test.js',
     'auth/auth_integration.test.js'
   ],
@@ -63,7 +64,9 @@ const TEST_DOMAINS = {
     'ui/achievements_modal.test.js'
   ],
   desktop: [
-    'ui/update_notification.test.js'
+    'ui/update_notification.test.js',
+    'desktop/desktop_auth_ipc.test.js',
+    'desktop/preload_bridge.test.js'
   ],
   ai: [
     'ai/bot_combat_brain.test.js',

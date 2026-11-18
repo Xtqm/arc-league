@@ -60,5 +60,78 @@ await provider1.signOut();
 assert.strictEqual(provider1.getCurrentUser(), null);
 console.log('✓ Sign out successfully cleared current user session');
 
+// Test 7: Credential sign-in and re-hydration preserving isAnonymous: false
+const credProvider = new MockAuthProvider();
+const credUser = await credProvider.signInWithCredentials('flynn@encom.grid', 'TronLegacy1982', 'FLYNN');
+assert.strictEqual(credUser.isAnonymous, false);
+assert.strictEqual(credUser.providerId, 'password');
+assert.strictEqual(credUser.handle, 'FLYNN');
+
+const rehydratedCred = new MockAuthProvider();
+await rehydratedCred.init();
+const rehydratedUser = rehydratedCred.getCurrentUser();
+assert.strictEqual(rehydratedUser.uid, credUser.uid);
+assert.strictEqual(rehydratedUser.isAnonymous, false, 'Re-hydrated credential session must preserve isAnonymous: false');
+assert.strictEqual(rehydratedUser.providerId, 'password', 'Re-hydrated session must preserve providerId');
+assert.strictEqual(rehydratedUser.handle, 'FLYNN');
+console.log('✓ Credential authentication successfully preserved isAnonymous: false on restart');
+
+// Test 8: Federated sign-in and re-hydration
+const fedProvider = new MockAuthProvider();
+const fedUser = await fedProvider.signInWithFederated('google', { handle: 'GRID_RUNNER', email: 'runner@google.com' });
+assert.strictEqual(fedUser.isAnonymous, false);
+assert.strictEqual(fedUser.providerId, 'google');
+
+const rehydratedFed = new MockAuthProvider();
+await rehydratedFed.init();
+assert.strictEqual(rehydratedFed.getCurrentUser().isAnonymous, false);
+assert.strictEqual(rehydratedFed.getCurrentUser().providerId, 'google');
+assert.strictEqual(rehydratedFed.getCurrentUser().handle, 'GRID_RUNNER');
+console.log('✓ Federated authentication preserved isAnonymous: false and providerId across rehydration');
+
+// Test 9: Desktop IPC session persistence and re-hydration
+let savedDesktopSession = null;
+let clearDesktopCalled = false;
+global.window = {
+  electronDesktop: {
+    isDesktop: true,
+    loadAuthSession: async () => ({ success: true, data: savedDesktopSession }),
+    saveAuthSession: async (payload) => {
+      savedDesktopSession = payload;
+      return { success: true };
+    },
+    clearAuthSession: async () => {
+      savedDesktopSession = null;
+      clearDesktopCalled = true;
+      return { success: true };
+    }
+  }
+};
+
+const desktopProvider1 = new MockAuthProvider();
+await desktopProvider1.signInWithCredentials('clu@encom.sys', 'SystemOverride89', 'CLU_SYSTEM');
+assert.notStrictEqual(savedDesktopSession, null);
+assert.strictEqual(savedDesktopSession.handle, 'CLU_SYSTEM');
+assert.strictEqual(savedDesktopSession.isAnonymous, false);
+console.log('✓ Desktop IPC bridge received persisted auth session on credential sign-in');
+
+// Clear local safe storage by signing out a non-desktop dummy or passing fresh state
+const desktopProvider2 = new MockAuthProvider();
+await desktopProvider2.init();
+const desktopUser2 = desktopProvider2.getCurrentUser();
+assert.strictEqual(desktopUser2.handle, 'CLU_SYSTEM');
+assert.strictEqual(desktopUser2.isAnonymous, false);
+assert.strictEqual(desktopUser2.providerId, 'password');
+console.log('✓ Desktop shell re-hydrated authenticated identity directly via loadAuthSession');
+
+// Test 10: Desktop sign out clears desktop session file
+await desktopProvider2.signOut();
+assert.strictEqual(desktopProvider2.getCurrentUser(), null);
+assert.strictEqual(savedDesktopSession, null);
+assert.strictEqual(clearDesktopCalled, true);
+console.log('✓ Desktop sign out successfully cleared native auth session payload via clearAuthSession');
+
+delete global.window;
+
 unsub();
 console.log('--- MockAuthProvider Test Suite PASSED ---\n');

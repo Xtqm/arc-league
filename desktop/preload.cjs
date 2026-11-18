@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('electronDesktop', {
   loadProfile: () => ipcRenderer.invoke('desktop:load-profile'),
   saveProfile: (payload) => ipcRenderer.invoke('desktop:save-profile', payload),
   saveProfileSync: (payload) => ipcRenderer.send('desktop:save-profile-sync', payload),
+  loadAuthSession: () => ipcRenderer.invoke('desktop:load-auth-session'),
+  saveAuthSession: (payload) => ipcRenderer.invoke('desktop:save-auth-session', payload),
+  clearAuthSession: () => ipcRenderer.invoke('desktop:clear-auth-session'),
   // Steamworks methods
   steamGetStatus: () => ipcRenderer.invoke('steam:get-status'),
   steamUnlockAchievement: (achievementId) => ipcRenderer.invoke('steam:unlock-achievement', achievementId),

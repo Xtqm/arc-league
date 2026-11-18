@@ -25,6 +25,14 @@ function getBackupProfilePath() {
   return path.join(getSaveDir(), 'profile.backup.json');
 }
 
+function getAuthSessionPath() {
+  return path.join(getSaveDir(), 'auth_session.json');
+}
+
+function getBackupAuthSessionPath() {
+  return path.join(getSaveDir(), 'auth_session.backup.json');
+}
+
 // Hardware acceleration and GPU switches
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
@@ -187,6 +195,73 @@ ipcMain.on('desktop:save-profile-sync', (_event, payload) => {
     fs.writeFileSync(profilePath, jsonStr, 'utf8');
   } catch (err) {
     console.error('Failed to sync-save desktop profile:', err);
+  }
+});
+
+// Native desktop auth session handlers
+ipcMain.handle('desktop:load-auth-session', async () => {
+  try {
+    const sessionPath = getAuthSessionPath();
+    if (fs.existsSync(sessionPath)) {
+      const data = await fsPromises.readFile(sessionPath, 'utf8');
+      try {
+        const parsed = JSON.parse(data);
+        return { success: true, data: parsed };
+      } catch (parseErr) {
+        console.warn('Corrupted auth session file, rotating to backup:', parseErr);
+        const backupPath = getBackupAuthSessionPath();
+        try {
+          await fsPromises.rename(sessionPath, backupPath);
+        } catch (_) {}
+        return { success: true, data: null };
+      }
+    }
+    return { success: true, data: null };
+  } catch (err) {
+    console.error('Failed to load desktop auth session:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('desktop:save-auth-session', async (_event, payload) => {
+  try {
+    const sessionPath = getAuthSessionPath();
+    const backupPath = getBackupAuthSessionPath();
+    const jsonStr = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+
+    // If session file exists, rotate to backup before overwrite
+    if (fs.existsSync(sessionPath)) {
+      try {
+        await fsPromises.copyFile(sessionPath, backupPath);
+      } catch (_) {}
+    }
+
+    const tempPath = `${sessionPath}.tmp`;
+    await fsPromises.writeFile(tempPath, jsonStr, 'utf8');
+    await fsPromises.rename(tempPath, sessionPath);
+    return { success: true };
+  } catch (err) {
+    console.error('Failed to save desktop auth session:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('desktop:clear-auth-session', async () => {
+  try {
+    const sessionPath = getAuthSessionPath();
+    const backupPath = getBackupAuthSessionPath();
+    if (fs.existsSync(sessionPath)) {
+      await fsPromises.unlink(sessionPath);
+    }
+    if (fs.existsSync(backupPath)) {
+      try {
+        await fsPromises.unlink(backupPath);
+      } catch (_) {}
+    }
+    return { success: true };
+  } catch (err) {
+    console.error('Failed to clear desktop auth session:', err);
+    return { success: false, error: err.message };
   }
 });
 

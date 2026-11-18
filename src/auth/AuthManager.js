@@ -65,6 +65,17 @@ export class AuthManager {
     if (this._initPromise) return this._initPromise;
 
     this._initPromise = (async () => {
+      // Coordinate desktop filesystem storage loading prior to auth initialization
+      if (typeof window !== 'undefined' && window.electronDesktop?.isDesktop) {
+        if (this._storage && typeof this._storage.initDesktop === 'function') {
+          try {
+            await this._storage.initDesktop();
+          } catch (err) {
+            console.warn('AuthManager: Failed to initialize desktop storage:', err);
+          }
+        }
+      }
+
       if (provider) {
         if (this._unsubProvider) {
           this._unsubProvider();
@@ -75,6 +86,8 @@ export class AuthManager {
         const { url, anonKey } = resolveSupabaseConfig();
         if (url || (typeof window !== 'undefined' && window.__USE_SUPABASE__)) {
           this._provider = new SupabaseAuthProvider();
+        } else {
+          this._provider = new MockAuthProvider();
         }
       }
 
@@ -221,12 +234,39 @@ export class AuthManager {
 
   /**
    * Terminates the current authentication session.
+   * On desktop, purges the native authentication session and transitions to a fresh guest subroutine.
+   * @param {object} [options]
+   * @param {boolean} [options.transitionToGuest] Explicit override for whether to transition to guest.
    * @returns {Promise<void>}
    */
-  async signOut() {
-    if (!this._provider) return;
-    await this._provider.signOut();
+  async signOut(options = {}) {
+    const isDesktop = typeof window !== 'undefined' && !!(window.electronDesktop?.isDesktop);
+
+    if (isDesktop && typeof window.electronDesktop.clearAuthSession === 'function') {
+      try {
+        await window.electronDesktop.clearAuthSession();
+      } catch (err) {
+        console.warn('AuthManager: Failed clearing desktop auth session on signOut:', err);
+      }
+    }
+
+    if (this._provider) {
+      await this._provider.signOut();
+    }
+
+    if (this._storage?.state?.player) {
+      this._storage.state.player.handle = 'USER_PROGRAM';
+    }
+
     this._applyUser(null);
+
+    const shouldTransition = options.transitionToGuest !== undefined
+      ? options.transitionToGuest
+      : isDesktop;
+
+    if (shouldTransition) {
+      await this.signInGuest(true);
+    }
   }
 
   /**
@@ -440,15 +480,33 @@ export class AuthManager {
         }
         if (this._storage.state) {
           this._storage.state.player.id = user.uid;
-          if (user.handle) {
+
+          const existingHandle = this._storage.state.player?.handle;
+          const isExistingAuthenticated = existingHandle &&
+            existingHandle !== 'USER_PROGRAM' &&
+            existingHandle !== 'USER' &&
+            !existingHandle.startsWith('GUEST_SUBROUTINE_');
+
+          if (user.isAnonymous && isExistingAuthenticated) {
+            user.handle = existingHandle;
+          } else if (user.handle) {
             this._storage.state.player.handle = user.handle;
           }
+
           this._storage.save({ immediate: true });
         }
         this._saveState = normalizeSaveState(this._storage.state);
       } else {
         this._saveState = getOrCreateSaveState(user.uid, user.handle);
-        if (user.handle && this._saveState && this._saveState.handle !== user.handle) {
+        const existingHandle = this._saveState?.handle;
+        const isExistingAuthenticated = existingHandle &&
+          existingHandle !== 'USER_PROGRAM' &&
+          existingHandle !== 'USER' &&
+          !existingHandle.startsWith('GUEST_SUBROUTINE_');
+
+        if (user.isAnonymous && isExistingAuthenticated) {
+          user.handle = existingHandle;
+        } else if (user.handle && this._saveState && this._saveState.handle !== user.handle) {
           this._saveState.handle = user.handle;
           saveSaveState(this._saveState);
         }

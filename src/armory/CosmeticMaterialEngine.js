@@ -81,7 +81,7 @@ export class CosmeticMaterialEngine {
    * @param {THREE.Group|THREE.Mesh} [options.playerDiscMesh]
    */
   constructor(options = {}) {
-    this.armory = options.armory || defaultArmoryManager;
+    this._armory = options.armory || null;
     this.playerObj = options.playerObj || null;
     this.playerDiscMesh = options.playerDiscMesh || null;
     this._unsubscribeArmory = null;
@@ -90,6 +90,14 @@ export class CosmeticMaterialEngine {
     // Track active cosmetic IDs
     this.activeDiscSkinId = null;
     this.activeChassisSkinId = null;
+  }
+
+  get armory() {
+    return this._armory || defaultArmoryManager;
+  }
+
+  set armory(val) {
+    this._armory = val;
   }
 
   /**

@@ -385,6 +385,16 @@ assert.strictEqual(typeof mockWindow.gameDebug.armory.registerItem, 'function');
 assert.strictEqual(typeof mockWindow.gameDebug.armory.unregisterItem, 'function');
 assert.strictEqual(typeof mockWindow.gameDebug.armory.clearDynamicCatalog, 'function');
 assert.strictEqual(typeof mockWindow.gameDebug.armory.getCatalog, 'function');
+assert.strictEqual(typeof mockWindow.gameDebug.openStudio, 'function');
+assert.strictEqual(typeof mockWindow.gameDebug.closeStudio, 'function');
+assert.strictEqual(typeof mockWindow.gameDebug.armory.openStudio, 'function');
+assert.strictEqual(typeof mockWindow.gameDebug.armory.closeStudio, 'function');
+
+// Test debug openStudio / closeStudio invocation
+const studio = mockWindow.gameDebug.openStudio();
+assert.ok(studio, 'openStudio must return studio modal instance');
+assert.strictEqual(mockWindow.gameDebug.armory.getStudio(), studio);
+assert.strictEqual(mockWindow.gameDebug.closeStudio(), true);
 
 // Test debug unlockAll
 mockWindow.gameDebug.armory.unlockAll();

@@ -18,6 +18,7 @@ import {
 } from './ArmoryCatalog.js';
 import { economyManager as defaultEconomyManager } from '../core/economy/EconomyManager.js';
 import { storageManager as defaultStorageManager, StorageEvents } from '../core/storage/StorageManager.js';
+import { CosmeticStudioModal } from '../ui/modals/CosmeticStudioModal.js';
 
 export const ArmoryEvents = Object.freeze({
   ITEM_UNLOCKED: 'ARMORY_ITEM_UNLOCKED',
@@ -65,6 +66,8 @@ export class ArmoryManager {
     this.catalog = options.catalog || ARMORY_CATALOG;
     this.economy = options.economy || defaultEconomyManager;
     this.storage = options.storage || defaultStorageManager;
+    this.StudioModalClass = options.StudioModalClass || null;
+    this._studioModal = null;
 
     this._listeners = new Map();
 
@@ -554,7 +557,7 @@ export class ArmoryManager {
   // ==========================================
 
   /**
-   * Binds debugging helpers to window.gameDebug.armory.
+   * Binds debugging helpers to window.gameDebug and window.gameDebug.armory.
    * @param {object} targetWindow
    */
   setupDebugSuite(targetWindow) {
@@ -562,7 +565,26 @@ export class ArmoryManager {
       return;
     }
 
+    const openStudio = (category) => {
+      if (!this._studioModal) {
+        const ModalClass = this.StudioModalClass || CosmeticStudioModal;
+        this._studioModal = new ModalClass({ armory: this });
+      }
+      this._studioModal.show(category);
+      return this._studioModal;
+    };
+
+    const closeStudio = () => {
+      if (this._studioModal) {
+        this._studioModal.hide();
+      }
+      return true;
+    };
+
     targetWindow.gameDebug = targetWindow.gameDebug || {};
+    targetWindow.gameDebug.openStudio = openStudio;
+    targetWindow.gameDebug.closeStudio = closeStudio;
+
     targetWindow.gameDebug.armory = {
       unlockAll: () => {
         this._ensureStorageReady();
@@ -584,7 +606,10 @@ export class ArmoryManager {
       registerItem: (item) => registerCatalogItem(item),
       unregisterItem: (itemId) => unregisterCatalogItem(itemId),
       clearDynamicCatalog: () => clearDynamicCatalog(),
-      getCatalog: (category) => this.getCatalogByCategory(category)
+      getCatalog: (category) => this.getCatalogByCategory(category),
+      openStudio,
+      closeStudio,
+      getStudio: () => this._studioModal
     };
   }
 }

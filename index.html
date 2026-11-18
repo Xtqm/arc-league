@@ -2838,6 +2838,335 @@
     animation: neon-fabricate-pulse 0.95s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
   }
 
+  /* Cosmetic Studio Dev GUI Overlay & Cyber-Grid Styling */
+  .cosmetic-studio-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0, 6, 12, 0.94);
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    touch-action: pan-y;
+  }
+
+  .cosmetic-studio-card {
+    width: 96%;
+    max-width: 1100px;
+    max-height: 92vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: rgba(1, 14, 22, 0.96);
+    background-image: 
+      linear-gradient(rgba(79, 242, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79, 242, 255, 0.05) 1px, transparent 1px);
+    background-size: 24px 24px;
+    border: 1px solid rgba(79, 242, 255, 0.55);
+    border-radius: 12px;
+    padding: 20px 24px;
+    box-shadow: 0 0 50px rgba(79, 242, 255, 0.22), inset 0 0 24px rgba(79, 242, 255, 0.1);
+    color: #fff;
+    font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+
+  .studio-top-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(79, 242, 255, 0.25);
+    padding-bottom: 12px;
+    margin-bottom: 14px;
+    gap: 12px;
+  }
+
+  .studio-title-badge {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .studio-title-badge h1 {
+    margin: 0;
+    font-size: 20px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--cyan);
+    text-shadow: 0 0 16px var(--cyan);
+  }
+
+  .studio-dev-tag {
+    font-size: 10px;
+    font-family: "Courier New", Courier, monospace;
+    background: rgba(255, 123, 26, 0.2);
+    border: 1px solid var(--orange);
+    color: var(--orange);
+    padding: 2px 6px;
+    border-radius: 3px;
+    letter-spacing: 1.5px;
+    font-weight: bold;
+  }
+
+  .studio-category-tabs {
+    display: flex;
+    gap: 8px;
+  }
+
+  .studio-tab-btn {
+    background: rgba(0, 24, 36, 0.65);
+    border: 1px solid rgba(79, 242, 255, 0.3);
+    border-radius: 4px;
+    color: #9fe9f2;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-family: "Courier New", Courier, monospace;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+  }
+
+  .studio-tab-btn:hover {
+    background: rgba(0, 48, 72, 0.75);
+    border-color: var(--cyan);
+    color: #fff;
+  }
+
+  .studio-tab-btn.active {
+    background: rgba(79, 242, 255, 0.2);
+    border-color: var(--cyan);
+    color: #fff;
+    box-shadow: 0 0 10px rgba(79, 242, 255, 0.3);
+  }
+
+  .studio-close-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 80, 80, 0.4);
+    color: #ff8888;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .studio-close-btn:hover {
+    background: rgba(255, 80, 80, 0.25);
+    border-color: #ff5555;
+    color: #fff;
+    box-shadow: 0 0 12px rgba(255, 80, 80, 0.4);
+  }
+
+  .studio-split-pane {
+    display: flex;
+    gap: 20px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .studio-preview-bay {
+    flex: 0 0 420px;
+    height: 420px;
+    position: relative;
+    background: radial-gradient(circle at center, rgba(0, 36, 54, 0.45) 0%, rgba(0, 8, 14, 0.85) 100%);
+    border: 1px solid rgba(79, 242, 255, 0.35);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.8);
+  }
+
+  .studio-preview-bay canvas {
+    outline: none;
+    cursor: grab;
+  }
+
+  .studio-preview-hint {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: "Courier New", Courier, monospace;
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: rgba(79, 242, 255, 0.6);
+    pointer-events: none;
+    text-transform: uppercase;
+  }
+
+  .studio-controls-pane {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .studio-control-group {
+    background: rgba(0, 20, 30, 0.55);
+    border: 1px solid rgba(79, 242, 255, 0.2);
+    border-radius: 6px;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .studio-control-group h3 {
+    margin: 0;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #9fe9f2;
+    border-bottom: 1px solid rgba(79, 242, 255, 0.15);
+    padding-bottom: 6px;
+  }
+
+  .studio-field-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12px;
+  }
+
+  .studio-field-row label {
+    font-family: "Courier New", Courier, monospace;
+    letter-spacing: 1px;
+    color: #c0d8e4;
+    min-width: 140px;
+  }
+
+  .studio-input-text, .studio-select {
+    flex: 1;
+    background: rgba(0, 10, 18, 0.8);
+    border: 1px solid rgba(79, 242, 255, 0.3);
+    border-radius: 4px;
+    color: #fff;
+    padding: 6px 10px;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 12px;
+  }
+
+  .studio-input-color-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+  }
+
+  .studio-input-color {
+    width: 38px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid rgba(79, 242, 255, 0.4);
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+  }
+
+  .studio-hex-code {
+    font-family: "Courier New", Courier, monospace;
+    font-size: 11px;
+    color: #8ce9f5;
+  }
+
+  .studio-slider-wrapper {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .studio-slider {
+    flex: 1;
+    accent-color: var(--cyan);
+  }
+
+  .studio-slider-val {
+    font-family: "Courier New", Courier, monospace;
+    font-size: 11px;
+    color: var(--cyan);
+    min-width: 40px;
+    text-align: right;
+  }
+
+  .studio-actions-footer {
+    display: flex;
+    gap: 12px;
+    margin-top: auto;
+    padding-top: 10px;
+    border-top: 1px solid rgba(79, 242, 255, 0.25);
+  }
+
+  .studio-action-btn {
+    flex: 1;
+    padding: 10px 16px;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+    border: 1px solid rgba(79, 242, 255, 0.4);
+    background: rgba(0, 24, 36, 0.7);
+    color: var(--cyan);
+  }
+
+  .studio-action-btn:hover {
+    background: rgba(79, 242, 255, 0.2);
+    border-color: var(--cyan);
+    color: #fff;
+    box-shadow: 0 0 16px rgba(79, 242, 255, 0.4);
+  }
+
+  .studio-action-btn.btn-test {
+    border-color: var(--orange);
+    color: var(--orange);
+    background: rgba(255, 123, 26, 0.15);
+  }
+
+  .studio-action-btn.btn-test:hover {
+    background: rgba(255, 123, 26, 0.3);
+    border-color: #ff9d4d;
+    color: #fff;
+    box-shadow: 0 0 16px rgba(255, 123, 26, 0.5);
+  }
+
+  .studio-action-btn.btn-copy {
+    border-color: #00ffcc;
+    color: #00ffcc;
+    background: rgba(0, 255, 204, 0.15);
+  }
+
+  .studio-action-btn.btn-copy:hover {
+    background: rgba(0, 255, 204, 0.3);
+    border-color: #66ffd9;
+    color: #fff;
+    box-shadow: 0 0 16px rgba(0, 255, 204, 0.5);
+  }
+
+  .studio-feedback-msg {
+    font-family: "Courier New", Courier, monospace;
+    font-size: 11px;
+    color: #00ffcc;
+    letter-spacing: 1px;
+    text-align: center;
+    margin-top: 4px;
+    min-height: 16px;
+  }
+
   /* Boot Terminal (Cold Open) */
   #bootTerminal {
     position: fixed;
@@ -3369,6 +3698,8 @@
 <div id="armoryModal" class="armory-modal modal-overlay" style="display:none;"></div>
 <!-- Achievements Modal (SPEC-ACHIEVE-001 Phase 2) -->
 <div id="achievementsModal" class="achievements-modal modal-overlay" style="display:none;"></div>
+<!-- Cosmetic Studio Modal (Developer GUI) -->
+<div id="cosmeticStudioModal" class="cosmetic-studio-modal modal-overlay" style="display:none;"></div>
 
 <script>
 // Your web app's Firebase configuration

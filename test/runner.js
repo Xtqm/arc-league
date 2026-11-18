@@ -34,7 +34,8 @@ const TEST_DOMAINS = {
   armory: [
     'armory/armory_manager.test.js',
     'armory/cosmetic_material_engine.test.js',
-    'armory/armory_modal.test.js'
+    'armory/armory_modal.test.js',
+    'armory/cosmetic_studio_modal.test.js'
   ],
   graphics: [
     'graphics/humanoid_rig.test.js',

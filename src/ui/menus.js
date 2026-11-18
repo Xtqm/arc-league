@@ -31,6 +31,7 @@ export {
   selectArenaMap,
   updateArenaSelectControls
 } from './arenaSelector.js';
+import { rebuildArenaTiles } from '../entities/Arena.js';
 import {
   selectArenaMap,
   updateArenaSelectControls,
@@ -159,6 +160,7 @@ export function getMainMenuHtml() {
     <b>PAUSE</b><span>Tap top right II button to suspend simulation</span>
   </div>
   <div class="mode-select" id="mainMenuButtons">
+    <button id="btnEnter3DLobby" class="mode-btn" style="width:100%;margin-bottom:14px;border-color:var(--cyan);color:#fff;background:rgba(79,242,255,0.22);box-shadow:0 0 16px rgba(79,242,255,0.4);letter-spacing:3px;">[ ENTER 3D PLAYABLE LOBBY ]</button>
     <button id="campaignBtn" class="mode-btn campaign-btn">LEAGUE CIRCUIT</button>
     <div id="survivalModeContainer" class="survival-mode-container" style="display:flex;flex-direction:column;gap:6px;width:100%;">
       <button id="swarmBtn" class="mode-btn swarm-btn">${state.isHardcoreSurvival ? 'ENTER ARCFIELD (HARDCORE)' : 'ENTER ARCFIELD (SURVIVAL)'}</button>
@@ -180,7 +182,31 @@ export function getMainMenuHtml() {
 </div>`;
 }
 
-export function showModeSelectMenu() {
+export function activate3DLobbyView() {
+  const overlay = document.getElementById('overlay');
+  if (overlay) {
+    overlay.classList.add('lobby-3d');
+  }
+  const hint = document.getElementById('hint');
+  if (hint) {
+    hint.innerHTML = 'WASD Move & Strafe &nbsp;·&nbsp; Mouse Look &nbsp;·&nbsp; LMB Throw Disc at Energy Core &nbsp;·&nbsp; MMB 1P/3P &nbsp;·&nbsp; ESC 2D Menu';
+    hint.style.display = 'block';
+    hint.style.opacity = '1';
+  }
+  const btn2D = document.getElementById('btnToggle2DMenu');
+  if (btn2D) btn2D.style.display = 'inline-block';
+}
+
+export function deactivate3DLobbyView() {
+  const overlay = document.getElementById('overlay');
+  if (overlay) {
+    overlay.classList.remove('lobby-3d');
+  }
+  const btn2D = document.getElementById('btnToggle2DMenu');
+  if (btn2D) btn2D.style.display = 'none';
+}
+
+export function showModeSelectMenu(options = {}) {
   updateSteamRichPresence('In Main Menu');
   state.gameMode = 'lobby';
   state.running = true;
@@ -188,8 +214,15 @@ export function showModeSelectMenu() {
   state.player.hp = 100;
   state.player.alive = true;
   state.player.hasDisc = true;
+  state.player.pos.set(0, 0, 10);
+  state.player.vel.set(0, 0, 0);
+  state.player.yaw = 0;
+  state.player.pitch = 0;
+  rebuildArenaTiles();
+
   lobbyCoresManager.init();
   lobbyCoresManager.spawnCores();
+
   const hm = document.getElementById('hostModal');
   if (hm) hm.style.display = 'none';
   const rm = document.getElementById('roomModal');
@@ -217,6 +250,18 @@ export function showModeSelectMenu() {
   const card = overlay.querySelector('.card');
   if (card) card.scrollTop = 0;
   bindMainMenuEvents();
+
+  const isHeadless = typeof window !== 'undefined' && (
+    window.__TRON_HEADLESS__ ||
+    (typeof navigator !== 'undefined' && navigator.webdriver && !window.__tronEnforcePlayableLobby)
+  );
+
+  const should3D = options.force3D || (!state.isTouchDevice && !isHeadless && !options.force2D);
+  if (should3D) {
+    activate3DLobbyView();
+  } else {
+    deactivate3DLobbyView();
+  }
 }
 
 export function startSoloSwarm(options = {}) {
@@ -247,6 +292,16 @@ export function bindMainMenuEvents() {
       console.warn(`UI Binding Warning: Button #${id} not found.`);
     }
   };
+
+  const btnEnter3D = document.getElementById('btnEnter3DLobby');
+  if (btnEnter3D) {
+    btnEnter3D.onclick = (e) => {
+      e.stopPropagation();
+      if (e.cancelable) e.preventDefault();
+      activate3DLobbyView();
+      tryLock();
+    };
+  }
 
   const startSwarm = (e) => {
     e.stopPropagation();
@@ -461,8 +516,8 @@ export function bindMainMenuEvents() {
   }
 }
 
-export function enterLobby() {
-  showModeSelect();
+export function enterLobby(options = {}) {
+  showModeSelectMenu({ ...options, force3D: true });
 }
 
 export function bindMenuButtons() {
@@ -474,6 +529,8 @@ if (typeof window !== 'undefined') {
   window.__tronEnterLobby = enterLobby;
   window.__tronShowModeSelect = showModeSelect;
   window.__tronShowModeSelectMenu = showModeSelectMenu;
+  window.__tronActivate3DLobbyView = activate3DLobbyView;
+  window.__tronDeactivate3DLobbyView = deactivate3DLobbyView;
   window.__tronTeardownMultiplayer = teardownMultiplayer;
   window.__tronShowCampaignSectors = () => gridSelectorModal.show();
   window.__tronShowLevelSelectView = (gridId) => levelSelectView.show(gridId);

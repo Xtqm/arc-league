@@ -1,6 +1,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { state } from '../core/state.js';
 import { setLastInputDevice } from '../ui/hud.js';
+import { camera } from '../graphics/scene.js';
 
 export let canvas = null;
 export let lockFailed = false;
@@ -113,7 +114,11 @@ export function initMouse(targetCanvas) {
     }
   });
 
-  canvas.addEventListener('click', () => {
+  canvas.addEventListener('click', (e) => {
+    if (state.gameMode === 'lobby' && typeof window !== 'undefined' && window.__tronLobbyCores) {
+      const hit = window.__tronLobbyCores.checkPointerIntersection(e.clientX, e.clientY, camera);
+      if (hit) return;
+    }
     if (!state.isTouchDevice && state.running && !isLocked()) {
       tryLock();
     }

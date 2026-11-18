@@ -15,7 +15,7 @@ import { initNetwork, initMockNetwork, getRoomRef, roomGetDoc } from '../network
 import { onClickCreateRoom, onClickConfirmJoin, copyRoomCode, teardownMultiplayer, startMultiplayerDuel } from '../network/roomManager.js';
 import { syncNetworkState, onTileDestabilizedByHost, updateRemotePlayers } from '../network/sync.js';
 import { updateHUD, message, msgEl, updateCrosshair, updateKeyMonitor, updateLockStateBanner, updateControlHintTimer, updateArenaNameplates, setLastInputDevice } from '../ui/hud.js';
-import { startMode, showModeSelect, bindMenuButtons } from '../ui/menus.js';
+import { startMode, showModeSelect, enterLobby, bindMenuButtons } from '../ui/menus.js';
 import { pauseGame, resumeGame, restartMatch, checkOrientation, requestFullScreen, exitFullScreen, toggleFullScreen, isFullScreen } from '../ui/modals.js';
 import { SFX, playDeRezSound } from '../audio/sfx.js';
 import { authManager } from '../auth/AuthManager.js';
@@ -353,6 +353,13 @@ export function initBootTerminal() {
 
   if (isCalibrated || isBypassed) {
     bootTerminal.style.display = 'none';
+    const isHeadless = typeof window !== 'undefined' && (
+      window.__TRON_HEADLESS__ ||
+      (typeof navigator !== 'undefined' && navigator.webdriver && !window.__tronEnforcePlayableLobby)
+    );
+    if (!state.isTouchDevice && !isHeadless) {
+      enterLobby();
+    }
     return;
   }
 
@@ -373,7 +380,7 @@ export function initBootTerminal() {
     if (typeof window !== 'undefined' && window.__tronStartCalibration) {
       window.__tronStartCalibration();
     } else {
-      showModeSelect();
+      enterLobby();
     }
   };
 
@@ -396,7 +403,7 @@ if (typeof window !== 'undefined') {
       if (typeof window !== 'undefined' && window.__tronStartCalibration) {
         window.__tronStartCalibration();
       } else {
-        showModeSelect();
+        enterLobby();
       }
     }
   };

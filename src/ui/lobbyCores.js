@@ -11,6 +11,7 @@ export const ENERGY_CORES_CONFIG = [
   {
     id: 'circuit',
     name: 'LEAGUE CIRCUIT',
+    subtext: 'CAMPAIGN CIRCUIT',
     mode: 'campaign',
     pos: new THREE.Vector3(0, 2.4, -22),
     color: 0x4ff2ff,
@@ -21,6 +22,7 @@ export const ENERGY_CORES_CONFIG = [
   {
     id: 'survival',
     name: 'SURVIVAL (SWARM)',
+    subtext: 'WAVE DEFENSE',
     mode: 'swarm',
     pos: new THREE.Vector3(22, 2.4, 0),
     color: 0xff7b1a,
@@ -31,6 +33,7 @@ export const ENERGY_CORES_CONFIG = [
   {
     id: 'duels',
     name: 'ONLINE DUELS',
+    subtext: '1v1 & 2v2 PVP',
     mode: 'duels',
     pos: new THREE.Vector3(-22, 2.4, 0),
     color: 0xbc13fe,
@@ -41,6 +44,7 @@ export const ENERGY_CORES_CONFIG = [
   {
     id: 'armory',
     name: 'OUTFITTING & ARMORY',
+    subtext: 'GEAR & VISORS',
     mode: 'armory',
     pos: new THREE.Vector3(0, 2.4, 22),
     color: 0x00ff88,
@@ -49,6 +53,39 @@ export const ENERGY_CORES_CONFIG = [
     geomType: 'box'
   }
 ];
+
+export function createCoreTextSprite(title, subtext, colorHex) {
+  if (typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 160;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, 512, 160);
+
+  // Outer glow & title
+  ctx.font = 'bold 38px "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = colorHex;
+  ctx.shadowColor = colorHex;
+  ctx.shadowBlur = 18;
+  ctx.fillText(title, 256, 60);
+
+  // Subtext badge
+  if (subtext) {
+    ctx.font = '600 22px "Segoe UI", system-ui, sans-serif';
+    ctx.fillStyle = '#bff4fb';
+    ctx.shadowColor = '#4ff2ff';
+    ctx.shadowBlur = 10;
+    ctx.fillText(`[ ${subtext} ]`, 256, 105);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(7.0, 2.2, 1);
+  sprite.position.set(0, 3.2, 0);
+  return sprite;
+}
 
 export class LobbyCoresManager {
   constructor() {
@@ -208,6 +245,13 @@ export class LobbyCoresManager {
       const light = new THREE.PointLight(cfg.color, 2.5, 12);
       light.position.set(0, 0, 0);
 
+      // Floating Holographic Title & Subtitle Badge
+      const hexStr = '#' + cfg.color.toString(16).padStart(6, '0');
+      const textSprite = createCoreTextSprite(cfg.name, cfg.subtext, hexStr);
+      if (textSprite) {
+        group.add(textSprite);
+      }
+
       group.add(mesh, wireMesh, light);
       scene.add(group);
 
@@ -216,13 +260,28 @@ export class LobbyCoresManager {
         group,
         mesh,
         wireMesh,
-        light
+        light,
+        textSprite
       });
     }
   }
 
   despawnCores() {
     for (const core of this.cores) {
+      if (core.textSprite) {
+        if (core.textSprite.material && core.textSprite.material.map) {
+          core.textSprite.material.map.dispose();
+        }
+        if (core.textSprite.material) {
+          core.textSprite.material.dispose();
+        }
+      }
+      if (core.mesh && core.mesh.material) {
+        core.mesh.material.dispose();
+      }
+      if (core.wireMesh && core.wireMesh.material) {
+        core.wireMesh.material.dispose();
+      }
       if (core.group) {
         scene.remove(core.group);
       }
@@ -267,6 +326,28 @@ export class LobbyCoresManager {
       const dist = disc.pos.distanceTo(core.group ? core.group.position : core.pos);
       if (dist < core.radius + config.DISC_R + 0.3) {
         this.triggerCore(core, disc);
+        return core;
+      }
+    }
+    return null;
+  }
+
+  checkPointerIntersection(clientX, clientY, camera) {
+    if (state.gameMode !== 'lobby' || this.cores.length === 0 || !camera) return null;
+    if (typeof window === 'undefined' || !window.innerWidth || !window.innerHeight) return null;
+    const mouse = new THREE.Vector2(
+      (clientX / window.innerWidth) * 2 - 1,
+      -(clientY / window.innerHeight) * 2 + 1
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(mouse, camera);
+
+    for (const core of this.cores) {
+      if (!core.mesh) continue;
+      const targets = [core.mesh, core.wireMesh, core.textSprite].filter(Boolean);
+      const intersects = raycaster.intersectObjects(targets);
+      if (intersects && intersects.length > 0) {
+        this.triggerCore(core);
         return core;
       }
     }

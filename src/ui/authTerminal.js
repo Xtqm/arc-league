@@ -249,6 +249,7 @@ export function getIdentityHeaderHtml(user, saveState, options = {}) {
         <span class="id-text">[USER RECOGNIZED] <b id="idCallsign">${callsign}</b> // LVL <span id="idLevel">${levelStr}</span></span>
       </div>
       <button id="manageIdentityBtn" class="id-btn cyan-btn" title="Open Grid Authorization Terminal">[ TERMINAL ]${pipHtml}</button>
+      <button id="btnToggle2DMenu" class="id-btn purple-btn" style="display:none;margin-left:8px;" title="Switch to 2D Mode Select Menu">[ 2D MENU ]</button>
     `;
   }
 
@@ -259,6 +260,7 @@ export function getIdentityHeaderHtml(user, saveState, options = {}) {
       <span class="id-text">[GUEST] SUB-ROUTINE // ID: <b id="idShortCode">${shortId}</b></span>
     </div>
     <button id="secureIdentityBtn" class="id-btn pulse-amber" title="Secure Identity & Sync Profile">[ SECURE IDENTITY ]${pipHtml}</button>
+    <button id="btnToggle2DMenu" class="id-btn purple-btn" style="display:none;margin-left:8px;" title="Switch to 2D Mode Select Menu">[ 2D MENU ]</button>
   `;
 }
 
@@ -312,6 +314,19 @@ export function updateIdentityHeader() {
         e.stopPropagation();
         if (e.cancelable) e.preventDefault();
         showAuthTerminal();
+      };
+    }
+
+    const btn2D = headerEl.querySelector('#btnToggle2DMenu');
+    if (btn2D) {
+      const is3D = document.getElementById('overlay')?.classList.contains('lobby-3d');
+      btn2D.style.display = is3D ? 'inline-block' : 'none';
+      btn2D.onclick = (e) => {
+        e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
+        if (typeof window !== 'undefined' && window.__tronDeactivate3DLobbyView) {
+          window.__tronDeactivate3DLobbyView();
+        }
       };
     }
   }

@@ -365,6 +365,22 @@
     background-color: #00050a;
     cursor:default;
     touch-action: pan-y; overscroll-behavior: contain; }
+  #overlay.lobby-3d {
+    background: transparent !important;
+    pointer-events: none !important;
+    display: flex !important;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+  }
+  #overlay.lobby-3d #mainMenu {
+    display: none !important;
+  }
+  #overlay.lobby-3d #identityHeader {
+    pointer-events: auto !important;
+    margin: 14px 0 0 16px !important;
+    position: relative !important;
+    z-index: 50 !important;
+  }
   h1 { margin:0 0 6px; font-size:54px; letter-spacing:18px; text-shadow:0 0 30px var(--cyan); }
   h2 { margin:0 0 26px; font-size:13px; letter-spacing:8px; font-weight:400; color:#9fe9f2; }
   .keys { display:grid; grid-template-columns:auto auto; gap:8px 18px; font-size:13px; text-align:left;
@@ -3308,6 +3324,7 @@
     <b>PAUSE</b><span>Tap top right II button to suspend simulation</span>
   </div>
   <div class="mode-select" id="mainMenuButtons">
+    <button id="btnEnter3DLobby" class="mode-btn" style="width:100%;margin-bottom:14px;border-color:var(--cyan);color:#fff;background:rgba(79,242,255,0.22);box-shadow:0 0 16px rgba(79,242,255,0.4);letter-spacing:3px;">[ ENTER 3D PLAYABLE LOBBY ]</button>
     <button id="campaignBtn" class="mode-btn campaign-btn">LEAGUE CIRCUIT</button>
     <button id="swarmBtn" class="mode-btn swarm-btn">ENTER ARCFIELD (SURVIVAL)</button>
     <button id="hostMatchBtn" class="mode-btn multi-btn">HOST ARCFIELD MATCH</button>

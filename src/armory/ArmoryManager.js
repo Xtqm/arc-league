@@ -11,6 +11,9 @@ import {
   UNLOCK_TYPES,
   getCatalogByCategory as defaultGetCatalogByCategory,
   getCatalogItem as defaultGetCatalogItem,
+  registerCatalogItem,
+  unregisterCatalogItem,
+  clearDynamicCatalog,
   isValidCategory
 } from './ArmoryCatalog.js';
 import { economyManager as defaultEconomyManager } from '../core/economy/EconomyManager.js';
@@ -171,7 +174,7 @@ export class ArmoryManager {
       const found = items.find((i) => i.id === itemId);
       if (found) return found;
     }
-    return null;
+    return defaultGetCatalogItem(itemId);
   }
 
   /**
@@ -180,10 +183,13 @@ export class ArmoryManager {
    * @returns {Array<object>}
    */
   getCatalogByCategory(category) {
-    if (!isValidCategory(category) || !this.catalog[category]) {
+    if (!isValidCategory(category)) {
       return [];
     }
-    return [...this.catalog[category]];
+    if (this.catalog === ARMORY_CATALOG) {
+      return defaultGetCatalogByCategory(category);
+    }
+    return this.catalog[category] ? [...this.catalog[category]] : [];
   }
 
   // ==========================================
@@ -574,7 +580,11 @@ export class ArmoryManager {
       equip: (category, itemId) => this.equipItem(category, itemId),
       purchase: (itemId) => this.purchaseItem(itemId),
       isUnlocked: (category, itemId) => this.isUnlocked(category, itemId),
-      canPurchase: (itemId) => this.canPurchase(itemId)
+      canPurchase: (itemId) => this.canPurchase(itemId),
+      registerItem: (item) => registerCatalogItem(item),
+      unregisterItem: (itemId) => unregisterCatalogItem(itemId),
+      clearDynamicCatalog: () => clearDynamicCatalog(),
+      getCatalog: (category) => this.getCatalogByCategory(category)
     };
   }
 }

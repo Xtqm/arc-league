@@ -195,6 +195,24 @@ engine.activeDiscSkinId = 'disc_retro_green';
 engine.applyChassisSkin(sampleRig, 'chassis_default');
 assert.strictEqual('#' + sampleRig.userData.backDisc.material.color.getHexString(), '#00ff66', 'Back disc must match activeDiscSkinId');
 
+// 4.5 Self-contained modular chassis skin without pre-registered CHASSIS_PBR_PRESETS
+const customRig = makeProgram(0x00f3ff);
+engine.applyChassisSkin(customRig, {
+  id: 'chassis_custom_modular_test',
+  shader: {
+    primaryHex: '#00ffcc',
+    secondaryEmissiveHex: '#0033aa',
+    suitHex: '#3a1050',
+    roughness: 0.12,
+    metalness: 0.93,
+    glowIntensity: 1.8
+  }
+});
+assert.strictEqual('#' + customRig.userData.suitMaterial.color.getHexString(), '#3a1050', 'Custom chassis suitHex must apply directly without PBR preset');
+assert.strictEqual(customRig.userData.suitMaterial.roughness, 0.12, 'Custom chassis roughness must apply directly');
+assert.strictEqual(customRig.userData.suitMaterial.metalness, 0.93, 'Custom chassis metalness must apply directly');
+assert.strictEqual('#' + customRig.userData.litMaterial.color.getHexString(), '#00ffcc', 'Custom chassis primaryHex must apply directly');
+
 console.log('✓ Group 4: Program chassis PBR styling and back disc synchronization verified.');
 
 // =========================================================================

@@ -366,12 +366,14 @@ export class CosmeticMaterialEngine {
     const glowScale = typeof shader.glowIntensity === 'number' ? shader.glowIntensity : 1.2;
     const hdrEmissiveIntensity = 2.2 * (glowScale / 1.2);
 
-    // Resolve PBR parameters from presets or skin properties
+    // Resolve PBR parameters from skin properties with fallback to presets
     const skinId = typeof skinIdOrConfig === 'string' ? skinIdOrConfig : (item?.id || 'chassis_default');
     const preset = CHASSIS_PBR_PRESETS[skinId] || CHASSIS_PBR_PRESETS.chassis_default;
-    const roughness = typeof shader.roughness === 'number' ? shader.roughness : preset.roughness;
-    const metalness = typeof shader.metalness === 'number' ? shader.metalness : preset.metalness;
-    const suitColor = new THREE.Color(preset.suitColor);
+    const pbr = shader.pbr || item?.pbr || {};
+    const roughness = typeof shader.roughness === 'number' ? shader.roughness : (typeof pbr.roughness === 'number' ? pbr.roughness : preset.roughness);
+    const metalness = typeof shader.metalness === 'number' ? shader.metalness : (typeof pbr.metalness === 'number' ? pbr.metalness : preset.metalness);
+    const suitHexValue = shader.suitHex ?? shader.suitColor ?? pbr.suitHex ?? pbr.suitColor ?? preset.suitColor;
+    const suitColor = new THREE.Color(suitHexValue);
 
     // 1. Direct mutation via cached rig materials
     if (playerRig.userData?.suitMaterial) {

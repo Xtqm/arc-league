@@ -127,7 +127,10 @@ export const ARMORY_CATALOG = Object.freeze({
         secondaryEmissiveHex: '#0066ff',
         trailOpacity: 0.8,
         wireframeToggle: false,
-        glowIntensity: 1.2
+        glowIntensity: 1.2,
+        suitHex: '#1e2631',
+        roughness: 0.38,
+        metalness: 0.78
       })
     }),
     Object.freeze({
@@ -143,7 +146,10 @@ export const ARMORY_CATALOG = Object.freeze({
         secondaryEmissiveHex: '#002244',
         trailOpacity: 0.6,
         wireframeToggle: false,
-        glowIntensity: 1.0
+        glowIntensity: 1.0,
+        suitHex: '#040608',
+        roughness: 0.85,
+        metalness: 0.2
       })
     }),
     Object.freeze({
@@ -159,7 +165,10 @@ export const ARMORY_CATALOG = Object.freeze({
         secondaryEmissiveHex: '#ff8800',
         trailOpacity: 0.85,
         wireframeToggle: false,
-        glowIntensity: 1.6
+        glowIntensity: 1.6,
+        suitHex: '#121210',
+        roughness: 0.2,
+        metalness: 0.95
       })
     }),
     Object.freeze({
@@ -175,7 +184,10 @@ export const ARMORY_CATALOG = Object.freeze({
         secondaryEmissiveHex: '#550000',
         trailOpacity: 0.9,
         wireframeToggle: false,
-        glowIntensity: 1.8
+        glowIntensity: 1.8,
+        suitHex: '#0a0404',
+        roughness: 0.3,
+        metalness: 0.9
       })
     }),
     Object.freeze({
@@ -191,7 +203,10 @@ export const ARMORY_CATALOG = Object.freeze({
         secondaryEmissiveHex: '#ddaa00',
         trailOpacity: 1.0,
         wireframeToggle: true,
-        glowIntensity: 2.5
+        glowIntensity: 2.5,
+        suitHex: '#e0e0e0',
+        roughness: 0.15,
+        metalness: 0.85
       })
     })
   ]),
@@ -282,25 +297,66 @@ export function isValidCategory(category) {
 }
 
 /**
- * Retrieves all catalog items for a given category.
- * @param {string} category e.g. 'discSkins', 'chassisSkins', 'unlockedMaps', 'discTypes'
- * @returns {Array<object>} Frozen array of item definitions, or empty array if category is invalid
+ * Dynamic registry map for runtime / developer custom catalog items.
+ * @type {Map<string, object>}
  */
-export function getCatalogByCategory(category) {
-  if (!category || typeof category !== 'string' || !ARMORY_CATALOG[category]) {
-    return [];
+const _dynamicItems = new Map();
+
+/**
+ * Registers an item dynamically into the catalog at runtime.
+ * Useful for dev experimentation, live modding, and dev tools without editing source files.
+ * @param {object} item
+ * @returns {boolean} True if successfully registered
+ */
+export function registerCatalogItem(item) {
+  if (!item || typeof item !== 'object' || !item.id || !isValidCategory(item.category)) {
+    return false;
   }
-  return ARMORY_CATALOG[category];
+  _dynamicItems.set(item.id, Object.freeze({ ...item }));
+  return true;
 }
 
 /**
- * Finds a specific catalog item by its unique ID across all categories.
+ * Unregisters a dynamically added catalog item by ID.
+ * @param {string} itemId
+ * @returns {boolean} True if removed, false if not found
+ */
+export function unregisterCatalogItem(itemId) {
+  return _dynamicItems.delete(itemId);
+}
+
+/**
+ * Clears all dynamically registered items.
+ */
+export function clearDynamicCatalog() {
+  _dynamicItems.clear();
+}
+
+/**
+ * Retrieves all catalog items for a given category (including runtime additions).
+ * @param {string} category e.g. 'discSkins', 'chassisSkins', 'unlockedMaps', 'discTypes'
+ * @returns {Array<object>} Array of item definitions, or empty array if category is invalid
+ */
+export function getCatalogByCategory(category) {
+  if (!isValidCategory(category)) {
+    return [];
+  }
+  const baseItems = ARMORY_CATALOG[category] || [];
+  const dynamicItems = Array.from(_dynamicItems.values()).filter((item) => item.category === category);
+  return [...baseItems, ...dynamicItems];
+}
+
+/**
+ * Finds a specific catalog item by its unique ID across all categories and dynamic entries.
  * @param {string} itemId e.g. 'disc_neon_amber'
  * @returns {object|null} Catalog item object or null if not found
  */
 export function getCatalogItem(itemId) {
   if (!itemId || typeof itemId !== 'string') {
     return null;
+  }
+  if (_dynamicItems.has(itemId)) {
+    return _dynamicItems.get(itemId);
   }
   for (const categoryKey of Object.values(ARMORY_CATEGORIES)) {
     const items = ARMORY_CATALOG[categoryKey] || [];
@@ -313,7 +369,7 @@ export function getCatalogItem(itemId) {
 }
 
 /**
- * Returns a flat array of all catalog items across all categories.
+ * Returns a flat array of all catalog items across all categories and dynamic entries.
  * @returns {Array<object>}
  */
 export function getAllCatalogItems() {
@@ -321,5 +377,6 @@ export function getAllCatalogItems() {
   for (const categoryKey of Object.values(ARMORY_CATEGORIES)) {
     allItems.push(...(ARMORY_CATALOG[categoryKey] || []));
   }
+  allItems.push(...Array.from(_dynamicItems.values()));
   return allItems;
 }

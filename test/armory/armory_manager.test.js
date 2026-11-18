@@ -12,7 +12,10 @@ import {
   isValidCategory,
   getCatalogByCategory,
   getCatalogItem,
-  getAllCatalogItems
+  getAllCatalogItems,
+  registerCatalogItem,
+  unregisterCatalogItem,
+  clearDynamicCatalog
 } from '../../src/armory/ArmoryCatalog.js';
 import {
   ArmoryManager,
@@ -47,14 +50,14 @@ const chassisSkins = getCatalogByCategory(ARMORY_CATEGORIES.CHASSIS_SKINS);
 const maps = getCatalogByCategory(ARMORY_CATEGORIES.UNLOCKED_MAPS);
 const discTypes = getCatalogByCategory(ARMORY_CATEGORIES.DISC_TYPES);
 
-assert.strictEqual(discSkins.length, 5, 'Must have 5 disc skins');
-assert.strictEqual(chassisSkins.length, 5, 'Must have 5 chassis skins');
-assert.strictEqual(maps.length, 3, 'Must have 3 maps');
-assert.strictEqual(discTypes.length, 1, 'Must have 1 disc type');
+assert.ok(discSkins.length >= 5, 'Must have at least 5 disc skins');
+assert.ok(chassisSkins.length >= 5, 'Must have at least 5 chassis skins');
+assert.ok(maps.length >= 3, 'Must have at least 3 maps');
+assert.ok(discTypes.length >= 1, 'Must have at least 1 disc type');
 
 // 1.3 Total items
 const allItems = getAllCatalogItems();
-assert.strictEqual(allItems.length, 14, 'Total catalog items must be 14');
+assert.ok(allItems.length >= 14, 'Total catalog items must be at least 14');
 
 // 1.4 Field structure & shader parameters validation
 for (const item of allItems) {
@@ -81,6 +84,13 @@ for (const item of allItems) {
   assert.ok(typeof item.shader.wireframeToggle === 'boolean', `wireframeToggle missing in ${item.id}`);
 }
 
+// 1.4b Chassis skins modular PBR parameters validation
+for (const chassis of chassisSkins) {
+  assert.ok(typeof chassis.shader.suitHex === 'string', `Chassis ${chassis.id} must define suitHex`);
+  assert.ok(typeof chassis.shader.roughness === 'number', `Chassis ${chassis.id} must define numeric roughness`);
+  assert.ok(typeof chassis.shader.metalness === 'number', `Chassis ${chassis.id} must define numeric metalness`);
+}
+
 // 1.5 Individual item lookups
 const amberDisc = getCatalogItem('disc_neon_amber');
 assert.ok(amberDisc);
@@ -100,6 +110,36 @@ assert.strictEqual(arbiterChassis.achievementId, 'grid_01_mastery');
 assert.strictEqual(getCatalogItem('nonexistent_item_id'), null);
 assert.strictEqual(getCatalogItem(''), null);
 assert.strictEqual(getCatalogItem(null), null);
+
+// 1.6 Dynamic catalog registration and lifecycle
+const customItem = {
+  id: 'disc_dynamic_test',
+  displayName: 'Dynamic Test Disc',
+  category: ARMORY_CATEGORIES.DISC_SKINS,
+  description: 'A dynamically registered test disc.',
+  unlockType: UNLOCK_TYPES.BITS,
+  cost: 350,
+  achievementId: null,
+  shader: {
+    primaryHex: '#123456',
+    secondaryEmissiveHex: '#654321',
+    trailOpacity: 0.8,
+    wireframeToggle: false,
+    glowIntensity: 1.5
+  }
+};
+
+assert.strictEqual(registerCatalogItem(customItem), true);
+assert.ok(getCatalogItem('disc_dynamic_test'));
+assert.strictEqual(getCatalogItem('disc_dynamic_test').displayName, 'Dynamic Test Disc');
+assert.ok(getCatalogByCategory(ARMORY_CATEGORIES.DISC_SKINS).some((i) => i.id === 'disc_dynamic_test'));
+
+assert.strictEqual(unregisterCatalogItem('disc_dynamic_test'), true);
+assert.strictEqual(getCatalogItem('disc_dynamic_test'), null);
+
+registerCatalogItem(customItem);
+clearDynamicCatalog();
+assert.strictEqual(getCatalogItem('disc_dynamic_test'), null);
 
 console.log('✓ Group 1: Catalog metadata, category indexers and shader properties validated.');
 
@@ -341,6 +381,10 @@ assert.strictEqual(typeof mockWindow.gameDebug.armory.unlockAll, 'function');
 assert.strictEqual(typeof mockWindow.gameDebug.armory.getLoadout, 'function');
 assert.strictEqual(typeof mockWindow.gameDebug.armory.equip, 'function');
 assert.strictEqual(typeof mockWindow.gameDebug.armory.purchase, 'function');
+assert.strictEqual(typeof mockWindow.gameDebug.armory.registerItem, 'function');
+assert.strictEqual(typeof mockWindow.gameDebug.armory.unregisterItem, 'function');
+assert.strictEqual(typeof mockWindow.gameDebug.armory.clearDynamicCatalog, 'function');
+assert.strictEqual(typeof mockWindow.gameDebug.armory.getCatalog, 'function');
 
 // Test debug unlockAll
 mockWindow.gameDebug.armory.unlockAll();

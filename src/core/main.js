@@ -34,6 +34,8 @@ import { tryLock } from '../input/mouse.js';
 import { calibrationMode } from '../modes/CalibrationMode.js';
 import { lobbyCoresManager } from '../ui/lobbyCores.js';
 import { dynamicDirector } from '../ai/DynamicDirector.js';
+import { armoryManager } from '../armory/ArmoryManager.js';
+import { economyManager } from './economy/EconomyManager.js';
 
 
 export const clock = new THREE.Clock();
@@ -830,7 +832,14 @@ window.__dbg = {
 };
 
 window.__TRON__ = window.__dbg;
-window.gameDebug = window.__dbg;
+window.gameDebug = Object.assign(window.__dbg, window.gameDebug || {});
+if (economyManager && typeof economyManager.setupDebugSuite === 'function') {
+  economyManager.setupDebugSuite(window);
+}
+if (armoryManager && typeof armoryManager.setupDebugSuite === 'function') {
+  armoryManager.setupDebugSuite(window);
+}
+window.openCosmeticStudio = (category) => window.gameDebug?.openStudio?.(category);
 
 export {
   requestFullScreen,

@@ -143,3 +143,18 @@ The system SHALL provide an optional Survival: Hardcore mode unlocked after clea
 #### Scenario: Dynamic Director countering turtling player
 - **WHEN** the Dynamic Director detects the player maintaining defensive parry blocks for extended intervals
 - **THEN** the Director elevates bot charged throw frequency to enforce guard crush attempts.
+
+### Requirement: Decoupled Duel Entry Modalities
+The system SHALL provide distinct, non-conflated user entry paths for Solo AI Practice, automated Quick Match, and Friendly Custom Rooms, ensuring each mode initializes strictly within its own gameplay and networking lifecycle.
+
+#### Scenario: Direct activation of Solo AI Practice from Main Menu
+- **WHEN** a player clicks the `PRACTICE (SOLO AI)` button (`#practiceBtn`) on the primary main menu
+- **THEN** the system immediately starts offline endless tiered bot combat (`duel_ai`) starting at Tier 1 (250 HP) without opening a multiplayer modal or initializing network signaling.
+
+#### Scenario: Direct activation of Quick Match from Main Menu
+- **WHEN** a player clicks the `QUICK MATCH` button (`#quickMatchBtn`) on the primary main menu
+- **THEN** the system immediately initiates automated matchmaking with the interactive warm-up sparring bot and active search HUD banner.
+
+#### Scenario: Activation of Friendly Room Host Modal
+- **WHEN** a player clicks the `HOST ARCFIELD MATCH` button (`#hostMatchBtn`) on the primary main menu
+- **THEN** the system opens `#hostModal` configured specifically for custom friendly room creation (arena sector and series length selection for 1v1 / 2v2 friend invites) without starting an automated matchmaking queue or spawning a warm-up bot.

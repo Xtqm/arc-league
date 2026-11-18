@@ -94,6 +94,7 @@ const TEST_DOMAINS = {
     'gameplay/rematch.test.js',
     'gameplay/variable_curving_e2e.test.js',
     'gameplay/unified_flow.test.js',
+    'gameplay/decoupled_match_entry.test.js',
     'gameplay/bot_combat_e2e_simulation.test.js'
   ]
 };

@@ -169,8 +169,12 @@ export function getMainMenuHtml() {
         <button id="btnSurvivalHardcore" class="btn variant-btn ${state.isHardcoreSurvival ? 'hot active' : ''}" data-variant="hardcore" style="padding:4px 10px;font-size:11px;min-width:90px;letter-spacing:1px;border-color:var(--orange);color:#ff7b1a;">HARDCORE [LVL 5+]</button>
       </div>
     </div>
-    <button id="hostMatchBtn" class="mode-btn multi-btn">HOST ARCFIELD MATCH</button>
-    <button id="joinOnlineBtn" class="mode-btn multi-btn">JOIN ARCFIELD MATCH</button>
+    <button id="practiceBtn" class="mode-btn duel-btn" style="width:100%;">PRACTICE (SOLO AI)</button>
+    <button id="quickMatchBtn" class="mode-btn multi-btn quick-match-primary" style="width:100%;border-color:#00ffff;color:#00ffff;box-shadow:0 0 10px rgba(0,255,255,0.3);letter-spacing:2px;">[ QUICK MATCH // PLAY NOW ]</button>
+    <div class="friendly-duels-row" style="display:flex;gap:8px;width:100%;">
+      <button id="hostMatchBtn" class="mode-btn multi-btn" style="flex:1;">HOST FRIENDLY MATCH</button>
+      <button id="joinOnlineBtn" class="mode-btn multi-btn" style="flex:1;">JOIN FRIENDLY MATCH</button>
+    </div>
     <!-- Legacy compatibility elements for tests & programmatic navigation -->
     <button id="armoryBtn" class="mode-btn armory-btn" style="display:none;min-width:44px;min-height:44px;" aria-hidden="true">OUTFITTING</button>
     <button id="achievementsBtn" class="mode-btn achievements-btn" style="display:none;min-width:44px;min-height:44px;" aria-hidden="true">TROPHY MATRIX</button>
@@ -407,7 +411,7 @@ export function bindMainMenuEvents() {
     });
   }
 
-  // Host setup modal bindings
+  // Match entry and modal bindings
   const hm = document.getElementById('hostModal');
   const quickMatchBtn = document.getElementById('quickMatchBtn');
   if (quickMatchBtn) {
@@ -417,6 +421,8 @@ export function bindMainMenuEvents() {
         requestFullScreen();
       }
       if (hm) hm.style.display = 'none';
+      const overlay = document.getElementById('overlay');
+      if (overlay) overlay.style.display = 'none';
       teardownSectorArena();
       startMatchmakingWithWarmup();
     };
@@ -427,11 +433,24 @@ export function bindMainMenuEvents() {
     practiceBtn.onclick = (e) => {
       e.stopPropagation(); if (e.cancelable) e.preventDefault();
       if (state.isTouchDevice) {
-        requestFullScreen();
+        if (!isFullScreen()) toggleFullScreen();
+        else requestFullScreen();
       }
       if (hm) hm.style.display = 'none';
-      selectArenaMap(resolveModalArenaMap());
-      startMode('duel_ai');
+      startSoloDuel();
+    };
+  }
+
+  const modalPracticeBtn = document.getElementById('modalPracticeBtn');
+  if (modalPracticeBtn) {
+    modalPracticeBtn.onclick = (e) => {
+      e.stopPropagation(); if (e.cancelable) e.preventDefault();
+      if (state.isTouchDevice) {
+        if (!isFullScreen()) toggleFullScreen();
+        else requestFullScreen();
+      }
+      if (hm) hm.style.display = 'none';
+      startSoloDuel();
     };
   }
 

@@ -128,6 +128,9 @@ export class MatchmakingQueue {
 
     this.bridge.connect('matchmaking_pool');
 
+    // Render queue HUD immediately on queue initiation
+    this._updateQueueHUD();
+
     // Timer tick for queue duration readout
     this._interval = setInterval(() => {
       this.elapsedSeconds++;
@@ -318,6 +321,14 @@ export class MatchmakingQueue {
     }
 
     safeMessage('MATCHMAKING CANCELLED');
+
+    if (typeof window !== 'undefined') {
+      if (typeof window.__tronShowModeSelect === 'function') {
+        window.__tronShowModeSelect();
+      } else if (window.__dbg && typeof window.__dbg.showModeSelect === 'function') {
+        window.__dbg.showModeSelect();
+      }
+    }
   }
 
   _clearTimer() {

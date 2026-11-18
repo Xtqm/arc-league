@@ -516,7 +516,10 @@ export class StorageManager {
     if (!this.state) {
       this.load();
     }
-    if (!path || typeof path !== 'string') {
+    if (path === '' || path === '*' || path === null || path === undefined) {
+      return this.state ? deepClone(this.state) : defaultValue;
+    }
+    if (typeof path !== 'string') {
       return defaultValue;
     }
 

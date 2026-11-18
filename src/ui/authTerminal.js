@@ -4,6 +4,7 @@ import { AuthEvents } from '../auth/events.js';
 import { setCursor } from '../input/InputManager.js';
 import { armoryModal } from './modals/ArmoryModal.js';
 import { achievementsModal } from './modals/AchievementsModal.js';
+import { achievementManager, AchievementEvents } from '../achievements/AchievementManager.js';
 import { settingsModal } from './modals/SettingsModal.js';
 import { economyManager, EconomyEvents } from '../core/economy/EconomyManager.js';
 import { storageManager } from '../core/storage/StorageManager.js';
@@ -226,12 +227,19 @@ export function setTerminalHubTab(tabName) {
  * Generates the HTML string for the Main Menu Identity Header badge.
  * @param {object|null} user 
  * @param {object|null} saveState 
+ * @param {object} [options]
+ * @param {boolean} [options.hasPendingClaims]
  * @returns {string}
  */
-export function getIdentityHeaderHtml(user, saveState) {
+export function getIdentityHeaderHtml(user, saveState, options = {}) {
   const isAuth = user && !user.isAnonymous;
   const level = calculateLevel(saveState);
   const levelStr = String(level).padStart(2, '0');
+  const hasClaims = typeof options.hasPendingClaims === 'boolean'
+    ? options.hasPendingClaims
+    : (typeof achievementManager?.getPendingClaimCount === 'function' && achievementManager.getPendingClaimCount() > 0);
+
+  const pipHtml = hasClaims ? `<span class="neon-pip-dot" title="Pending Directives Rewards Ready">●</span>` : '';
 
   if (isAuth) {
     const callsign = (user.handle || 'PROGRAM').toUpperCase();
@@ -240,7 +248,7 @@ export function getIdentityHeaderHtml(user, saveState) {
         <span class="status-circuit green-circuit" title="Active Grid Connection"></span>
         <span class="id-text">[USER RECOGNIZED] <b id="idCallsign">${callsign}</b> // LVL <span id="idLevel">${levelStr}</span></span>
       </div>
-      <button id="manageIdentityBtn" class="id-btn cyan-btn" title="Open Grid Authorization Terminal">[ TERMINAL ]</button>
+      <button id="manageIdentityBtn" class="id-btn cyan-btn" title="Open Grid Authorization Terminal">[ TERMINAL ]${pipHtml}</button>
     `;
   }
 
@@ -250,8 +258,38 @@ export function getIdentityHeaderHtml(user, saveState) {
       <span class="id-icon">◈</span>
       <span class="id-text">[GUEST] SUB-ROUTINE // ID: <b id="idShortCode">${shortId}</b></span>
     </div>
-    <button id="secureIdentityBtn" class="id-btn pulse-amber" title="Secure Identity & Sync Profile">[ SECURE IDENTITY ]</button>
+    <button id="secureIdentityBtn" class="id-btn pulse-amber" title="Secure Identity & Sync Profile">[ SECURE IDENTITY ]${pipHtml}</button>
   `;
+}
+
+/**
+ * Updates the neon notification pip indicator dot on the Hub TROPHY MATRIX tab.
+ */
+export function updateHubDirectivesPip() {
+  if (typeof document === 'undefined') return;
+  const tabDirectives = document.getElementById('tabHubDirectives');
+  if (!tabDirectives) return;
+
+  const hasClaims = typeof achievementManager?.getPendingClaimCount === 'function' && achievementManager.getPendingClaimCount() > 0;
+  let pip = tabDirectives.querySelector('.neon-pip-dot');
+
+  if (hasClaims) {
+    if (!pip) {
+      pip = document.createElement('span');
+      pip.className = 'neon-pip-dot';
+      pip.textContent = '●';
+      pip.title = 'Pending Directives Rewards Ready';
+      tabDirectives.appendChild(pip);
+    }
+  } else {
+    if (pip) {
+      if (typeof pip.remove === 'function') {
+        pip.remove();
+      } else if (pip.parentNode && typeof pip.parentNode.removeChild === 'function') {
+        pip.parentNode.removeChild(pip);
+      }
+    }
+  }
 }
 
 /**
@@ -260,23 +298,24 @@ export function getIdentityHeaderHtml(user, saveState) {
 export function updateIdentityHeader() {
   if (typeof document === 'undefined') return;
   const headerEl = document.getElementById('identityHeader');
-  if (!headerEl) return;
+  if (headerEl) {
+    const user = authManager.currentUser;
+    const saveState = authManager.saveState;
+    const isAuth = user && !user.isAnonymous;
 
-  const user = authManager.currentUser;
-  const saveState = authManager.saveState;
-  const isAuth = user && !user.isAnonymous;
+    headerEl.className = `identity-header ${isAuth ? 'state-auth' : 'state-guest'}`;
+    headerEl.innerHTML = getIdentityHeaderHtml(user, saveState);
 
-  headerEl.className = `identity-header ${isAuth ? 'state-auth' : 'state-guest'}`;
-  headerEl.innerHTML = getIdentityHeaderHtml(user, saveState);
-
-  const btn = headerEl.querySelector('#secureIdentityBtn') || headerEl.querySelector('#manageIdentityBtn');
-  if (btn) {
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      if (e.cancelable) e.preventDefault();
-      showAuthTerminal();
-    };
+    const btn = headerEl.querySelector('#secureIdentityBtn') || headerEl.querySelector('#manageIdentityBtn');
+    if (btn) {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
+        showAuthTerminal();
+      };
+    }
   }
+  updateHubDirectivesPip();
 }
 
 /**
@@ -627,6 +666,18 @@ export function initAuthTerminal() {
         populateTerminalData();
         populateDossierData();
       }
+    });
+  }
+
+  // Subscribe to achievement events for reactive pip indicators
+  if (achievementManager && typeof achievementManager.on === 'function') {
+    achievementManager.on(AchievementEvents.ACHIEVEMENT_UNLOCKED, () => {
+      updateIdentityHeader();
+      updateHubDirectivesPip();
+    });
+    achievementManager.on(AchievementEvents.PROGRESS_UPDATED, () => {
+      updateIdentityHeader();
+      updateHubDirectivesPip();
     });
   }
 
@@ -1020,6 +1071,7 @@ if (typeof window !== 'undefined') {
   window.__tronShowAuthTerminal = showAuthTerminal;
   window.__tronHideAuthTerminal = hideAuthTerminal;
   window.__tronUpdateIdentityHeader = updateIdentityHeader;
+  window.__tronUpdateHubDirectivesPip = updateHubDirectivesPip;
   window.__tronSetTerminalStep = setTerminalStep;
   window.__tronSetTerminalView = setTerminalView;
   window.__tronSetTerminalHubTab = setTerminalHubTab;

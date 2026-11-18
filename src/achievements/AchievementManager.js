@@ -13,9 +13,17 @@ import { storageManager as defaultStorageManager } from '../core/storage/Storage
 import { StorageEvents } from '../core/storage/schema.js';
 import { economyManager as defaultEconomyManager } from '../core/economy/EconomyManager.js';
 import { armoryManager as defaultArmoryManager } from '../armory/ArmoryManager.js';
+import { playAchievementFanfare } from '../audio/sfx.js';
+
+export const AchievementStatus = Object.freeze({
+  LOCKED: 'LOCKED',
+  CLAIMABLE: 'CLAIMABLE',
+  CLAIMED: 'CLAIMED'
+});
 
 export const AchievementEvents = Object.freeze({
   ACHIEVEMENT_UNLOCKED: 'ACHIEVEMENT_UNLOCKED',
+  ACHIEVEMENT_CLAIMABLE: 'ACHIEVEMENT_CLAIMABLE',
   PROGRESS_UPDATED: 'ACHIEVEMENT_PROGRESS_UPDATED'
 });
 
@@ -26,12 +34,14 @@ export class AchievementManager {
    * @param {import('../core/economy/EconomyManager.js').EconomyManager} [options.economy]
    * @param {import('../armory/ArmoryManager.js').ArmoryManager} [options.armory]
    * @param {Function} [options.onUnlockToast]
+   * @param {Function} [options.playFanfareFn]
    */
   constructor(options = {}) {
     this.storage = options.storage || defaultStorageManager;
     this.economy = options.economy || defaultEconomyManager;
     this.armory = options.armory || defaultArmoryManager;
     this.onUnlockToast = options.onUnlockToast || null;
+    this.playFanfareFn = options.playFanfareFn || playAchievementFanfare;
 
     this.isInitialized = false;
     this._listeners = new Map();
@@ -139,22 +149,129 @@ export class AchievementManager {
   }
 
   /**
-   * Returns progress details for all registered achievements.
+   * Returns progress details for all registered achievements with three-tier lifecycle status.
    * @returns {Array<object>}
    */
   getMatrixStatus() {
-    const fullState = this.storage.get('', {}) || {};
+    const fullState = this.storage.get('', {}) || this.storage.state || {};
     const all = getAllAchievements();
 
     return all.map((ach) => {
-      const unlocked = this.isUnlocked(ach.id);
+      const isClaimed = this.isUnlocked(ach.id);
       const progress = ach.evaluate(fullState);
+      let status = AchievementStatus.LOCKED;
+      if (isClaimed) {
+        status = AchievementStatus.CLAIMED;
+      } else if (progress && progress.satisfied) {
+        status = AchievementStatus.CLAIMABLE;
+      }
+
       return {
         ...ach,
-        unlocked,
-        progress: unlocked ? { ...progress, ratio: 1.0, current: progress.target, satisfied: true } : progress
+        unlocked: isClaimed,
+        status,
+        progress: isClaimed ? { ...progress, ratio: 1.0, current: progress.target, satisfied: true } : progress
       };
     });
+  }
+
+  /**
+   * Returns a list of achievements that have satisfied criteria but are not yet claimed.
+   * @returns {Array<object>}
+   */
+  getClaimableAchievements() {
+    const fullState = this.storage.get('', {}) || this.storage.state || {};
+    const all = getAllAchievements();
+    const claimable = [];
+
+    for (const ach of all) {
+      if (!this.isUnlocked(ach.id)) {
+        const evalResult = ach.evaluate(fullState);
+        if (evalResult && evalResult.satisfied) {
+          claimable.push({
+            ...ach,
+            unlocked: false,
+            status: AchievementStatus.CLAIMABLE,
+            progress: evalResult
+          });
+        }
+      }
+    }
+    return claimable;
+  }
+
+  /**
+   * Returns the count of achievements currently awaiting reward collection.
+   * @returns {number}
+   */
+  getPendingClaimCount() {
+    return this.getClaimableAchievements().length;
+  }
+
+  /**
+   * Claims the reward for a satisfied achievement, awarding Arc Credits,
+   * unlocking cosmetic skin, playing crystal synth fanfare, and persisting to storage.
+   * @param {string} achievementId
+   * @param {object} [options]
+   * @param {boolean} [options.silentAudio=false]
+   * @returns {boolean} True if successfully claimed, false if already claimed or not satisfied
+   */
+  claimReward(achievementId, options = {}) {
+    if (!achievementId || typeof achievementId !== 'string') return false;
+    if (this.isUnlocked(achievementId)) return false;
+
+    const ach = getAchievement(achievementId);
+    if (!ach) return false;
+
+    const fullState = this.storage.get('', {}) || this.storage.state || {};
+    const evalResult = ach.evaluate(fullState);
+    if (!evalResult || !evalResult.satisfied) return false;
+
+    const success = this.unlock(achievementId, {
+      silent: true,
+      ...options
+    });
+
+    if (success && !options.silentAudio) {
+      if (typeof this.playFanfareFn === 'function') {
+        try {
+          this.playFanfareFn();
+        } catch (_) {}
+      }
+    }
+
+    return success;
+  }
+
+  /**
+   * Redeems all currently claimable achievement rewards in batch.
+   * @param {object} [options]
+   * @param {boolean} [options.silentAudio=false]
+   * @returns {Array<string>} Array of newly claimed achievement IDs
+   */
+  claimAllRewards(options = {}) {
+    const claimable = this.getClaimableAchievements();
+    const claimedIds = [];
+
+    for (const ach of claimable) {
+      const success = this.unlock(ach.id, {
+        silent: true,
+        ...options
+      });
+      if (success) {
+        claimedIds.push(ach.id);
+      }
+    }
+
+    if (claimedIds.length > 0 && !options.silentAudio) {
+      if (typeof this.playFanfareFn === 'function') {
+        try {
+          this.playFanfareFn();
+        } catch (_) {}
+      }
+    }
+
+    return claimedIds;
   }
 
   /**
@@ -205,52 +322,53 @@ export class AchievementManager {
 
     // Filter relevant telemetry paths to prevent circular evaluation
     const isTelemetryPath =
+      path === '*' ||
       path.startsWith('stats.') ||
       path.startsWith('campaign.levelRecords') ||
       path === 'campaign.starsEarned';
 
     if (!isTelemetryPath) return;
 
-    this.checkPendingAchievements({ silent: false });
+    this.checkPendingAchievements({ silent: true });
   }
 
   /**
-   * Evaluates all locked achievements against current state and triggers unlocks.
+   * Evaluates all locked achievements against current state and emits claimable notifications.
+   * Does NOT auto-unlock or trigger mid-combat toasts/fanfares during gameplay.
    * @param {object} [options]
-   * @param {boolean} [options.silent=false]
-   * @returns {Array<string>} Newly unlocked achievement IDs
+   * @returns {Array<string>} Claimable achievement IDs
    */
   checkPendingAchievements(options = {}) {
-    const fullState = this.storage.get('', {}) || {};
-    const newlyUnlocked = [];
+    const fullState = this.storage.get('', {}) || this.storage.state || {};
+    const claimableIds = [];
 
     for (const ach of getAllAchievements()) {
       if (!this.isUnlocked(ach.id)) {
         const evalResult = ach.evaluate(fullState);
         if (evalResult && evalResult.satisfied) {
-          const success = this.unlock(ach.id, {
-            silent: options.silent ?? false,
-            retroactive: options.retroactive ?? false
+          claimableIds.push(ach.id);
+          this.emit(AchievementEvents.PROGRESS_UPDATED, {
+            achievementId: ach.id,
+            achievement: { ...ach },
+            progress: evalResult,
+            claimable: true
           });
-          if (success) {
-            newlyUnlocked.push(ach.id);
-          }
         }
       }
     }
 
-    return newlyUnlocked;
+    return claimableIds;
   }
 
   /**
    * Reconciles locked achievements against existing player save state on boot.
-   * Silently grants rewards for satisfied milestones without spamming toasts.
+   * Evaluates criteria silently without auto-unlocking or mid-combat toasts.
    * @param {object} [options]
-   * @returns {Array<string>} IDs of retroactively unlocked achievements
+   * @returns {Array<string>} IDs of claimable achievements
    */
   reconcileAchievements(options = {}) {
     return this.checkPendingAchievements({
-      silent: options.silent ?? true,
+      silent: true,
       retroactive: true
     });
   }

@@ -133,38 +133,61 @@ const initialStorage = createMockStorage({
 const economy1 = createMockEconomy();
 const armory1 = createMockArmory();
 let toastCount = 0;
+let fanfareCount1 = 0;
 
 const manager1 = new AchievementManager({
   storage: initialStorage,
   economy: economy1,
   armory: armory1,
-  onUnlockToast: () => { toastCount++; }
+  onUnlockToast: () => { toastCount++; },
+  playFanfareFn: () => { fanfareCount1++; }
 });
 
 // Boot the manager
 manager1.init();
 
 // ach_first_blood (10 derezzes >= 1), ach_swarm_survivor (wave 16 >= 15), ach_grid_one_master (18 stars)
+// With claimable lifecycle, achievements are NOT auto-unlocked; they are CLAIMABLE upon boot!
+assert.strictEqual(manager1.isUnlocked('ach_first_blood'), false);
+assert.strictEqual(manager1.isUnlocked('ach_swarm_survivor'), false);
+assert.strictEqual(manager1.isUnlocked('ach_grid_one_master'), false);
+
+// Pending claim count and claimable list
+assert.strictEqual(manager1.getPendingClaimCount(), 3);
+const claimable1 = manager1.getClaimableAchievements();
+assert.strictEqual(claimable1.length, 3);
+assert.deepStrictEqual(claimable1.map(a => a.id).sort(), ['ach_first_blood', 'ach_grid_one_master', 'ach_swarm_survivor'].sort());
+
+// No rewards granted prior to explicit claim
+assert.strictEqual(economy1.getBits(), 0);
+assert.strictEqual(armory1.isUnlocked('discSkins', 'disc_corrupted_void'), false);
+assert.strictEqual(toastCount, 0, 'No toasts should be shown during silent boot reconciliation');
+assert.strictEqual(fanfareCount1, 0, 'No audio fanfare should be played during boot reconciliation');
+
+// Claim individual achievement: ach_first_blood
+const claimedFirstBlood = manager1.claimReward('ach_first_blood');
+assert.strictEqual(claimedFirstBlood, true);
 assert.strictEqual(manager1.isUnlocked('ach_first_blood'), true);
+assert.strictEqual(economy1.getBits(), 100);
+assert.strictEqual(fanfareCount1, 1, 'Crystal fanfare should play on individual claim');
+assert.strictEqual(manager1.getPendingClaimCount(), 2);
+
+// Claim remaining achievements in batch: ach_swarm_survivor and ach_grid_one_master
+const batchClaimed1 = manager1.claimAllRewards();
+assert.strictEqual(batchClaimed1.length, 2);
+assert.strictEqual(manager1.getPendingClaimCount(), 0);
 assert.strictEqual(manager1.isUnlocked('ach_swarm_survivor'), true);
 assert.strictEqual(manager1.isUnlocked('ach_grid_one_master'), true);
-
-// ach_curve_god and ach_parry_king should still be locked
-assert.strictEqual(manager1.isUnlocked('ach_curve_god'), false);
-assert.strictEqual(manager1.isUnlocked('ach_parry_king'), false);
-assert.strictEqual(manager1.isUnlocked('ach_untouchable'), false);
 
 // Rewards: 100 + 750 + 1000 = 1850 Bits
 assert.strictEqual(economy1.getBits(), 1850);
 
-// Cosmetic rewards
+// Cosmetic rewards unlocked
 assert.ok(armory1.isUnlocked('discSkins', 'disc_corrupted_void'));
 assert.ok(armory1.isUnlocked('chassisSkins', 'chassis_arbiter'));
+assert.strictEqual(fanfareCount1, 2, 'Fanfare should play once for batch claim');
 
-// Toast suppressed on boot-time retroactive reconciliation
-assert.strictEqual(toastCount, 0, 'No toasts should be shown during silent boot reconciliation');
-
-console.log('✓ Group 1: Retroactive boot reconciliation and reward distribution verified.');
+console.log('✓ Group 1: Retroactive boot reconciliation, claimable status, and claim pipeline verified.');
 
 // =========================================================================
 // Test Group 2: Idempotence & Duplicate Prevention
@@ -173,30 +196,34 @@ console.log('\n[Group 2] Testing Duplicate Unlock & Reward Prevention...');
 
 const historyLengthBefore = economy1.getHistory().length;
 const newlyReconciled = manager1.reconcileAchievements();
-assert.strictEqual(newlyReconciled.length, 0, 'No new achievements should be unlocked');
+assert.strictEqual(newlyReconciled.length, 0, 'No new achievements should be claimable');
 assert.strictEqual(economy1.getHistory().length, historyLengthBefore, 'No duplicate rewards should be granted');
 
-// Explicit duplicate unlock call returns false
+// Explicit duplicate claim calls return false / empty
+assert.strictEqual(manager1.claimReward('ach_first_blood'), false);
+assert.strictEqual(manager1.claimAllRewards().length, 0);
 assert.strictEqual(manager1.unlock('ach_first_blood'), false);
 
 console.log('✓ Group 2: Duplicate prevention verified.');
 
 // =========================================================================
-// Test Group 3: Runtime Reactive Mutation Evaluation
+// Test Group 3: Runtime Reactive Mutation Evaluation (Distraction-Free)
 // =========================================================================
-console.log('\n[Group 3] Testing Runtime Reactive Telemetry Mutation...');
+console.log('\n[Group 3] Testing Runtime Reactive Telemetry Mutation (Distraction-Free Combat)...');
 
 const economy2 = createMockEconomy();
 const armory2 = createMockArmory();
 const storage2 = createMockStorage();
 const toastEvents = [];
 const unlockEvents = [];
+let fanfareCount2 = 0;
 
 const manager2 = new AchievementManager({
   storage: storage2,
   economy: economy2,
   armory: armory2,
-  onUnlockToast: (ach) => { toastEvents.push(ach); }
+  onUnlockToast: (ach) => { toastEvents.push(ach); },
+  playFanfareFn: () => { fanfareCount2++; }
 });
 
 manager2.on(AchievementEvents.ACHIEVEMENT_UNLOCKED, (e) => {
@@ -205,16 +232,18 @@ manager2.on(AchievementEvents.ACHIEVEMENT_UNLOCKED, (e) => {
 
 manager2.init();
 assert.strictEqual(manager2.getCompletionStats().unlocked, 0);
+assert.strictEqual(manager2.getPendingClaimCount(), 0);
 
 // Execute 50 parries in combat
 storage2.set('stats.parriesExecuted', 50);
 
-assert.strictEqual(manager2.isUnlocked('ach_parry_king'), true);
-assert.strictEqual(economy2.getBits(), 250);
-assert.strictEqual(toastEvents.length, 1);
-assert.strictEqual(toastEvents[0].id, 'ach_parry_king');
-assert.strictEqual(unlockEvents.length, 1);
-assert.strictEqual(unlockEvents[0].achievementId, 'ach_parry_king');
+// Mid-combat check: criteria satisfied, but NO toast and NO mid-combat unlock
+assert.strictEqual(manager2.isUnlocked('ach_parry_king'), false, 'Should remain locked until claimed');
+assert.strictEqual(manager2.getPendingClaimCount(), 1, 'Should transition to claimable state');
+assert.strictEqual(economy2.getBits(), 0, 'No bits awarded mid-combat');
+assert.strictEqual(toastEvents.length, 0, 'Zero toasts during active combat');
+assert.strictEqual(fanfareCount2, 0, 'Zero audio fanfare during active combat');
+assert.strictEqual(unlockEvents.length, 0, 'No unlock events until explicitly claimed');
 
 // Complete a trial with 100% integrity
 storage2.set('campaign.levelRecords.level_01_01', {
@@ -223,12 +252,30 @@ storage2.set('campaign.levelRecords.level_01_01', {
   stars: 3
 });
 
+assert.strictEqual(manager2.isUnlocked('ach_untouchable'), false);
+assert.strictEqual(manager2.getPendingClaimCount(), 2);
+assert.strictEqual(toastEvents.length, 0, 'Toasts remain suppressed mid-combat');
+assert.strictEqual(fanfareCount2, 0, 'Fanfare remains suppressed mid-combat');
+
+// Player visits Trophy Matrix and claims ach_parry_king
+const claimedParry = manager2.claimReward('ach_parry_king');
+assert.strictEqual(claimedParry, true);
+assert.strictEqual(manager2.isUnlocked('ach_parry_king'), true);
+assert.strictEqual(economy2.getBits(), 250);
+assert.strictEqual(manager2.getPendingClaimCount(), 1);
+assert.strictEqual(fanfareCount2, 1);
+assert.strictEqual(unlockEvents.length, 1);
+assert.strictEqual(unlockEvents[0].achievementId, 'ach_parry_king');
+
+// Player claims rest in batch
+const claimedBatch = manager2.claimAllRewards();
+assert.deepStrictEqual(claimedBatch, ['ach_untouchable']);
 assert.strictEqual(manager2.isUnlocked('ach_untouchable'), true);
 assert.strictEqual(economy2.getBits(), 250 + 500); // 750 Bits total
-assert.strictEqual(toastEvents.length, 2);
-assert.strictEqual(toastEvents[1].id, 'ach_untouchable');
+assert.strictEqual(manager2.getPendingClaimCount(), 0);
+assert.strictEqual(fanfareCount2, 2);
 
-console.log('✓ Group 3: Runtime reactive unlocks, rewards, and toast dispatch verified.');
+console.log('✓ Group 3: Distraction-free combat evaluation and Trophy Matrix claiming verified.');
 
 // =========================================================================
 // Test Group 4: Matrix Status & Completion Percentage
@@ -246,12 +293,24 @@ assert.strictEqual(matrix.length, 6);
 const parryStatus = matrix.find(a => a.id === 'ach_parry_king');
 assert.ok(parryStatus);
 assert.strictEqual(parryStatus.unlocked, true);
+assert.strictEqual(parryStatus.status, 'CLAIMED');
 assert.strictEqual(parryStatus.progress.ratio, 1.0);
 
 const curveStatus = matrix.find(a => a.id === 'ach_curve_god');
 assert.ok(curveStatus);
 assert.strictEqual(curveStatus.unlocked, false);
+assert.strictEqual(curveStatus.status, 'LOCKED');
 assert.strictEqual(curveStatus.progress.ratio, 0);
+
+// Test wildcard mutation handling
+const storageWildcard = createMockStorage();
+const managerWildcard = new AchievementManager({ storage: storageWildcard });
+managerWildcard.init();
+storageWildcard.state.stats.totalDerezzes = 1;
+storageWildcard.set('*', storageWildcard.state);
+assert.strictEqual(managerWildcard.getPendingClaimCount(), 1);
+assert.strictEqual(managerWildcard.getClaimableAchievements()[0].id, 'ach_first_blood');
+console.log('✓ Wildcard storage mutation evaluation verified.');
 
 console.log('✓ Group 4: Matrix status and completion percentage validated.');
 

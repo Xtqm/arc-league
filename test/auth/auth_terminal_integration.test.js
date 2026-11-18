@@ -384,6 +384,62 @@ async function runTerminalIntegrationTests() {
     assert.strictEqual(standaloneCheck.closedAfterReturn, true, 'Clicking RETURN in standalone SettingsModal must close it');
     console.log('✓ Pause Menu standalone SettingsModal remains functional');
 
+    console.log('\n--- 8. Testing Neon Pip Notification Display & Dismissal ---');
+    // Ensure player is returned to main menu
+    await page.evaluate(() => {
+      if (window.__dbg && typeof window.__dbg.returnToMenu === 'function') {
+        window.__dbg.returnToMenu();
+      }
+    });
+
+    // Simulate satisfying achievement criteria (e.g. 1st derezz)
+    const pipStateBefore = await page.evaluate(async () => {
+      const { storageManager } = await import('./src/core/storage/StorageManager.js');
+      const { achievementManager } = await import('./src/achievements/AchievementManager.js');
+      const { updateIdentityHeader, updateHubDirectivesPip } = await import('./src/ui/authTerminal.js');
+
+      // Mutate stats to trigger claimable achievement
+      storageManager.set('stats.totalDerezzes', 1, { immediate: true });
+      achievementManager.checkPendingAchievements();
+      updateIdentityHeader();
+      updateHubDirectivesPip();
+
+      const btn = document.querySelector('#manageIdentityBtn') || document.querySelector('#secureIdentityBtn');
+      const tabDirectives = document.getElementById('tabHubDirectives');
+      return {
+        pendingCount: achievementManager.getPendingClaimCount(),
+        hasHeaderPip: !!btn?.querySelector('.neon-pip-dot'),
+        hasTabPip: !!tabDirectives?.querySelector('.neon-pip-dot')
+      };
+    });
+
+    assert.ok(pipStateBefore.pendingCount > 0, 'Achievement criteria should be satisfied and pending claim');
+    assert.strictEqual(pipStateBefore.hasHeaderPip, true, 'Identity header button must display .neon-pip-dot when claims exist');
+    assert.strictEqual(pipStateBefore.hasTabPip, true, 'Hub Directives tab must display .neon-pip-dot when claims exist');
+
+    // Claim the rewards and verify removal
+    const pipStateAfter = await page.evaluate(async () => {
+      const { achievementManager } = await import('./src/achievements/AchievementManager.js');
+      const { updateIdentityHeader, updateHubDirectivesPip } = await import('./src/ui/authTerminal.js');
+
+      achievementManager.claimAllRewards();
+      updateIdentityHeader();
+      updateHubDirectivesPip();
+
+      const btn = document.querySelector('#manageIdentityBtn') || document.querySelector('#secureIdentityBtn');
+      const tabDirectives = document.getElementById('tabHubDirectives');
+      return {
+        pendingCount: achievementManager.getPendingClaimCount(),
+        hasHeaderPip: !!btn?.querySelector('.neon-pip-dot'),
+        hasTabPip: !!tabDirectives?.querySelector('.neon-pip-dot')
+      };
+    });
+
+    assert.strictEqual(pipStateAfter.pendingCount, 0, 'All pending claims should be redeemed');
+    assert.strictEqual(pipStateAfter.hasHeaderPip, false, 'Identity header button must remove .neon-pip-dot when claims are 0');
+    assert.strictEqual(pipStateAfter.hasTabPip, false, 'Hub Directives tab must remove .neon-pip-dot when claims are 0');
+    console.log('✓ Neon pip indicator dot dynamically renders on pending claims and removes cleanly upon redemption');
+
     console.log('\n=== ALL TERMINAL INTEGRATION TESTS PASSED ===');
   });
 }

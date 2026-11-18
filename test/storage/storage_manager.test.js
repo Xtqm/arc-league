@@ -75,6 +75,22 @@ assert.strictEqual(testManager.get('player.currency.bits'), 0);
 assert.strictEqual(testManager.get('stats.highestWave'), 1);
 assert.strictEqual(testManager.get('non.existent.path', 'fallback_val'), 'fallback_val');
 
+// Empty and wildcard root state reads
+const rootEmpty = testManager.get('');
+const rootWildcard = testManager.get('*');
+const rootNull = testManager.get(null);
+const rootUndefined = testManager.get(undefined);
+assert.ok(rootEmpty && typeof rootEmpty === 'object');
+assert.strictEqual(rootEmpty.version, '1.0.0');
+assert.strictEqual(rootEmpty.player.handle, 'USER_PROGRAM');
+assert.strictEqual(rootWildcard.version, '1.0.0');
+assert.strictEqual(rootNull.version, '1.0.0');
+assert.strictEqual(rootUndefined.version, '1.0.0');
+
+// Verify cloned isolation
+rootEmpty.player.handle = 'MUTATED_CLONE';
+assert.strictEqual(testManager.get('player.handle'), 'USER_PROGRAM', 'get("") must return cloned root state');
+
 // Keypath writes and mutation events
 let mutateEvent = null;
 testManager.on(StorageEvents.MUTATED, (evt) => {

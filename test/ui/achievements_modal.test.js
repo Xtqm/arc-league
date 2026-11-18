@@ -20,6 +20,7 @@ class MockElement {
     this.id = '';
     this.className = '';
     this.innerHTML = '';
+    this.dataset = {};
     this._listeners = new Map();
   }
   appendChild(child) {
@@ -35,6 +36,16 @@ class MockElement {
     }
     return child;
   }
+  getAttribute(attr) {
+    if (attr === 'data-id') return this.dataset.id || this._dataId || null;
+    return null;
+  }
+  setAttribute(attr, val) {
+    if (attr === 'data-id') {
+      this.dataset.id = val;
+      this._dataId = val;
+    }
+  }
   querySelector(sel) {
     if (sel.startsWith('#')) {
       const id = sel.slice(1);
@@ -44,7 +55,28 @@ class MockElement {
         if (found) return found;
       }
     }
+    if (sel.startsWith('.')) {
+      const cls = sel.slice(1);
+      if (this.className.split(' ').includes(cls)) return this;
+      for (const c of this.children) {
+        const found = c.querySelector(sel);
+        if (found) return found;
+      }
+    }
     return null;
+  }
+  querySelectorAll(sel) {
+    const list = [];
+    if (sel.startsWith('.')) {
+      const cls = sel.slice(1);
+      if (this.className.split(' ').includes(cls)) list.push(this);
+    }
+    for (const c of this.children) {
+      if (typeof c.querySelectorAll === 'function') {
+        list.push(...c.querySelectorAll(sel));
+      }
+    }
+    return list;
   }
   addEventListener(event, fn) {
     if (!this._listeners.has(event)) this._listeners.set(event, []);
@@ -54,6 +86,10 @@ class MockElement {
 
 // Mock AchievementManager
 function createMockAchievementManager() {
+  let reconciledCalled = 0;
+  const claimedRewards = [];
+  let claimAllCalled = false;
+
   const achievements = [
     {
       id: 'ach_first_blood',
@@ -63,6 +99,7 @@ function createMockAchievementManager() {
       icon: '⚡',
       target: 1,
       unlocked: true,
+      status: 'CLAIMED',
       progress: { current: 1, target: 1, ratio: 1.0, satisfied: true },
       reward: { bits: 100, cosmetic: null }
     },
@@ -74,6 +111,7 @@ function createMockAchievementManager() {
       icon: '🌀',
       target: 25,
       unlocked: false,
+      status: 'LOCKED',
       progress: { current: 10, target: 25, ratio: 0.4, satisfied: false },
       reward: { bits: 300, cosmetic: null }
     },
@@ -85,7 +123,8 @@ function createMockAchievementManager() {
       icon: '🛡️',
       target: 50,
       unlocked: false,
-      progress: { current: 35, target: 50, ratio: 0.7, satisfied: false },
+      status: 'CLAIMABLE',
+      progress: { current: 50, target: 50, ratio: 1.0, satisfied: true },
       reward: { bits: 250, cosmetic: null }
     },
     {
@@ -96,7 +135,8 @@ function createMockAchievementManager() {
       icon: '💎',
       target: 1,
       unlocked: false,
-      progress: { current: 0, target: 1, ratio: 0, satisfied: false },
+      status: 'CLAIMABLE',
+      progress: { current: 1, target: 1, ratio: 1.0, satisfied: true },
       reward: { bits: 500, cosmetic: null }
     },
     {
@@ -107,6 +147,7 @@ function createMockAchievementManager() {
       icon: '🔥',
       target: 15,
       unlocked: true,
+      status: 'CLAIMED',
       progress: { current: 15, target: 15, ratio: 1.0, satisfied: true },
       reward: {
         bits: 750,
@@ -121,6 +162,7 @@ function createMockAchievementManager() {
       icon: '👑',
       target: 18,
       unlocked: false,
+      status: 'LOCKED',
       progress: { current: 12, target: 18, ratio: 0.67, satisfied: false },
       reward: {
         bits: 1000,
@@ -131,7 +173,34 @@ function createMockAchievementManager() {
 
   return {
     getMatrixStatus: () => achievements,
-    getCompletionStats: () => ({ total: 6, unlocked: 2, percentage: 33 })
+    getCompletionStats: () => ({ total: 6, unlocked: achievements.filter(a => a.status === 'CLAIMED').length, percentage: 33 }),
+    getPendingClaimCount: () => achievements.filter(a => a.status === 'CLAIMABLE').length,
+    claimReward: (id) => {
+      claimedRewards.push(id);
+      const target = achievements.find(a => a.id === id);
+      if (target) {
+        target.status = 'CLAIMED';
+        target.unlocked = true;
+      }
+      return true;
+    },
+    claimAllRewards: () => {
+      claimAllCalled = true;
+      const claimable = achievements.filter(a => a.status === 'CLAIMABLE');
+      for (const a of claimable) {
+        a.status = 'CLAIMED';
+        a.unlocked = true;
+        claimedRewards.push(a.id);
+      }
+      return claimable.map(a => a.id);
+    },
+    reconcileAchievements: () => {
+      reconciledCalled++;
+      return [];
+    },
+    getClaimedRewards: () => [...claimedRewards],
+    wasClaimAllCalled: () => claimAllCalled,
+    getReconciledCount: () => reconciledCalled
   };
 }
 
@@ -173,13 +242,17 @@ assert.ok(markup.includes('Flawless Subroutine'));
 assert.ok(markup.includes('Endless Firewall'));
 assert.ok(markup.includes('Outlands Conqueror'));
 
-// Unlocked vs Locked Badges
+// Unlocked vs Locked Badges vs Claimable Buttons
 assert.ok(markup.includes('[ UNLOCKED ]'), 'Must render unlocked status badges');
 assert.ok(markup.includes('[ LOCKED ]'), 'Must render locked status badges');
+assert.ok(markup.includes('[ CLAIM REWARD ]'), 'Must render interactive [ CLAIM REWARD ] buttons on claimable cards');
+assert.ok(markup.includes('claimBtn_ach_parry_king'), 'Must render specific claim button for claimable milestone');
+assert.ok(markup.includes('[ CLAIM ALL REWARDS ]'), 'Must render header [ CLAIM ALL REWARDS ] when >= 2 achievements ready');
+assert.ok(markup.includes('id="claimAllAchievementsBtn"'), 'Must render #claimAllAchievementsBtn in header');
 
 // Progress numbers
 assert.ok(markup.includes('10 / 25'), 'Must render curve kills progress (10 / 25)');
-assert.ok(markup.includes('35 / 50'), 'Must render parries progress (35 / 50)');
+assert.ok(markup.includes('50 / 50'), 'Must render parries progress (50 / 50)');
 assert.ok(markup.includes('12 / 18'), 'Must render grid stars progress (12 / 18)');
 
 // Reward Badges
@@ -243,11 +316,38 @@ assert.strictEqual(modal.isOpen(), false);
 
 // Show again and click return button
 modal.show();
+assert.ok(mockMgr.getReconciledCount() >= 1, 'reconcileAchievements must be called upon show()');
 assert.ok(typeof returnBtn.onclick === 'function');
 returnBtn.onclick({ stopPropagation: () => {} });
 assert.strictEqual(modal.isOpen(), false);
 
-console.log('✓ Group 4: Close and return button events verified.');
+// Test interactive [ CLAIM REWARD ] and [ CLAIM ALL REWARDS ] click bindings
+modal.show();
+const claimParryBtn = new MockElement('button');
+claimParryBtn.id = 'claimBtn_ach_parry_king';
+claimParryBtn.className = 'claim-reward-btn';
+claimParryBtn.setAttribute('data-id', 'ach_parry_king');
+
+const claimAllBtn = new MockElement('button');
+claimAllBtn.id = 'claimAllAchievementsBtn';
+
+const mockRootInteractive = new MockElement('div');
+mockRootInteractive.appendChild(claimParryBtn);
+mockRootInteractive.appendChild(claimAllBtn);
+mockRootInteractive.appendChild(closeBtn);
+mockRootInteractive.appendChild(returnBtn);
+
+modal.bindEvents(mockRootInteractive);
+
+assert.ok(typeof claimParryBtn.onclick === 'function', 'Claim reward button must have click binding');
+claimParryBtn.onclick({ stopPropagation: () => {} });
+assert.ok(mockMgr.getClaimedRewards().includes('ach_parry_king'), 'Clicking [ CLAIM REWARD ] must invoke claimReward()');
+
+assert.ok(typeof claimAllBtn.onclick === 'function', 'Claim all rewards button must have click binding');
+claimAllBtn.onclick({ stopPropagation: () => {} });
+assert.strictEqual(mockMgr.wasClaimAllCalled(), true, 'Clicking [ CLAIM ALL REWARDS ] must invoke claimAllRewards()');
+
+console.log('✓ Group 4: Close, return, [ CLAIM REWARD ], and [ CLAIM ALL REWARDS ] button events verified.');
 
 // =========================================================================
 // Test Group 5: Main Menu Static DOM & CSS Integration

@@ -1135,6 +1135,34 @@
     box-shadow: 0 0 18px var(--cyan);
   }
 
+  /* ───────────────────────── Sleek Neon Pip Indicator Dot ───────────────────────── */
+  .neon-pip-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    min-width: 7px;
+    min-height: 7px;
+    border-radius: 50%;
+    background: #ffaa00;
+    box-shadow: 0 0 6px #ffaa00, 0 0 12px #ffaa00;
+    margin-left: 6px;
+    vertical-align: middle;
+    animation: neonPipPulse 1.8s infinite ease-in-out;
+    pointer-events: none;
+  }
+  @keyframes neonPipPulse {
+    0%, 100% {
+      opacity: 0.85;
+      transform: scale(0.95);
+      box-shadow: 0 0 4px #ffaa00, 0 0 8px #ffaa00;
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.25);
+      box-shadow: 0 0 8px #ffaa00, 0 0 16px #ffcc00, 0 0 22px #ffaa00;
+    }
+  }
+
   /* ───────────────────────── Grid Authorization Terminal Card ───────────────────────── */
   .auth-terminal-card {
     position: relative;

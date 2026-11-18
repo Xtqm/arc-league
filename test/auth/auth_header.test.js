@@ -87,8 +87,34 @@ class MockDomElement {
     this.select = () => {};
     this.addEventListener = () => {};
     this.removeEventListener = () => {};
+    this.children = [];
+    this.parentNode = null;
+    this.appendChild = (c) => {
+      this.children.push(c);
+      c.parentNode = this;
+      return c;
+    };
+    this.removeChild = (c) => {
+      const idx = this.children.indexOf(c);
+      if (idx !== -1) {
+        this.children.splice(idx, 1);
+        c.parentNode = null;
+      }
+      return c;
+    };
+    this.remove = () => {
+      if (this.parentNode && typeof this.parentNode.removeChild === 'function') {
+        this.parentNode.removeChild(this);
+      }
+    };
   }
-  querySelector() {
+  querySelector(sel) {
+    if (sel && sel.startsWith('.')) {
+      const cls = sel.slice(1);
+      for (const c of this.children) {
+        if (c.className && c.className.split(' ').includes(cls)) return c;
+      }
+    }
     return null;
   }
   querySelectorAll() {
@@ -137,6 +163,7 @@ const mockElements = {
 globalThis.document = {
   getElementById: (id) => mockElements[id] || null,
   querySelector: () => null,
+  createElement: (tag) => new MockDomElement(tag),
   activeElement: new MockDomElement('BODY'),
   pointerLockElement: null,
   exitPointerLock: () => {}
@@ -251,5 +278,36 @@ economyManager.spendBits(150, 'test_cat', 'test_item');
 assert.strictEqual(authManager._saveState.bits, 600, 'spendBits must synchronously update saveState.bits');
 assert.strictEqual(mockElements.dossierBits.textContent, '600 BITS', 'spendBits must synchronously update dossierBits readout');
 console.log('✓ economyManager.spendBits reactively updates Program Dossier Bits readout');
+
+// 7. Notification Pip Display and Dismissal on Identity Header and Hub Directives Tab
+const { updateHubDirectivesPip } = await import('../../src/ui/authTerminal.js');
+const { achievementManager } = await import('../../src/achievements/AchievementManager.js');
+
+// Test with pending claims = true
+const htmlWithPip = getIdentityHeaderHtml(authUser, { stats: { totalScore: 2500, highestWave: 4 } }, { hasPendingClaims: true });
+assert.ok(htmlWithPip.includes('neon-pip-dot'), 'Identity header must include .neon-pip-dot when claims exist');
+
+const guestHtmlWithPip = getIdentityHeaderHtml(guestUser, { stats: { totalScore: 0, highestWave: 1 } }, { hasPendingClaims: true });
+assert.ok(guestHtmlWithPip.includes('neon-pip-dot'), 'Guest header button must include .neon-pip-dot when claims exist');
+
+// Test with pending claims = false
+const htmlWithoutPip = getIdentityHeaderHtml(authUser, { stats: { totalScore: 2500, highestWave: 4 } }, { hasPendingClaims: false });
+assert.strictEqual(htmlWithoutPip.includes('neon-pip-dot'), false, 'Identity header must NOT include .neon-pip-dot when claims are 0');
+
+const guestHtmlWithoutPip = getIdentityHeaderHtml(guestUser, { stats: { totalScore: 0, highestWave: 1 } }, { hasPendingClaims: false });
+assert.strictEqual(guestHtmlWithoutPip.includes('neon-pip-dot'), false, 'Guest header button must NOT include .neon-pip-dot when claims are 0');
+
+// Test updateHubDirectivesPip
+const origPendingCount = achievementManager.getPendingClaimCount;
+achievementManager.getPendingClaimCount = () => 2;
+updateHubDirectivesPip();
+assert.ok(mockElements.tabHubDirectives.querySelector('.neon-pip-dot'), 'Directives tab must have .neon-pip-dot when claims exist');
+
+achievementManager.getPendingClaimCount = () => 0;
+updateHubDirectivesPip();
+assert.strictEqual(mockElements.tabHubDirectives.querySelector('.neon-pip-dot'), null, 'Directives tab must clear .neon-pip-dot when claims redeemed');
+
+achievementManager.getPendingClaimCount = origPendingCount;
+console.log('✓ getIdentityHeaderHtml & updateHubDirectivesPip properly render and remove .neon-pip-dot indicators');
 
 console.log('--- Main Menu Identity Header Unit Tests PASSED ---');

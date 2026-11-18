@@ -65,12 +65,29 @@ export class AchievementsModal {
     setCursor();
     state.achievementsModalOpen = true;
 
+    // Active reconciliation upon show()
+    if (this.achievements && typeof this.achievements.reconcileAchievements === 'function') {
+      try {
+        this.achievements.reconcileAchievements();
+      } catch (_) {}
+    }
+
     const el = this.container;
     if (!el) return;
 
     el.innerHTML = this.render();
     el.style.display = 'flex';
 
+    this.bindEvents(el);
+  }
+
+  /**
+   * Refreshes the modal DOM and re-binds events in real-time.
+   */
+  refresh() {
+    const el = this.container;
+    if (!el || el.style.display === 'none') return;
+    el.innerHTML = this.render();
     this.bindEvents(el);
   }
 
@@ -102,6 +119,9 @@ export class AchievementsModal {
   render() {
     const stats = this.achievements.getCompletionStats();
     const matrix = this.achievements.getMatrixStatus();
+    const pendingClaimCount = typeof this.achievements.getPendingClaimCount === 'function'
+      ? this.achievements.getPendingClaimCount()
+      : matrix.filter((a) => a.status === 'CLAIMABLE' || (!a.unlocked && a.progress?.satisfied)).length;
 
     // Render cards
     const cardsHtml = matrix.map((ach) => this.renderAchievementCard(ach)).join('');
@@ -137,22 +157,41 @@ export class AchievementsModal {
               SYSTEM SUBSYSTEM MILESTONES &amp; PERFORMANCE RECOGNITION
             </div>
           </div>
-          ${!this._inHub ? `
-          <button id="achievementsCloseBtn" style="
-            background: rgba(255, 0, 85, 0.15);
-            border: 1px solid #ff0055;
-            color: #ff3377;
-            padding: 6px 14px;
-            border-radius: 4px;
-            font-size: 13px;
-            font-weight: bold;
-            cursor: pointer;
-            letter-spacing: 1px;
-            transition: all 0.2s;
-          " onmouseover="this.style.background='rgba(255,0,85,0.3)'" onmouseout="this.style.background='rgba(255,0,85,0.15)'">
-            [ ESC // CLOSE ]
-          </button>
-          ` : ''}
+          <div style="display: flex; align-items: center; gap: 12px;">
+            ${pendingClaimCount >= 2 ? `
+            <button id="claimAllAchievementsBtn" style="
+              background: rgba(255, 170, 0, 0.2);
+              border: 1px solid #ffaa00;
+              color: #ffcc00;
+              padding: 6px 14px;
+              border-radius: 4px;
+              font-size: 12px;
+              font-weight: bold;
+              cursor: pointer;
+              letter-spacing: 1.5px;
+              box-shadow: 0 0 12px rgba(255, 170, 0, 0.4);
+              transition: all 0.2s;
+            " onmouseover="this.style.background='rgba(255,170,0,0.35)'" onmouseout="this.style.background='rgba(255,170,0,0.2)'">
+              [ CLAIM ALL REWARDS ]
+            </button>
+            ` : ''}
+            ${!this._inHub ? `
+            <button id="achievementsCloseBtn" style="
+              background: rgba(255, 0, 85, 0.15);
+              border: 1px solid #ff0055;
+              color: #ff3377;
+              padding: 6px 14px;
+              border-radius: 4px;
+              font-size: 13px;
+              font-weight: bold;
+              cursor: pointer;
+              letter-spacing: 1px;
+              transition: all 0.2s;
+            " onmouseover="this.style.background='rgba(255,0,85,0.3)'" onmouseout="this.style.background='rgba(255,0,85,0.15)'">
+              [ ESC // CLOSE ]
+            </button>
+            ` : ''}
+          </div>
         </div>
 
         <!-- Completion Summary Bar -->
@@ -227,35 +266,81 @@ export class AchievementsModal {
   }
 
   /**
-   * Renders an individual achievement item row/card.
+   * Renders an individual achievement item row/card with three-tier lifecycle support.
    * @param {object} ach
    * @returns {string}
    */
   renderAchievementCard(ach) {
-    const isUnlocked = Boolean(ach.unlocked);
+    const isUnlocked = Boolean(ach.unlocked || ach.status === 'CLAIMED');
     const progress = ach.progress || { current: 0, target: 1, ratio: 0, satisfied: false };
-    const pct = Math.round(progress.ratio * 100);
+    const isClaimable = !isUnlocked && (ach.status === 'CLAIMABLE' || Boolean(progress.satisfied));
+    const pct = isUnlocked ? 100 : Math.min(100, Math.round(progress.ratio * 100));
 
-    const borderColor = isUnlocked ? '#00f3ff' : 'rgba(0, 243, 255, 0.25)';
-    const bgColor = isUnlocked ? 'rgba(0, 243, 255, 0.08)' : 'rgba(0, 15, 25, 0.6)';
-    const titleColor = isUnlocked ? '#ffffff' : '#99bbcc';
+    let borderColor = 'rgba(0, 243, 255, 0.25)';
+    let bgColor = 'rgba(0, 15, 25, 0.6)';
+    let titleColor = '#99bbcc';
+    let boxShadow = 'none';
+
+    if (isUnlocked) {
+      borderColor = '#00f3ff';
+      bgColor = 'rgba(0, 243, 255, 0.08)';
+      titleColor = '#ffffff';
+      boxShadow = '0 0 14px rgba(0, 243, 255, 0.2)';
+    } else if (isClaimable) {
+      borderColor = '#ffaa00';
+      bgColor = 'rgba(255, 170, 0, 0.08)';
+      titleColor = '#ffea88';
+      boxShadow = '0 0 14px rgba(255, 170, 0, 0.3)';
+    }
 
     // Reward preview pills
     let rewardPreview = '';
-    if (ach.reward?.bits > 0) {
-      rewardPreview += `<span style="background:rgba(255,170,0,0.15); border:1px solid #ffaa00; color:#ffaa00; padding:2px 8px; border-radius:3px; font-size:11px; font-weight:bold;">+${ach.reward.bits} BITS</span>`;
+    const rewardCredits = ach.reward?.credits ?? ach.reward?.bits ?? 0;
+    if (rewardCredits > 0) {
+      rewardPreview += `<span style="background:rgba(255,170,0,0.15); border:1px solid #ffaa00; color:#ffaa00; padding:2px 8px; border-radius:3px; font-size:11px; font-weight:bold;">+${rewardCredits} BITS</span>`;
     }
     if (ach.reward?.cosmetic) {
       const cosmeticTitle = ach.reward.cosmetic.displayName || ach.reward.cosmetic.itemId;
       rewardPreview += `<span style="background:rgba(255,0,85,0.15); border:1px solid #ff0055; color:#ff3377; padding:2px 8px; border-radius:3px; font-size:11px; font-weight:bold;">SKIN: ${cosmeticTitle.toUpperCase()}</span>`;
     }
 
-    const statusBadge = isUnlocked
-      ? `<span style="color:#00f3ff; font-weight:bold; font-size:11px; letter-spacing:1px; background:rgba(0,243,255,0.15); padding:3px 8px; border-radius:3px; border:1px solid #00f3ff;">[ UNLOCKED ]</span>`
-      : `<span style="color:#668899; font-weight:bold; font-size:11px; letter-spacing:1px; background:rgba(255,255,255,0.05); padding:3px 8px; border-radius:3px; border:1px solid rgba(255,255,255,0.15);">[ LOCKED ]</span>`;
+    let statusBadge = '';
+    if (isUnlocked) {
+      statusBadge = `<span class="achievement-status-badge" style="color:#00f3ff; font-weight:bold; font-size:11px; letter-spacing:1px; background:rgba(0,243,255,0.15); padding:3px 8px; border-radius:3px; border:1px solid #00f3ff;">[ UNLOCKED ]</span>`;
+    } else if (isClaimable) {
+      statusBadge = `
+        <button id="claimBtn_${ach.id}" class="claim-reward-btn" data-id="${ach.id}" style="
+          background: rgba(255, 170, 0, 0.2);
+          border: 1px solid #ffaa00;
+          color: #ffcc00;
+          font-weight: bold;
+          font-size: 11px;
+          letter-spacing: 1px;
+          padding: 4px 12px;
+          border-radius: 4px;
+          cursor: pointer;
+          box-shadow: 0 0 10px rgba(255, 170, 0, 0.4);
+          transition: all 0.2s;
+        " onmouseover="this.style.background='rgba(255,170,0,0.35)'" onmouseout="this.style.background='rgba(255,170,0,0.2)'">
+          [ CLAIM REWARD ]
+        </button>
+      `;
+    } else {
+      statusBadge = `<span class="achievement-status-badge" style="color:#668899; font-weight:bold; font-size:11px; letter-spacing:1px; background:rgba(255,255,255,0.05); padding:3px 8px; border-radius:3px; border:1px solid rgba(255,255,255,0.15);">[ LOCKED ]</span>`;
+    }
+
+    const progressBarBg = isUnlocked
+      ? '#00f3ff'
+      : (isClaimable ? '#ffaa00' : '#00aaee');
+    const progressBarGlow = isUnlocked
+      ? '0 0 6px #00f3ff'
+      : (isClaimable ? '0 0 6px #ffaa00' : 'none');
+    const progressColor = isUnlocked
+      ? '#00f3ff'
+      : (isClaimable ? '#ffaa00' : '#668899');
 
     return `
-      <div class="achievement-card" style="
+      <div class="achievement-card" id="card_${ach.id}" data-id="${ach.id}" style="
         border: 1px solid ${borderColor};
         background: ${bgColor};
         border-radius: 6px;
@@ -263,7 +348,8 @@ export class AchievementsModal {
         display: flex;
         align-items: center;
         gap: 16px;
-        box-shadow: ${isUnlocked ? '0 0 14px rgba(0,243,255,0.2)' : 'none'};
+        box-shadow: ${boxShadow};
+        transition: all 0.3s ease;
       ">
         <!-- Icon Glyph -->
         <div style="
@@ -273,8 +359,8 @@ export class AchievementsModal {
           display: flex;
           align-items: center;
           justify-content: center;
-          background: ${isUnlocked ? 'rgba(0, 243, 255, 0.15)' : 'rgba(255, 255, 255, 0.05)'};
-          border: 1px solid ${isUnlocked ? '#00f3ff' : 'rgba(255, 255, 255, 0.15)'};
+          background: ${isUnlocked ? 'rgba(0, 243, 255, 0.15)' : (isClaimable ? 'rgba(255, 170, 0, 0.15)' : 'rgba(255, 255, 255, 0.05)')};
+          border: 1px solid ${isUnlocked ? '#00f3ff' : (isClaimable ? '#ffaa00' : 'rgba(255, 255, 255, 0.15)')};
           border-radius: 6px;
           flex-shrink: 0;
         ">
@@ -306,11 +392,12 @@ export class AchievementsModal {
               <div style="
                 width: ${pct}%;
                 height: 100%;
-                background: ${isUnlocked ? '#00f3ff' : '#00aaee'};
-                box-shadow: ${isUnlocked ? '0 0 6px #00f3ff' : 'none'};
+                background: ${progressBarBg};
+                box-shadow: ${progressBarGlow};
+                transition: width 0.3s ease;
               "></div>
             </div>
-            <span style="font-size: 11px; color: ${isUnlocked ? '#00f3ff' : '#668899'}; font-weight: bold; min-width: 65px; text-align: right;">
+            <span style="font-size: 11px; color: ${progressColor}; font-weight: bold; min-width: 65px; text-align: right;">
               ${progress.current} / ${progress.target}
             </span>
           </div>
@@ -350,6 +437,34 @@ export class AchievementsModal {
         } else {
           this.hide();
         }
+      };
+    }
+
+    // Individual claim buttons
+    const claimBtns = root.querySelectorAll ? root.querySelectorAll('.claim-reward-btn') : [];
+    for (const btn of claimBtns) {
+      btn.onclick = (e) => {
+        if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+        const id = (btn.getAttribute ? btn.getAttribute('data-id') : null) || btn.dataset?.id || (btn.id ? btn.id.replace('claimBtn_', '') : null);
+        if (!id) return;
+        btn.disabled = true;
+        if (this.achievements && typeof this.achievements.claimReward === 'function') {
+          this.achievements.claimReward(id);
+        }
+        this.refresh();
+      };
+    }
+
+    // Batch claim button
+    const claimAllBtn = root.querySelector('#claimAllAchievementsBtn');
+    if (claimAllBtn) {
+      claimAllBtn.onclick = (e) => {
+        if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+        claimAllBtn.disabled = true;
+        if (this.achievements && typeof this.achievements.claimAllRewards === 'function') {
+          this.achievements.claimAllRewards();
+        }
+        this.refresh();
       };
     }
 

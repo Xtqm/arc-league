@@ -74,6 +74,14 @@ The system SHALL render a persistent identity status indicator in the top-right 
 - **WHEN** the auth engine broadcasts an identity state change or profile update event
 - **THEN** the main menu identity badge updates immediately without requiring a page reload or menu re-initialization.
 
+#### Scenario: Notification pip display for pending achievement rewards
+- **WHEN** one or more achievements are satisfied and awaiting reward collection
+- **THEN** the identity action button (`#manageIdentityBtn` or `#secureIdentityBtn`) displays a sleek neon pulsing dot indicator (`●`) signaling that pending rewards are ready in the Trophy Matrix.
+
+#### Scenario: Notification pip dismissal on reward collection
+- **WHEN** all pending achievement rewards are claimed
+- **THEN** the sleek neon pulsing dot indicator is immediately removed from the identity header button.
+
 ### Requirement: Grid Authorization Terminal Modal
 The system SHALL provide a diegetic Grid Authorization Terminal modal interface aligned with the Main Menu design language, featuring clean legible typography, rounded glassmorphism, an authenticated Program Dossier hub, elevated Quick Sync authentication, a 2-step account creation wizard with Callsign pre-fill, integrated Outfitting, Trophy Matrix, and System Config views, and a dedicated exit control.
 
@@ -108,6 +116,10 @@ The system SHALL provide a diegetic Grid Authorization Terminal modal interface 
 #### Scenario: Terminal tabbed navigation
 - **WHEN** the player activates the hub navigation tabs (`IDENT MATRIX`, `OUTFITTING`, `TROPHY MATRIX`, `SYSTEM CONFIG`)
 - **THEN** the terminal switches sub-views in real time, rendering the identity dossier/auth wizard under `IDENT MATRIX`, the 3D Armory catalog under `OUTFITTING`, the Trophy Matrix under `TROPHY MATRIX`, and System Settings under `SYSTEM CONFIG` without exiting the modal.
+
+#### Scenario: Directives tab notification indicator
+- **WHEN** one or more achievements are in the claimable state
+- **THEN** the `TROPHY MATRIX` tab (`#tabHubDirectives`) displays a sleek neon pulsing dot indicator (`●`) next to the tab label.
 
 ### Requirement: PointerLock and Canvas Modal Safety
 The system SHALL safely isolate mouse and touch input between active modal terminals and the Three.js canvas, guaranteeing PointerLock release upon terminal launch.

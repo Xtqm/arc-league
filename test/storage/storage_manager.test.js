@@ -30,6 +30,8 @@ assert.strictEqual(typeof defaultA.inventory, 'object');
 assert.ok(Array.isArray(defaultA.achievements));
 assert.strictEqual(typeof defaultA.stats, 'object');
 assert.strictEqual(defaultA.player.currency.bits, 0);
+assert.strictEqual(defaultA.calibration_bypassed, false);
+assert.strictEqual(defaultA.calibration_completed, false);
 
 // Immutability & deep-cloning check
 defaultA.player.currency.bits = 5000;

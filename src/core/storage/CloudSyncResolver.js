@@ -189,12 +189,14 @@ export function normalizeSaveState(state = {}) {
   const inventory = normalizeInventory(s.inventory);
   const loadout = normalizeLoadout(s.loadout);
   const calibrationCompleted = Boolean(s.calibration_completed || s.calibrationCompleted || s.player?.calibration_completed);
+  const calibrationBypassed = Boolean(s.calibration_bypassed || s.calibrationBypassed || s.player?.calibration_bypassed);
 
   return {
     version: typeof s.version === 'number' ? s.version : (Number.parseInt(s.version, 10) || 1),
     userId,
     handle,
     calibration_completed: calibrationCompleted,
+    calibration_bypassed: calibrationBypassed,
     createdAt: s.createdAt || Date.now(),
     lastActiveAt: s.lastActiveAt || s.updatedAt || Date.now(),
     bits,
@@ -685,6 +687,7 @@ export class CloudSyncResolver {
       userId: local.userId || cloud.userId,
       handle: resolvedHandle,
       calibration_completed: Boolean(local.calibration_completed || cloud.calibration_completed),
+      calibration_bypassed: Boolean(local.calibration_bypassed || cloud.calibration_bypassed),
       createdAt: Math.min(local.createdAt || Date.now(), cloud.createdAt || Date.now()),
       lastActiveAt: Math.max(local.lastActiveAt || 0, cloud.lastActiveAt || 0, Date.now()),
       bits: mergedBits,
@@ -780,6 +783,7 @@ export function rowToSaveState(row) {
     userId: row.user_id,
     handle: row.handle || 'PROGRAM',
     calibration_completed: Boolean(row.calibration_completed),
+    calibration_bypassed: Boolean(row.calibration_bypassed),
     bits: Number(row.bits || 0),
     level: Number(row.level || 1),
     starMastery: typeof row.star_mastery === 'object' && row.star_mastery !== null ? row.star_mastery : {},

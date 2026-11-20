@@ -246,6 +246,30 @@ export class CampaignHUD {
   launchTrial(levelId) {
     SFX.missionBriefSweep();
 
+    if (levelId === 'level_01_01') {
+      this.hideMissionBrief();
+      tryLock();
+      focusGame();
+      const startCal = (typeof window !== 'undefined' && typeof window.__tronStartCalibration === 'function')
+        ? window.__tronStartCalibration
+        : (typeof globalThis !== 'undefined' && typeof globalThis.__tronStartCalibration === 'function')
+          ? globalThis.__tronStartCalibration
+          : null;
+
+      if (startCal) {
+        startCal();
+      } else {
+        import('../../modes/CalibrationMode.js').then(({ calibrationMode }) => {
+          calibrationMode.start();
+        });
+      }
+
+      if (typeof this._onLaunchTrial === 'function') {
+        this._onLaunchTrial(levelId);
+      }
+      return;
+    }
+
     // Initialize active trial in CampaignManager
     this.manager.startTrial(levelId);
     state.gameMode = 'campaign';

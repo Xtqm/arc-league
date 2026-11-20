@@ -39,6 +39,7 @@ export const DEFAULT_SAVE_STATE = Object.freeze({
   createdAt: 0,
   updatedAt: 0,
   calibration_completed: false,
+  calibration_bypassed: false,
   player: Object.freeze({
     id: 'user_anonymous',
     handle: 'USER_PROGRAM',
@@ -102,6 +103,7 @@ export function createDefaultSaveState(overrides = {}) {
     createdAt: now,
     updatedAt: now,
     calibration_completed: overrides?.calibration_completed ?? false,
+    calibration_bypassed: overrides?.calibration_bypassed ?? false,
     player: {
       id: overrides?.player?.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `usr_${Math.random().toString(36).substring(2, 9)}`),
       handle: overrides?.player?.handle || 'USER_PROGRAM',

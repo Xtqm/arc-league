@@ -56,7 +56,8 @@ const TEST_DOMAINS = {
     'campaign/campaign_phase1.test.js',
     'campaign/campaign_phase2.test.js',
     'campaign/campaign_phase3.test.js',
-    'campaign/campaign_runtime_bridge.test.js'
+    'campaign/campaign_runtime_bridge.test.js',
+    'campaign/campaign_trial_lifecycle.test.js'
   ],
   achievements: [
     'achievements/achievement_registry.test.js',
@@ -75,7 +76,9 @@ const TEST_DOMAINS = {
     'ai/arbiter_personalities.test.js',
     'ai/swarm_squad_coordinator.test.js',
     'modes/survival_hardcore.test.js',
-    'modes/lobby_cores.test.js'
+    'modes/lobby_cores.test.js',
+    'modes/calibration_mode.test.js',
+    'modes/boot_terminal_lifecycle.test.js'
   ],
   combat: [
     'combat/bot_parry_guard_crush.test.js',

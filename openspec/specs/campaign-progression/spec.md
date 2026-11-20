@@ -75,8 +75,12 @@ The system SHALL manage the active trial lifecycle across initiation, wave spawn
 - **THEN** an active trial session is initialized, capturing the start timestamp, resetting telemetry counters, locking in the level configuration, applying sector theme and hazards, and commencing a countdown timer.
 
 #### Scenario: Spawning configured trial enemy waves
-- **WHEN** the trial countdown completes
+- **WHEN** the trial countdown completes for a standard or Arbiter trial
 - **THEN** the system spawns the hostile sub-routines configured in the level's wave definition with authoritative difficulty tiers, counts, and health pools (or deploys the Rival Arbiter boss encounter if the level is an Arbiter trial).
+
+#### Scenario: Launching Boot Diagnostic calibration trial
+- **WHEN** `startTrial('level_01_01')` completes countdown or is launched from the mission brief
+- **THEN** the system transitions into the continuous three-beat calibration gauntlet under CalibrationMode rather than standard random wave combat.
 
 #### Scenario: Recording live gameplay metrics during a trial
 - **WHEN** combat events occur (damage taken, enemy de-rezzed, curve throw hit, ricochet hit) and are reported via `recordMetric(type, amount)`

@@ -246,4 +246,15 @@ assert.ok(normalizedLegacy.inventory.cosmetics.includes('trail_amber'));
 assert.ok(normalizedLegacy.inventory.unlockedMaps.includes('arena_grid_01'));
 console.log('✓ Legacy flat inventory arrays translated into structured inventory cleanly');
 
+// Test 8: Monotonic calibration_bypassed and calibration_completed merge
+const localCal = { calibration_bypassed: true, calibration_completed: false, userId: 'u1' };
+const cloudCal = { calibration_bypassed: false, calibration_completed: true, userId: 'u1' };
+const mergedCal = CloudSyncResolver.resolve(localCal, cloudCal);
+assert.strictEqual(mergedCal.calibration_bypassed, true, 'calibration_bypassed must merge monotonically via OR');
+assert.strictEqual(mergedCal.calibration_completed, true, 'calibration_completed must merge monotonically via OR');
+
+const uncal = CloudSyncResolver.resolve({ calibration_bypassed: false }, { calibration_bypassed: false });
+assert.strictEqual(uncal.calibration_bypassed, false);
+console.log('✓ Monotonic calibration_bypassed and calibration_completed resolution verified');
+
 console.log('--- CloudSyncResolver Test Suite PASSED ---\n');

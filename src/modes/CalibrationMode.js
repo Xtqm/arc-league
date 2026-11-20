@@ -206,6 +206,8 @@ export class CalibrationMode {
     this.showBypassPrompt(false);
     this.beat = 0;
 
+    storageManager.set('calibration_bypassed', true, { immediate: true });
+
     if (typeof window !== 'undefined' && window.__tronEnterLobby) {
       window.__tronEnterLobby();
     } else if (typeof window !== 'undefined' && window.__tronShowModeSelect) {
@@ -271,6 +273,7 @@ export class CalibrationMode {
 
     // 3. Mark calibration completed in persistent storage
     storageManager.set('calibration_completed', true, { immediate: true });
+    storageManager.set('calibration_bypassed', true, { immediate: true });
 
     message('CALIBRATION COMPLETE // 100 ARC BITS ACCRUED // GRID 01 STAR 1 SECURED');
     SFX.achievementFanfare();
@@ -289,8 +292,9 @@ export class CalibrationMode {
 }
 
 export const calibrationMode = new CalibrationMode();
-if (typeof window !== 'undefined') {
-  window.__tronCalibrationMode = calibrationMode;
-  window.__tronStartCalibration = () => calibrationMode.start();
-  window.__tronBypassCalibration = () => calibrationMode.bypass();
+const globalScope = typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null);
+if (globalScope) {
+  globalScope.__tronCalibrationMode = calibrationMode;
+  globalScope.__tronStartCalibration = () => calibrationMode.start();
+  globalScope.__tronBypassCalibration = () => calibrationMode.bypass();
 }

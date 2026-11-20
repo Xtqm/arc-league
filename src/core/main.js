@@ -346,14 +346,15 @@ export function initBootTerminal() {
   const bootTerminal = typeof document !== 'undefined' ? document.getElementById('bootTerminal') : null;
   if (!bootTerminal) return;
 
-  const isCalibrated = storageManager.get('calibration_completed', false);
-  const isBypassed = typeof window !== 'undefined' && (
+  const isCalibrated = Boolean(storageManager.get('calibration_completed', false));
+  const isBypassed = Boolean(storageManager.get('calibration_bypassed', false));
+  const isEnvBypassed = typeof window !== 'undefined' && (
     window.__tronSkipBootTerminal ||
     window.__TRON_HEADLESS__ ||
     (typeof navigator !== 'undefined' && navigator.webdriver && !window.__tronEnforceBootTerminal)
   );
 
-  if (isCalibrated || isBypassed) {
+  if (isCalibrated || isBypassed || isEnvBypassed) {
     bootTerminal.style.display = 'none';
     const isHeadless = typeof window !== 'undefined' && (
       window.__TRON_HEADLESS__ ||
@@ -423,7 +424,6 @@ export function initApp() {
     updateNotification.init();
     settingsManager.load();
     updateSteamRichPresence('In Main Menu');
-    initBootTerminal();
     const bypassBtn = document.getElementById('calibrationBypass');
     if (bypassBtn) {
       bypassBtn.addEventListener('click', (e) => {
@@ -438,6 +438,7 @@ export function initApp() {
     }
 
     authReady.finally(() => {
+      initBootTerminal();
       setTimeout(() => requestAnimationFrame(animate), 50);
     });
   } catch (err) {
@@ -454,7 +455,8 @@ if (typeof document !== 'undefined') {
 }
 
 // Debug hooks for headless puppeteer test harness
-window.__dbg = {
+if (typeof window !== 'undefined') {
+  window.__dbg = {
   cores: () => lobbyCoresManager,
   calibration: () => calibrationMode,
   bootTerminal: () => document.getElementById('bootTerminal'),
@@ -839,7 +841,8 @@ if (economyManager && typeof economyManager.setupDebugSuite === 'function') {
 if (armoryManager && typeof armoryManager.setupDebugSuite === 'function') {
   armoryManager.setupDebugSuite(window);
 }
-window.openCosmeticStudio = (category) => window.gameDebug?.openStudio?.(category);
+  window.openCosmeticStudio = (category) => window.gameDebug?.openStudio?.(category);
+}
 
 export {
   requestFullScreen,

@@ -63,6 +63,7 @@ mode.complete();
 
 assert.strictEqual(mode.beat, 'completed', 'Mode beat must be completed');
 assert.strictEqual(storageManager.get('calibration_completed'), true, 'Persistent calibration_completed must be true');
+assert.strictEqual(storageManager.get('calibration_bypassed'), true, 'Persistent calibration_bypassed must be true on completion');
 
 const finalBits = economyManager.getCredits();
 assert.strictEqual(finalBits, initialBits + 100, 'Must deposit exactly 100 Arc Bits');
@@ -77,12 +78,15 @@ console.log('✓ Calibration completion successfully awarded 100 Arc Bits, Grid 
 // Test 6: Calibration Bypass
 console.log('\n[Test 6] Testing Calibration Bypass escape hatch...');
 storageManager.set('calibration_completed', false, { immediate: true });
+storageManager.set('calibration_bypassed', false, { immediate: true });
 mode.start();
 assert.strictEqual(state.gameMode, 'calibration');
 assert.strictEqual(state.foes.length, 1);
 mode.bypass();
 assert.strictEqual(state.foes.length, 0, 'Bypass must cleanly clear active calibration entities');
 assert.strictEqual(state.timeScale, 1.0, 'Bypass must restore timeScale to 1.0');
+assert.strictEqual(storageManager.get('calibration_bypassed'), true, 'Persistent calibration_bypassed must be true on bypass');
+assert.strictEqual(storageManager.get('calibration_completed'), false, 'Bypass must not set calibration_completed');
 console.log('✓ Calibration bypass terminates cleanly and clears entities');
 
 console.log('\n======================================================');

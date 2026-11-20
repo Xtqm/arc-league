@@ -250,6 +250,7 @@ export function getIdentityHeaderHtml(user, saveState, options = {}) {
       </div>
       <button id="manageIdentityBtn" class="id-btn cyan-btn" title="Open Grid Authorization Terminal">[ TERMINAL ]${pipHtml}</button>
       <button id="btnToggle2DMenu" class="id-btn purple-btn" style="display:none;margin-left:8px;" title="Switch to 2D Mode Select Menu">[ 2D MENU ]</button>
+      <button id="btnHeaderSettings" class="id-btn settings-gear-btn" style="margin-left:8px;" title="System Settings" aria-label="System Settings">[ ⚙ ]</button>
     `;
   }
 
@@ -261,6 +262,7 @@ export function getIdentityHeaderHtml(user, saveState, options = {}) {
     </div>
     <button id="secureIdentityBtn" class="id-btn pulse-amber" title="Secure Identity & Sync Profile">[ SECURE IDENTITY ]${pipHtml}</button>
     <button id="btnToggle2DMenu" class="id-btn purple-btn" style="display:none;margin-left:8px;" title="Switch to 2D Mode Select Menu">[ 2D MENU ]</button>
+    <button id="btnHeaderSettings" class="id-btn settings-gear-btn" style="margin-left:8px;" title="System Settings" aria-label="System Settings">[ ⚙ ]</button>
   `;
 }
 
@@ -326,6 +328,21 @@ export function updateIdentityHeader() {
         if (e.cancelable) e.preventDefault();
         if (typeof window !== 'undefined' && window.__tronDeactivate3DLobbyView) {
           window.__tronDeactivate3DLobbyView();
+        }
+      };
+    }
+
+    const btnSettings = headerEl.querySelector('#btnHeaderSettings');
+    if (btnSettings) {
+      btnSettings.onclick = (e) => {
+        e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
+        if (typeof window !== 'undefined' && window.__tronOpenSettings) {
+          window.__tronOpenSettings();
+        } else if (settingsModal) {
+          settingsModal._customContainer = null;
+          settingsModal._inHub = false;
+          settingsModal.show();
         }
       };
     }

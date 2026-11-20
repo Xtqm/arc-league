@@ -33,7 +33,7 @@ export const isLocked = () => !!(canvas && typeof document !== 'undefined' && do
 export const MAX_MOUSE_DELTA = 150;
 
 export function tryLock() {
-  if (state.isTouchDevice) return;
+  if (state.isTouchDevice || state.gameMode === 'lobby') return;
   if (!canvas) return;
   try {
     const p = canvas.requestPointerLock({ unadjustedMovement: true });
@@ -67,7 +67,7 @@ export function tryLock() {
 
 export function setCursor() {
   if (typeof document === 'undefined' || !document.body) return;
-  if (state.isTouchDevice) {
+  if (state.isTouchDevice || state.gameMode === 'lobby') {
     document.body.style.cursor = 'default';
     return;
   }
@@ -106,6 +106,7 @@ export function initMouse(targetCanvas) {
   canvas.style.outline = 'none';
 
   canvas.addEventListener('mousedown', () => {
+    if (state.gameMode === 'lobby') return;
     if (!state.isTouchDevice) {
       focusGame();
       if (lockFailed === false && document.pointerLockElement !== canvas && state.running && !state.paused) {
@@ -115,11 +116,17 @@ export function initMouse(targetCanvas) {
   });
 
   canvas.addEventListener('click', (e) => {
+    if (typeof document !== 'undefined' && document.elementFromPoint) {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if (el && el.closest && el.closest('#identityHeader, .modal, .modal-overlay, #authModal, #armoryModal, #achievementsModal, #settingsModal, #cosmeticStudioModal, .card')) {
+        return;
+      }
+    }
     if (state.gameMode === 'lobby' && typeof window !== 'undefined' && window.__tronLobbyCores) {
       const hit = window.__tronLobbyCores.checkPointerIntersection(e.clientX, e.clientY, camera);
       if (hit) return;
     }
-    if (!state.isTouchDevice && state.running && !isLocked()) {
+    if (state.gameMode !== 'lobby' && !state.isTouchDevice && state.running && !isLocked()) {
       tryLock();
     }
   });
@@ -129,7 +136,7 @@ export function initMouse(targetCanvas) {
   });
 
   document.addEventListener('pointerlockchange', () => {
-    if (state.isTouchDevice) return;
+    if (state.isTouchDevice || state.gameMode === 'lobby') return;
     const locked = isLocked();
     if (locked) {
       lockFailed = false;
@@ -156,7 +163,7 @@ export function initMouse(targetCanvas) {
     }
     state.cursorX = e.clientX;
     state.cursorY = e.clientY;
-    if (!state.running || state.paused) return;
+    if (!state.running || state.paused || state.gameMode === 'lobby') return;
 
     if (isLocked()) {
       state.steerX = state.steerY = 0;
@@ -177,7 +184,8 @@ export function initMouse(targetCanvas) {
 
   window.addEventListener('mousedown', e => {
     if (state.isTouchDevice || !state.running || state.paused || state.authModalOpen || state.armoryModalOpen) return;
-    if (e.target && typeof e.target.closest === 'function' && e.target.closest('button, input, select, textarea, .modal, .modal-overlay, .card, #authModal, #coreConfirmModal')) return;
+    if (state.gameMode === 'lobby') return;
+    if (e.target && typeof e.target.closest === 'function' && e.target.closest('button, input, select, textarea, .modal, .modal-overlay, .card, #authModal, #coreConfirmModal, #identityHeader')) return;
     setLastInputDevice('kbm');
     if (e.button === 0) {
       if (typeof window !== 'undefined' && window.__tronStartChargingThrow) {
@@ -200,8 +208,8 @@ export function initMouse(targetCanvas) {
   });
 
   window.addEventListener('mouseup', e => {
-    if (state.isTouchDevice || state.authModalOpen || state.armoryModalOpen) return;
-    if (e.target && typeof e.target.closest === 'function' && e.target.closest('button, input, select, textarea, .modal, .modal-overlay, .card, #authModal, #coreConfirmModal')) return;
+    if (state.isTouchDevice || state.authModalOpen || state.armoryModalOpen || state.gameMode === 'lobby') return;
+    if (e.target && typeof e.target.closest === 'function' && e.target.closest('button, input, select, textarea, .modal, .modal-overlay, .card, #authModal, #coreConfirmModal, #identityHeader')) return;
     if (e.button === 0) {
       if (typeof window !== 'undefined' && window.__tronReleaseChargingThrow) {
         window.__tronReleaseChargingThrow();

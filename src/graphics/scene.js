@@ -193,6 +193,11 @@ if (typeof window !== 'undefined') {
 }
 
 export function toggleCameraPerspective() {
+  if (state.gameMode === 'lobby') {
+    state.cameraPerspective = 'first_person';
+    state.cameraPerspectiveBlend = 0.0;
+    return 'first_person';
+  }
   state.cameraPerspective = state.cameraPerspective === 'first_person' ? 'third_person' : 'first_person';
   if (typeof document !== 'undefined') {
     const btn = document.getElementById('btnPerspectiveToggle');
@@ -212,6 +217,27 @@ if (typeof window !== 'undefined') {
 }
 
 export function updateCamera(dt, snap = false) {
+  if (state.gameMode === 'lobby') {
+    state.cameraPerspective = 'first_person';
+    state.cameraPerspectiveBlend = 0.0;
+    const parallaxEnabled = settingsManager.get('menuParallax', true);
+    let targetYaw = 0;
+    let targetPitch = 0;
+    if (parallaxEnabled && typeof window !== 'undefined' && window.innerWidth && window.innerHeight) {
+      const curX = state.cursorX !== undefined ? state.cursorX : window.innerWidth / 2;
+      const curY = state.cursorY !== undefined ? state.cursorY : window.innerHeight / 2;
+      const ndcX = THREE.MathUtils.clamp((curX / window.innerWidth) * 2 - 1, -1, 1);
+      const ndcY = THREE.MathUtils.clamp((curY / window.innerHeight) * 2 - 1, -1, 1);
+      const maxYaw = 8 * (Math.PI / 180);
+      const maxPitch = 5 * (Math.PI / 180);
+      targetYaw = -ndcX * maxYaw;
+      targetPitch = -ndcY * maxPitch;
+    }
+    const lerpFactor = snap || dt <= 0 ? 1.0 : (1 - Math.pow(1 - 0.06, dt * 60));
+    state.player.yaw = THREE.MathUtils.lerp(state.player.yaw || 0, targetYaw, lerpFactor);
+    state.player.pitch = THREE.MathUtils.lerp(state.player.pitch || 0, targetPitch, lerpFactor);
+  }
+
   const targetBlend = state.cameraPerspective === 'first_person' ? 0.0 : 1.0;
   if (snap || dt <= 0) {
     state.cameraPerspectiveBlend = targetBlend;

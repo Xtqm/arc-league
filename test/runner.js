@@ -74,7 +74,8 @@ const TEST_DOMAINS = {
     'ai/bot_combat_brain.test.js',
     'ai/arbiter_personalities.test.js',
     'ai/swarm_squad_coordinator.test.js',
-    'modes/survival_hardcore.test.js'
+    'modes/survival_hardcore.test.js',
+    'modes/lobby_cores.test.js'
   ],
   combat: [
     'combat/bot_parry_guard_crush.test.js',

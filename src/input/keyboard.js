@@ -86,6 +86,74 @@ export function onDown(e) {
     return;
   }
 
+  // Handle lobby mode input isolation: disable locomotion keys & KeyP, contextually route Escape
+  if (state.gameMode === 'lobby') {
+    const LOCOMOTION_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'];
+    if (LOCOMOTION_KEYS.includes(c)) {
+      if (EAT.includes(c)) e.preventDefault();
+      return;
+    }
+    if (c === 'KeyP') {
+      e.preventDefault();
+      return;
+    }
+    if (c === 'Escape') {
+      e.preventDefault();
+      const coreModal = typeof document !== 'undefined' ? document.getElementById('coreConfirmModal') : null;
+      if (coreModal && coreModal.style && coreModal.style.display !== 'none') {
+        if (typeof window !== 'undefined' && window.__tronLobbyCores) {
+          window.__tronLobbyCores.cancelLaunch();
+        } else {
+          coreModal.style.display = 'none';
+        }
+        return;
+      }
+
+      const settingsModalEl = typeof document !== 'undefined' ? document.getElementById('settingsModal') : null;
+      if (settingsModalEl && settingsModalEl.style && settingsModalEl.style.display !== 'none') {
+        if (typeof window !== 'undefined' && window.__tronCloseSettings) {
+          window.__tronCloseSettings();
+        } else {
+          settingsModalEl.style.display = 'none';
+        }
+        return;
+      }
+
+      const hostModal = typeof document !== 'undefined' ? document.getElementById('hostModal') : null;
+      if (hostModal && hostModal.style && hostModal.style.display !== 'none') {
+        hostModal.style.display = 'none';
+        return;
+      }
+
+      const roomModal = typeof document !== 'undefined' ? document.getElementById('roomModal') : null;
+      if (roomModal && roomModal.style && roomModal.style.display !== 'none') {
+        roomModal.style.display = 'none';
+        return;
+      }
+
+      // Root lobby Escape handling: Electron shell exit confirmation vs browser inertness
+      const isDesktop = typeof window !== 'undefined' && (
+        !!window.electronDesktop?.isDesktop ||
+        !!window.__electronBridge ||
+        (typeof process !== 'undefined' && !!process?.versions?.electron)
+      );
+
+      if (isDesktop) {
+        const shouldExit = typeof window !== 'undefined' && typeof window.confirm === 'function'
+          ? window.confirm('TERMINATE PROCESS // EXIT TO DESKTOP?')
+          : true;
+        if (shouldExit) {
+          if (typeof window !== 'undefined' && window.electronDesktop && typeof window.electronDesktop.quitApp === 'function') {
+            window.electronDesktop.quitApp();
+          } else if (typeof window !== 'undefined' && typeof window.close === 'function') {
+            window.close();
+          }
+        }
+      }
+      return;
+    }
+  }
+
   if (!c) return;
   setLastInputDevice('kbm');
   state.keys[c] = true;

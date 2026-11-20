@@ -218,10 +218,12 @@ export function showModeSelectMenu(options = {}) {
   state.player.hp = 100;
   state.player.alive = true;
   state.player.hasDisc = true;
-  state.player.pos.set(0, 0, 10);
+  state.player.pos.set(0, 0, 0);
   state.player.vel.set(0, 0, 0);
   state.player.yaw = 0;
   state.player.pitch = 0;
+  state.cameraPerspective = 'first_person';
+  state.cameraPerspectiveBlend = 0.0;
   rebuildArenaTiles();
 
   lobbyCoresManager.init();

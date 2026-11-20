@@ -91,6 +91,7 @@ export class SettingsModal {
     const currentTouchSens = Math.round(Number(this.settings.get('touchSensitivity', 1.0)) * 100);
     const currentMouseSens = Math.round(Number(this.settings.get('mouseSensitivity', 1.0)) * 100);
     const currentCoreConfirm = Boolean(this.settings.get('coreLaunchConfirmation', true));
+    const currentMenuParallax = Boolean(this.settings.get('menuParallax', true));
     const currentPerspective = String(this.settings.get('defaultCameraPerspective', 'third_person')).toLowerCase();
     const currentInertia = String(this.settings.get('touchInertia', 'smooth')).toLowerCase();
     const currentInvertY = Boolean(this.settings.get('invertY', false));
@@ -214,6 +215,14 @@ export class SettingsModal {
               <div style="font-size:9px; color:rgba(79,242,255,0.6); margin-top:2px;">PROMPT BEFORE LAUNCHING MODE</div>
             </div>
             <button id="toggleCoreConfirmBtn" class="btn" style="padding:4px 12px; font-size:11px; cursor:pointer;">${currentCoreConfirm ? 'ENABLED' : 'DISABLED'}</button>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; margin-bottom:12px;">
+            <div>
+              <span>MENU PARALLAX MOTION</span>
+              <div style="font-size:9px; color:rgba(79,242,255,0.6); margin-top:2px;">HOLO-DECK CAMERA PARALLAX</div>
+            </div>
+            <button id="toggleMenuParallaxBtn" class="btn" style="padding:4px 12px; font-size:11px; cursor:pointer;">${currentMenuParallax ? 'ENABLED' : 'DISABLED'}</button>
           </div>
 
           <div style="margin-bottom:12px;">
@@ -434,6 +443,15 @@ export class SettingsModal {
         const next = !this.settings.get('coreLaunchConfirmation', true);
         this.settings.set('coreLaunchConfirmation', next);
         coreConfirmBtn.textContent = next ? 'ENABLED' : 'DISABLED';
+      };
+    }
+
+    const menuParallaxBtn = el.querySelector('#toggleMenuParallaxBtn');
+    if (menuParallaxBtn) {
+      menuParallaxBtn.onclick = () => {
+        const next = !this.settings.get('menuParallax', true);
+        this.settings.set('menuParallax', next);
+        menuParallaxBtn.textContent = next ? 'ENABLED' : 'DISABLED';
       };
     }
 

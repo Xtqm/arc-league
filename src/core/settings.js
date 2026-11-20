@@ -74,6 +74,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   slowMoEnabled: true,
   mouseSensitivity: 1.0,     // 0.1 - 3.0
   coreLaunchConfirmation: true, // boolean
+  menuParallax: true,        // boolean
   defaultCameraPerspective: 'third_person' // 'third_person' | 'first_person'
 });
 
@@ -154,6 +155,8 @@ export class SettingsManager {
       const n = Number(value);
       normalized = Number.isFinite(n) ? Math.max(0.1, Math.min(3.0, Math.round(n * 100) / 100)) : DEFAULT_SETTINGS.mouseSensitivity;
     } else if (key === 'coreLaunchConfirmation') {
+      normalized = Boolean(value);
+    } else if (key === 'menuParallax') {
       normalized = Boolean(value);
     } else if (key === 'defaultCameraPerspective') {
       const s = String(value).toLowerCase();

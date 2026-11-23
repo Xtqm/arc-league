@@ -10,6 +10,7 @@ import { shake, showGameOver } from '../ui/UIManager.js';
 import { getTileAt, rebuildArenaTiles, pillars } from './Arena.js';
 import { spawnDisc, disposeDiscEntity } from './Disc.js';
 import { getPlayerCurveIntent, resetPlayerCurveIntent } from '../input/keyboard.js';
+import { setCursor } from '../input/mouse.js';
 import { touchMove, updateCurveButtons, updateTouchMomentum, resetTouchInputs } from '../input/touch.js';
 import { getLeftStick, getRightStick, playGamepadHaptics } from '../input/gamepad.js';
 import { getRoomRef, roomUpdateDoc } from '../network/firebaseSetup.js';
@@ -549,6 +550,12 @@ export function damagePlayer(amount, from) {
     state.running = false;
     state.gameOverT = 0;
     resetTouchInputs();
+    if (typeof document !== 'undefined') {
+      if (document.exitPointerLock) {
+        try { document.exitPointerLock(); } catch (_) {}
+      }
+      setCursor();
+    }
     burst(_playerBurstPos.copy(state.player.pos).setY(state.player.y + 1.4), config.CYAN, 90, 16);
     if (state.player.obj) state.player.obj.visible = false;
 
@@ -582,9 +589,6 @@ export function damagePlayer(amount, from) {
         outcome = campaignManager.failTrial(state.gameOverReason || 'INTEGRITY_DEPLETED');
       } catch (err) {
         console.error('[Player] Error failing campaign trial:', err);
-      }
-      if (typeof document !== 'undefined' && document.pointerLockElement) {
-        try { document.exitPointerLock(); } catch (_) {}
       }
       setTimeout(() => {
         trialDebriefModal.show(outcome || {

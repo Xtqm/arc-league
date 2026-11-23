@@ -34,6 +34,9 @@ export const MAX_MOUSE_DELTA = 150;
 
 export function tryLock() {
   if (state.isTouchDevice || state.gameMode === 'lobby') return;
+  if (state.player && !state.player.alive) return;
+  const overlay = typeof document !== 'undefined' ? document.getElementById('overlay') : null;
+  if (overlay && overlay.style && overlay.style.display && overlay.style.display !== 'none') return;
   if (!canvas) return;
   try {
     const p = canvas.requestPointerLock({ unadjustedMovement: true });
@@ -67,7 +70,12 @@ export function tryLock() {
 
 export function setCursor() {
   if (typeof document === 'undefined' || !document.body) return;
-  if (state.isTouchDevice || state.gameMode === 'lobby') {
+  if (state.isTouchDevice || state.gameMode === 'lobby' || (state.player && !state.player.alive)) {
+    document.body.style.cursor = 'default';
+    return;
+  }
+  const overlay = document.getElementById('overlay');
+  if (overlay && overlay.style && overlay.style.display && overlay.style.display !== 'none') {
     document.body.style.cursor = 'default';
     return;
   }
@@ -107,6 +115,9 @@ export function initMouse(targetCanvas) {
 
   canvas.addEventListener('mousedown', () => {
     if (state.gameMode === 'lobby') return;
+    if (state.player && !state.player.alive) return;
+    const overlay = typeof document !== 'undefined' ? document.getElementById('overlay') : null;
+    if (overlay && overlay.style && overlay.style.display && overlay.style.display !== 'none') return;
     if (!state.isTouchDevice) {
       focusGame();
       if (lockFailed === false && document.pointerLockElement !== canvas && state.running && !state.paused) {
@@ -116,9 +127,12 @@ export function initMouse(targetCanvas) {
   });
 
   canvas.addEventListener('click', (e) => {
+    if (state.player && !state.player.alive) return;
+    const overlay = typeof document !== 'undefined' ? document.getElementById('overlay') : null;
+    if (overlay && overlay.style && overlay.style.display && overlay.style.display !== 'none') return;
     if (typeof document !== 'undefined' && document.elementFromPoint) {
       const el = document.elementFromPoint(e.clientX, e.clientY);
-      if (el && el.closest && el.closest('#identityHeader, .modal, .modal-overlay, #authModal, #armoryModal, #achievementsModal, #settingsModal, #cosmeticStudioModal, .card')) {
+      if (el && el.closest && el.closest('#identityHeader, .modal, .modal-overlay, #authModal, #armoryModal, #achievementsModal, #settingsModal, #cosmeticStudioModal, .card, #overlay')) {
         return;
       }
     }

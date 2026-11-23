@@ -28,6 +28,10 @@ export class TrialDebriefModal {
     this._onNextTrial = null;
     this._onRetryTrial = null;
     this._onReturnToGrid = null;
+
+    if (typeof window !== 'undefined') {
+      window.__tronCloseTrialDebrief = () => this.hide();
+    }
   }
 
   get container() {

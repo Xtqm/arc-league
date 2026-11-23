@@ -73,7 +73,8 @@ const TEST_DOMAINS = {
     'ui/directives_modal.test.js',
     'ui/update_notification.test.js',
     'desktop/desktop_auth_ipc.test.js',
-    'desktop/preload_bridge.test.js'
+    'desktop/preload_bridge.test.js',
+    'game_over_escape_remediation.test.js'
   ],
   ai: [
     'ai/bot_combat_brain.test.js',

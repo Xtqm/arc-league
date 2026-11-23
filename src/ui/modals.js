@@ -190,6 +190,12 @@ if (typeof window !== 'undefined') {
 
 export function showGameOver(customTitle, customSubtitle) {
   resetTouchInputs();
+  if (typeof document !== 'undefined') {
+    if (document.exitPointerLock) {
+      try { document.exitPointerLock(); } catch (_) {}
+    }
+    setCursor();
+  }
   const isDuelMode = state.gameMode === 'duel' || state.gameMode === 'duel_ai';
   if (isDuelMode) {
     duelEconomyBridge.processMatchOutcome('defeat', 'ai');

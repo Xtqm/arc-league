@@ -95,95 +95,164 @@ export function codeOf(e) {
   return '';
 }
 
+function isModalVisible(el) {
+  if (!el || !el.style) return false;
+  return el.style.display !== 'none' && el.style.display !== '';
+}
+
 export function onDown(e) {
   const c = codeOf(e);
-
-  // Handle Escape isolation for Grid Authorization Terminal (dismissal restricted to [X] button)
-  if (c === 'Escape' && state.authModalOpen) {
-    e.preventDefault();
-    return;
-  }
-
-  // Handle Escape dismissal for Armory Modal
-  if (c === 'Escape' && state.armoryModalOpen) {
-    e.preventDefault();
-    if (typeof window !== 'undefined' && typeof window.__tronCloseArmory === 'function') {
-      window.__tronCloseArmory();
-    } else {
-      const arm = document.getElementById('armoryModal');
-      if (arm) arm.style.display = 'none';
-      state.armoryModalOpen = false;
-      const overlay = document.getElementById('overlay');
-      if (overlay) overlay.style.display = 'flex';
-    }
-    return;
-  }
 
   const isInputTarget = typeof document !== 'undefined' && document.activeElement && 
      (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
 
-  if (isInputTarget || state.authModalOpen || state.armoryModalOpen) {
+  if (isInputTarget) {
     return;
   }
 
-  // Handle lobby mode input isolation: disable locomotion keys & KeyP, contextually route Escape
-  if (state.gameMode === 'lobby') {
-    const LOCOMOTION_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'];
-    if (LOCOMOTION_KEYS.includes(c)) {
-      if (EAT.includes(c)) e.preventDefault();
-      return;
-    }
-    if (c === 'KeyP') {
+  // Priority-driven Escape state machine across all game lifecycle states
+  if (c === 'Escape') {
+    // 1. Grid Authorization Terminal isolation (dismissal restricted exclusively to [X] button)
+    if (state.authModalOpen) {
       e.preventDefault();
       return;
     }
-    if (e.key === '?' || (c === 'Slash' && e.shiftKey)) {
+
+    // 2. Universal Modal Interception: dismiss open sub-modals before root actions
+    // Armory Modal
+    const armoryModalEl = typeof document !== 'undefined' ? document.getElementById('armoryModal') : null;
+    if (state.armoryModalOpen || isModalVisible(armoryModalEl)) {
       e.preventDefault();
-      if (typeof window !== 'undefined' && typeof window.__tronToggleDirectives === 'function') {
-        window.__tronToggleDirectives();
+      if (typeof window !== 'undefined' && typeof window.__tronCloseArmory === 'function') {
+        window.__tronCloseArmory();
+      } else {
+        if (armoryModalEl) armoryModalEl.style.display = 'none';
+        state.armoryModalOpen = false;
+        const overlay = typeof document !== 'undefined' ? document.getElementById('overlay') : null;
+        if (overlay) overlay.style.display = 'flex';
       }
       return;
     }
-    if (c === 'Escape') {
+
+    // Achievements Modal
+    const achievementsModalEl = typeof document !== 'undefined' ? document.getElementById('achievementsModal') : null;
+    if (state.achievementsModalOpen || isModalVisible(achievementsModalEl)) {
       e.preventDefault();
-      const directivesModalEl = typeof document !== 'undefined' ? document.getElementById('directivesModal') : null;
-      if (directivesModalEl && directivesModalEl.style && directivesModalEl.style.display !== 'none') {
-        if (typeof window !== 'undefined' && window.__tronCloseDirectives) {
-          window.__tronCloseDirectives();
-        } else {
-          directivesModalEl.style.display = 'none';
+      if (typeof window !== 'undefined' && typeof window.__tronCloseAchievements === 'function') {
+        window.__tronCloseAchievements();
+      } else {
+        if (achievementsModalEl) achievementsModalEl.style.display = 'none';
+        state.achievementsModalOpen = false;
+      }
+      return;
+    }
+
+    // Trial Debrief Modal
+    const trialDebriefModalEl = typeof document !== 'undefined' ? document.getElementById('trialDebriefModal') : null;
+    if (isModalVisible(trialDebriefModalEl)) {
+      e.preventDefault();
+      if (typeof window !== 'undefined' && typeof window.__tronCloseTrialDebrief === 'function') {
+        window.__tronCloseTrialDebrief();
+      } else if (typeof window !== 'undefined' && window.__tronTrialDebriefModal && typeof window.__tronTrialDebriefModal.hide === 'function') {
+        window.__tronTrialDebriefModal.hide();
+      } else {
+        trialDebriefModalEl.style.display = 'none';
+      }
+      return;
+    }
+
+    // Directives Modal
+    const directivesModalEl = typeof document !== 'undefined' ? document.getElementById('directivesModal') : null;
+    if (isModalVisible(directivesModalEl)) {
+      e.preventDefault();
+      if (typeof window !== 'undefined' && typeof window.__tronCloseDirectives === 'function') {
+        window.__tronCloseDirectives();
+      } else {
+        directivesModalEl.style.display = 'none';
+      }
+      return;
+    }
+
+    // Settings Modal
+    const settingsModalEl = typeof document !== 'undefined' ? document.getElementById('settingsModal') : null;
+    if (isModalVisible(settingsModalEl)) {
+      e.preventDefault();
+      if (typeof window !== 'undefined' && typeof window.__tronCloseSettings === 'function') {
+        window.__tronCloseSettings();
+      } else {
+        settingsModalEl.style.display = 'none';
+      }
+      return;
+    }
+
+    // Cosmetic Studio Modal
+    const cosmeticStudioModalEl = typeof document !== 'undefined' ? document.getElementById('cosmeticStudioModal') : null;
+    if (isModalVisible(cosmeticStudioModalEl)) {
+      e.preventDefault();
+      if (typeof window !== 'undefined' && typeof window.__tronCloseStudio === 'function') {
+        window.__tronCloseStudio();
+      } else {
+        cosmeticStudioModalEl.style.display = 'none';
+      }
+      return;
+    }
+
+    // Host Modal
+    const hostModalEl = typeof document !== 'undefined' ? document.getElementById('hostModal') : null;
+    if (isModalVisible(hostModalEl)) {
+      e.preventDefault();
+      hostModalEl.style.display = 'none';
+      return;
+    }
+
+    // Room Modal
+    const roomModalEl = typeof document !== 'undefined' ? document.getElementById('roomModal') : null;
+    if (isModalVisible(roomModalEl)) {
+      e.preventDefault();
+      roomModalEl.style.display = 'none';
+      return;
+    }
+
+    // Calibration Mode Bypass Hatch (when cold-open calibration without level ID)
+    if (state.gameMode === 'calibration' && !state.campaignLevelId) {
+      e.preventDefault();
+      if (typeof window !== 'undefined' && window.__tronBypassCalibration) {
+        window.__tronBypassCalibration();
+      }
+      return;
+    }
+
+    // 3. Pointer Lock Evaluation (Tier 1 vs Tier 2)
+    const pointerLocked = typeof document !== 'undefined' && (!!document.pointerLockElement || isLocked());
+
+    if (pointerLocked) {
+      // Tier 1: Pointer locked during match
+      // Release pointer lock, pause match if running, keep fullscreen
+      e.preventDefault();
+      if (typeof document !== 'undefined' && document.exitPointerLock) {
+        try { document.exitPointerLock(); } catch (_) {}
+      }
+      if (state.running && !state.paused) {
+        const now = performance.now();
+        if (now - state.lastPauseToggle > 180) {
+          state.lastPauseToggle = now;
+          if (state.gameMode !== 'duel_multi' && state.gameMode !== 'duos_multi') {
+            triggerPauseGame();
+          }
         }
-        return;
       }
+      return;
+    }
 
-      const settingsModalEl = typeof document !== 'undefined' ? document.getElementById('settingsModal') : null;
-      if (settingsModalEl && settingsModalEl.style && settingsModalEl.style.display !== 'none') {
-        if (typeof window !== 'undefined' && window.__tronCloseSettings) {
-          window.__tronCloseSettings();
-        } else {
-          settingsModalEl.style.display = 'none';
-        }
-        return;
-      }
+    // Tier 2: Pointer is NOT locked (Pause Menu, Game Over / Defeat, Lobby, etc.)
+    if (isFullScreen()) {
+      e.preventDefault();
+      exitFullScreen();
+      return;
+    }
 
-      const hostModal = typeof document !== 'undefined' ? document.getElementById('hostModal') : null;
-      if (hostModal && hostModal.style && hostModal.style.display !== 'none') {
-        hostModal.style.display = 'none';
-        return;
-      }
-
-      const roomModal = typeof document !== 'undefined' ? document.getElementById('roomModal') : null;
-      if (roomModal && roomModal.style && roomModal.style.display !== 'none') {
-        roomModal.style.display = 'none';
-        return;
-      }
-
-      if (isFullScreen()) {
-        exitFullScreen();
-        return;
-      }
-
-      // Root lobby Escape handling: Electron shell exit confirmation vs browser inertness
+    // Windowed fallback (not fullscreen, pointer unlocked):
+    if (state.gameMode === 'lobby') {
       const isDesktop = typeof window !== 'undefined' && (
         !!window.electronDesktop?.isDesktop ||
         !!window.__electronBridge ||
@@ -201,6 +270,47 @@ export function onDown(e) {
             window.close();
           }
         }
+      }
+      return;
+    }
+
+    if (state.running) {
+      const now = performance.now();
+      if (now - state.lastPauseToggle > 180) {
+        state.lastPauseToggle = now;
+        if (state.gameMode !== 'duel_multi' && state.gameMode !== 'duos_multi') {
+          if (state.paused) {
+            triggerResumeGame();
+          } else {
+            triggerPauseGame();
+          }
+        }
+      }
+      return;
+    }
+
+    return;
+  }
+
+  if (state.authModalOpen || state.armoryModalOpen) {
+    return;
+  }
+
+  // Handle lobby mode input isolation: disable locomotion keys & KeyP
+  if (state.gameMode === 'lobby') {
+    const LOCOMOTION_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'];
+    if (LOCOMOTION_KEYS.includes(c)) {
+      if (EAT.includes(c)) e.preventDefault();
+      return;
+    }
+    if (c === 'KeyP') {
+      e.preventDefault();
+      return;
+    }
+    if (e.key === '?' || (c === 'Slash' && e.shiftKey)) {
+      e.preventDefault();
+      if (typeof window !== 'undefined' && typeof window.__tronToggleDirectives === 'function') {
+        window.__tronToggleDirectives();
       }
       return;
     }
@@ -268,60 +378,6 @@ export function onDown(e) {
       }
     }
     return;
-  }
-
-  if (c === 'Escape') {
-    if (state.running) {
-      if (state.gameMode === 'calibration' && !state.campaignLevelId) {
-        e.preventDefault();
-        if (typeof window !== 'undefined' && window.__tronBypassCalibration) {
-          window.__tronBypassCalibration();
-        }
-        return;
-      }
-
-      const inFullscreen = isFullScreen();
-      const pointerLocked = typeof document !== 'undefined' && (!!document.pointerLockElement || isLocked());
-
-      if (inFullscreen) {
-        e.preventDefault();
-        if (state.paused || !pointerLocked) {
-          exitFullScreen();
-          return;
-        } else {
-          const now = performance.now();
-          if (now - state.lastPauseToggle > 180) {
-            state.lastPauseToggle = now;
-            if (state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi') {
-              if (typeof document !== 'undefined' && document.exitPointerLock) {
-                document.exitPointerLock();
-              }
-            } else {
-              triggerPauseGame();
-            }
-          }
-          return;
-        }
-      } else {
-        const now = performance.now();
-        if (now - state.lastPauseToggle > 180) {
-          state.lastPauseToggle = now;
-          if (state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi') {
-            e.preventDefault();
-            if (typeof document !== 'undefined' && document.pointerLockElement) {
-              document.exitPointerLock();
-            }
-          } else {
-            if (state.paused) {
-              triggerResumeGame();
-            } else {
-              triggerPauseGame();
-            }
-          }
-        }
-        return;
-      }
-    }
   }
 }
 

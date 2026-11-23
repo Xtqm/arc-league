@@ -48,15 +48,15 @@ The system SHALL trigger an active parry window (0.35s) upon shield input, defle
 - **THEN** the shield does not remain raised, the active window closes at 0.35s, and the recovery cooldown is initiated.
 
 ### Requirement: Health and Energy Regeneration
-The system SHALL maintain player health and energy pools, regenerating energy automatically while health loss past zero causes de-rez elimination.
+The system SHALL maintain player health and energy pools, regenerating energy automatically while health loss past zero causes de-rez elimination, and SHALL immediately release pointer lock and restore the visible system cursor upon elimination across all game modes.
 
 #### Scenario: Energy auto-regeneration
 - **WHEN** player energy is depleted below 100%
 - **THEN** energy steadily regenerates toward full capacity over time.
 
 #### Scenario: Lethal damage elimination
-- **WHEN** incoming damage reduces player health to zero or below
-- **THEN** the player is de-rezzed and the elimination flow is initiated.
+- **WHEN** incoming damage reduces player health to zero or below, or the player falls into the void
+- **THEN** the player is de-rezzed, pointer lock is immediately released, the system cursor is restored, and the elimination game-over flow is presented.
 
 ### Requirement: Combat Viewport Stability and Aim Alignment
 The system SHALL maintain a glitch-free, 1:1 responsive third-person combat camera that eliminates gimbal lock flips, boundary collision inversion, and pointer lock delta spikes while clamping rapid mouse swipes to preserve continuous aim orientation.

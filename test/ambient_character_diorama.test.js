@@ -290,11 +290,16 @@ assert.strictEqual(getDioramaState(), 'IDLE', 'Initial diorama state must be IDL
 updateAmbientLobby(5.6);
 assert.strictEqual(getDioramaState(), 'JUMP', 'Diorama must transition to JUMP after IDLE duration');
 
-// Advance jump flight
+// Advance jump flight: Phase 1 launch -> Phase 2 double-jump secondary impulse
 updateAmbientLobby(0.7);
 assert.ok(rig.position.y > 0.5, 'Diorama rig position.y must be elevated during jump arc');
+assert.ok(rig.position.y >= 1.0, 'Diorama rig must reach primary launch height (>= 1.0m)');
 
-// Complete jump
+// Advance into secondary double-jump apex
+updateAmbientLobby(0.5);
+assert.ok(rig.position.y > 1.5, 'Diorama rig must reach secondary double-jump apex height (> 1.5m)');
+
+// Complete jump (hang-time + cushioned landing at 2.3s)
 updateAmbientLobby(1.2);
 assert.strictEqual(getDioramaState(), 'IDLE', 'Diorama must return to IDLE after landing cushion');
 assert.strictEqual(rig.position.y, 0, 'Diorama rig position.y must be grounded at 0');

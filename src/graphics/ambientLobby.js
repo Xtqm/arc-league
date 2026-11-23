@@ -5,6 +5,7 @@ import { scene, camera, snapCamera } from './scene.js';
 import { makeDisc, makeProgram, animateProgramKinematics } from './materials.js';
 import { settingsManager } from '../core/settings.js';
 import { cosmeticMaterialEngine } from '../armory/CosmeticMaterialEngine.js';
+import { burst } from './particles.js';
 
 let dioramaGroup = null;
 let dioramaRig = null;
@@ -14,6 +15,7 @@ let dioramaState = 'IDLE';
 let stateTimer = 0;
 let dioramaTime = 0;
 let nextSpecialAction = 'JUMP';
+let jumpSecondaryTriggered = false;
 
 export function getStagingDisc() {
   return dioramaGroup;
@@ -106,6 +108,15 @@ export function spawnDiorama() {
   return dioramaGroup;
 }
 
+function setDioramaBackDiscVisible(visible) {
+  if (dioramaRig && dioramaRig.userData?.backDisc) {
+    dioramaRig.userData.backDisc.visible = !!visible;
+    if (dioramaRig.userData.backDisc.userData?.wireframeOverlay) {
+      dioramaRig.userData.backDisc.userData.wireframeOverlay.visible = !!visible;
+    }
+  }
+}
+
 export function despawnDiorama() {
   if (dioramaGroup) {
     dioramaGroup.visible = false;
@@ -113,11 +124,10 @@ export function despawnDiorama() {
   if (dioramaFlightDisc) {
     dioramaFlightDisc.visible = false;
   }
-  if (dioramaRig && dioramaRig.userData?.backDisc) {
-    dioramaRig.userData.backDisc.visible = true;
-  }
+  setDioramaBackDiscVisible(true);
   dioramaState = 'IDLE';
   stateTimer = 0;
+  jumpSecondaryTriggered = false;
 }
 
 export function spawnStagingDisc() {
@@ -156,7 +166,7 @@ export function updateAmbientLobby(dt) {
 
   switch (dioramaState) {
     case 'IDLE': {
-      if (dioramaRig.userData?.backDisc) dioramaRig.userData.backDisc.visible = true;
+      setDioramaBackDiscVisible(true);
       if (dioramaFlightDisc) dioramaFlightDisc.visible = false;
       dioramaRig.position.y = 0;
 
@@ -172,6 +182,7 @@ export function updateAmbientLobby(dt) {
         stateTimer = 0;
         if (nextSpecialAction === 'JUMP') {
           dioramaState = 'JUMP';
+          jumpSecondaryTriggered = false;
           nextSpecialAction = 'THROW';
         } else {
           dioramaState = 'THROW_WINDUP';
@@ -182,22 +193,54 @@ export function updateAmbientLobby(dt) {
     }
 
     case 'JUMP': {
-      if (dioramaRig.userData?.backDisc) dioramaRig.userData.backDisc.visible = true;
+      setDioramaBackDiscVisible(true);
       if (dioramaFlightDisc) dioramaFlightDisc.visible = false;
 
-      // 1.8s jump duration: 0 - 1.5s parabolic flight, 1.5 - 1.8s landing cushion
+      // 2.3s multi-phase double-jump trajectory:
+      // 0.0s - 0.65s: Primary launch rising from y = 0 to y = 1.05m
+      // 0.65s - 1.45s: Secondary impulse kick & particle burst boosting y to 1.95m
+      // 1.45s - 2.0s: Aerodynamic hang-time with floating limb kinematics descending toward pedestal
+      // 2.0s - 2.3s: Knee-compression landing cushion returning cleanly to y = 0
+      let y = 0;
       let vy = 0;
       let grounded = false;
-      if (stateTimer < 1.5) {
-        const jumpProg = stateTimer / 1.5;
-        dioramaRig.position.y = Math.sin(jumpProg * Math.PI) * 1.25;
-        vy = Math.cos(jumpProg * Math.PI) * 4.0;
+
+      if (stateTimer < 0.65) {
+        const p = stateTimer / 0.65;
+        y = Math.sin(p * (Math.PI / 2)) * 1.05;
+        vy = Math.cos(p * (Math.PI / 2)) * 2.53;
+        grounded = false;
+      } else if (stateTimer < 1.45) {
+        if (!jumpSecondaryTriggered) {
+          jumpSecondaryTriggered = true;
+          try {
+            if (dioramaRig) {
+              const worldPos = new THREE.Vector3();
+              dioramaRig.getWorldPosition(worldPos);
+              worldPos.y += 0.3;
+              burst(worldPos, config.CYAN || 0x00f3ff, 18, 8);
+            }
+          } catch (e) {
+            // Safe guard in test / headless environments
+          }
+        }
+        const p = (stateTimer - 0.65) / 0.80;
+        y = 1.05 + Math.sin(p * (Math.PI / 2)) * 0.90;
+        vy = Math.cos(p * (Math.PI / 2)) * 1.77;
+        grounded = false;
+      } else if (stateTimer < 2.0) {
+        const p = (stateTimer - 1.45) / 0.55;
+        y = 1.95 - (1.90 * (p * p));
+        vy = - (2 * 1.90 * p) / 0.55;
         grounded = false;
       } else {
-        dioramaRig.position.y = 0;
+        const p = Math.min(1.0, (stateTimer - 2.0) / 0.30);
+        y = 0.05 * (1.0 - p);
         vy = 0;
         grounded = true;
       }
+
+      dioramaRig.position.y = y;
 
       animateProgramKinematics(dioramaRig, delta, {
         speed: 0,
@@ -207,16 +250,17 @@ export function updateAmbientLobby(dt) {
         time: dioramaTime
       });
 
-      if (stateTimer >= 1.8) {
+      if (stateTimer >= 2.3) {
         dioramaRig.position.y = 0;
         dioramaState = 'IDLE';
         stateTimer = 0;
+        jumpSecondaryTriggered = false;
       }
       break;
     }
 
     case 'THROW_WINDUP': {
-      if (dioramaRig.userData?.backDisc) dioramaRig.userData.backDisc.visible = true;
+      setDioramaBackDiscVisible(true);
       if (dioramaFlightDisc) dioramaFlightDisc.visible = false;
       dioramaRig.position.y = 0;
 
@@ -238,7 +282,7 @@ export function updateAmbientLobby(dt) {
     }
 
     case 'THROW_RELEASE': {
-      if (dioramaRig.userData?.backDisc) dioramaRig.userData.backDisc.visible = false;
+      setDioramaBackDiscVisible(false);
       if (dioramaFlightDisc) {
         dioramaFlightDisc.visible = true;
         dioramaFlightDisc.position.set(1.55, 1.15, -3.5);
@@ -261,7 +305,7 @@ export function updateAmbientLobby(dt) {
     }
 
     case 'BOOMERANG_ARC': {
-      if (dioramaRig.userData?.backDisc) dioramaRig.userData.backDisc.visible = false;
+      setDioramaBackDiscVisible(false);
       dioramaRig.position.y = 0;
 
       animateProgramKinematics(dioramaRig, delta, {
@@ -294,7 +338,7 @@ export function updateAmbientLobby(dt) {
 
     case 'MAGNETIC_CATCH': {
       if (dioramaFlightDisc) dioramaFlightDisc.visible = false;
-      if (dioramaRig.userData?.backDisc) dioramaRig.userData.backDisc.visible = true;
+      setDioramaBackDiscVisible(true);
       dioramaRig.position.y = 0;
 
       animateProgramKinematics(dioramaRig, delta, {

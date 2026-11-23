@@ -438,6 +438,39 @@ engine.applyDiscSkin(shapedDisc, {
 assert.strictEqual(shapedDisc.userData.currentShape, 'circle');
 assert.strictEqual(prevHexOuterDisposed, true, 'Hexagon outer geometry must be disposed when reverting to circle');
 
+// 8.5 Palm-Held Disc Shape-Conforming Wireframe Lifecycle
+engine.applyDiscSkin(palmDisc, {
+  id: 'disc_test_hex_wf_palm',
+  shape: 'hexagon',
+  shader: {
+    primaryHex: '#00ffaa',
+    secondaryEmissiveHex: '#005533',
+    wireframeToggle: true
+  }
+});
+
+assert.strictEqual(palmDisc.userData.currentShape, 'hexagon', 'Palm disc must adopt hexagon shape');
+assert.ok(palmDisc.userData.wireframeOverlay, 'Palm disc must possess wireframeOverlay when wireframeToggle is true');
+assert.strictEqual(palmDisc.userData.wireframeOverlay.visible, true, 'Palm disc wireframeOverlay must be visible');
+assert.strictEqual(palmDisc.userData.wireframeOverlay.userData.currentShape, 'hexagon', 'Palm disc wireframeOverlay must conform to hexagon shape');
+
+let oldPalmWfDisposed = false;
+palmDisc.userData.wireframeOverlay.geometry.dispose = () => { oldPalmWfDisposed = true; };
+
+// Toggle wireframe off for palm disc
+engine.applyDiscSkin(palmDisc, {
+  id: 'disc_test_hex_nowf_palm',
+  shape: 'hexagon',
+  shader: {
+    primaryHex: '#00ffaa',
+    secondaryEmissiveHex: '#005533',
+    wireframeToggle: false
+  }
+});
+
+assert.strictEqual(oldPalmWfDisposed, true, 'Prior palm wireframe geometry must be disposed when toggled off');
+assert.strictEqual(palmDisc.userData.wireframeOverlay, null, 'Palm disc wireframeOverlay must be cleared and null when toggled off');
+
 console.log('✓ Group 8: Procedural shape swapping, conforming wireframe, palm disc sync, and zero WebGL leaks verified.');
 
 // =========================================================================

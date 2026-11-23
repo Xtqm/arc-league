@@ -15,6 +15,7 @@ import { storageManager } from '../core/storage/StorageManager.js';
 import { scene } from '../graphics/scene.js';
 import { disposeDiscEntity } from '../entities/Disc.js';
 import { disposeHierarchy } from '../armory/CosmeticMaterialEngine.js';
+import { playTerminalKeySound, playEquipSound } from '../audio/sfx.js';
 
 // Setup Campaign UI navigation transitions
 gridSelectorModal.setOnSelectGrid((gridId) => levelSelectView.show(gridId));
@@ -212,11 +213,11 @@ export function getMainMenuHtml() {
   </div>
   <div class="mode-directives mode-select" id="mainMenuButtons">
     <button id="campaignBtn" class="mode-btn campaign-btn">LEAGUE CIRCUIT</button>
-    <div id="survivalModeContainer" class="survival-mode-container" style="display:flex;flex-direction:column;gap:6px;width:100%;">
+    <div id="survivalModeContainer" class="survival-mode-container">
       <button id="swarmBtn" class="mode-btn swarm-btn">${state.isHardcoreSurvival ? 'ENTER ARCFIELD (HARDCORE)' : 'ENTER ARCFIELD (SURVIVAL)'}</button>
-      <div id="survivalVariantToggle" class="survival-variant-toggle" style="display:${isUnlocked ? 'flex' : 'none'};gap:8px;justify-content:center;margin-top:2px;">
-        <button id="btnSurvivalStandard" class="btn variant-btn ${!state.isHardcoreSurvival ? 'hot active' : ''}" data-variant="standard" style="padding:4px 10px;font-size:11px;min-width:90px;letter-spacing:1px;">STANDARD</button>
-        <button id="btnSurvivalHardcore" class="btn variant-btn ${state.isHardcoreSurvival ? 'hot active' : ''}" data-variant="hardcore" style="padding:4px 10px;font-size:11px;min-width:90px;letter-spacing:1px;border-color:var(--orange);color:#ff7b1a;">HARDCORE [LVL 5+]</button>
+      <div id="survivalVariantToggle" class="survival-variant-toggle" style="display:${isUnlocked ? 'flex' : 'none'};">
+        <button id="btnSurvivalStandard" class="btn variant-btn ${!state.isHardcoreSurvival ? 'hot active' : ''}" data-variant="standard">STANDARD</button>
+        <button id="btnSurvivalHardcore" class="btn variant-btn ${state.isHardcoreSurvival ? 'hot active' : ''}" data-variant="hardcore">HARDCORE [LVL 5+]</button>
       </div>
     </div>
     <button id="practiceBtn" class="mode-btn duel-btn" style="width:100%;">PRACTICE (SOLO AI)</button>
@@ -338,11 +339,34 @@ export function bindMainMenuEvents() {
   const bind = (id, fn) => {
     const b = document.getElementById(id);
     if (b) {
-      b.addEventListener('click', fn);
+      b.addEventListener('click', (e) => {
+        try { playEquipSound(); } catch (_) {}
+        fn(e);
+      });
+      b.addEventListener('mouseenter', () => {
+        try { playTerminalKeySound(); } catch (_) {}
+      });
     } else {
       console.warn(`UI Binding Warning: Button #${id} not found.`);
     }
   };
+
+  if (typeof document !== 'undefined') {
+    const rail = document.getElementById('mainMenu');
+    if (rail && typeof rail.querySelectorAll === 'function') {
+      const railButtons = rail.querySelectorAll('.mode-btn, .dock-btn, .variant-btn');
+      for (const btn of railButtons) {
+        if (btn && btn.addEventListener) {
+          btn.addEventListener('mouseenter', () => {
+            try { playTerminalKeySound(); } catch (_) {}
+          });
+          btn.addEventListener('click', () => {
+            try { playEquipSound(); } catch (_) {}
+          });
+        }
+      }
+    }
+  }
 
   const btnEnter3D = document.getElementById('btnEnter3DLobby');
   if (btnEnter3D) {

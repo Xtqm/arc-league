@@ -300,6 +300,60 @@ export class CosmeticMaterialEngine {
           child.material.opacity = Math.min(0.65, 0.25 * (glowScale / 1.5));
         }
       });
+
+      // Retro Wireframe Overlay Management for Palm Disc
+      const shouldHaveWireframe = !!shader.wireframeToggle;
+      let wireframeMesh = discMesh.userData?.wireframeOverlay;
+      if (!wireframeMesh) {
+        discMesh.traverse((child) => {
+          if (child !== discMesh && (child.userData?.part === 'disc_wireframe_overlay' || child.userData?.isWireframeOverlay)) {
+            wireframeMesh = child;
+          }
+        });
+      }
+
+      if (shouldHaveWireframe) {
+        if (!wireframeMesh) {
+          const wfGeo = createWireframeGeometry(targetShape, { radius: palmRadius });
+          const wfMat = new THREE.MeshBasicMaterial({
+            color: secondaryColor,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.85
+          });
+          wireframeMesh = new THREE.Mesh(wfGeo, wfMat);
+          wireframeMesh.userData.isWireframeOverlay = true;
+          wireframeMesh.userData.part = 'disc_wireframe_overlay';
+          wireframeMesh.userData.currentShape = targetShape;
+          discMesh.add(wireframeMesh);
+          discMesh.userData.wireframeOverlay = wireframeMesh;
+        } else {
+          if (wireframeMesh.userData?.currentShape !== targetShape) {
+            const oldWfGeo = wireframeMesh.geometry;
+            wireframeMesh.geometry = createWireframeGeometry(targetShape, { radius: palmRadius });
+            if (oldWfGeo && typeof oldWfGeo.dispose === 'function') {
+              oldWfGeo.dispose();
+            }
+            wireframeMesh.userData.currentShape = targetShape;
+          }
+          if (wireframeMesh.material && wireframeMesh.material.color) {
+            wireframeMesh.material.color.copy(secondaryColor);
+          }
+          wireframeMesh.visible = true;
+        }
+      } else {
+        if (wireframeMesh) {
+          discMesh.remove(wireframeMesh);
+          if (wireframeMesh.geometry && typeof wireframeMesh.geometry.dispose === 'function') {
+            wireframeMesh.geometry.dispose();
+          }
+          if (wireframeMesh.material && typeof wireframeMesh.material.dispose === 'function') {
+            wireframeMesh.material.dispose();
+          }
+          discMesh.userData.wireframeOverlay = null;
+        }
+      }
+
       return true;
     }
 

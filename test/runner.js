@@ -76,6 +76,14 @@ const TEST_DOMAINS = {
     'desktop/preload_bridge.test.js',
     'game_over_escape_remediation.test.js'
   ],
+  ui: [
+    'ui/tactical_rail_menu.test.js',
+    'ui/directives_modal.test.js',
+    'ui/update_notification.test.js',
+    'ui/achievements_modal.test.js',
+    'ui/achievement_toast.test.js',
+    'ui/duel_map_selector.test.js'
+  ],
   ai: [
     'ai/bot_combat_brain.test.js',
     'ai/arbiter_personalities.test.js',
@@ -126,6 +134,7 @@ async function main() {
     for (const domain of Object.keys(TEST_DOMAINS)) {
       testQueue.push(...TEST_DOMAINS[domain]);
     }
+    testQueue = [...new Set(testQueue)];
   }
 
   console.log(`\n======================================================`);

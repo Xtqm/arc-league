@@ -73,6 +73,28 @@ assert.strictEqual(visorCount, 1, 'Player rig must contain exactly 1 visor mesh'
 assert.ok(playerRig.userData.coreMesh, 'Player rig must expose glowing chest coreMesh');
 assert.ok(playerRig.userData.headHalo, 'Player rig must include tilted headHalo');
 
+// Verify 5-finger articulated humanoid hands on Player Athlete Rig
+for (const handKey of ['leftHand', 'rightHand']) {
+  const handJoint = joints[handKey];
+  assert.strictEqual(handJoint.userData.hasHumanoidFingers, true, `${handKey} must have humanoid fingers on player rig`);
+  assert.ok(handJoint.userData.palmMesh, `${handKey} must possess palmMesh`);
+  assert.strictEqual(handJoint.userData.palmMesh.userData.part, 'chassis_suit', 'Palm mesh must have chassis_suit part tag');
+  assert.strictEqual(handJoint.userData.thumbShards.length, 2, `${handKey} must have 2 thumb phalanges`);
+  assert.strictEqual(handJoint.userData.fingerShards.length, 8, `${handKey} must have 8 finger phalanges (4 digits x 2 segments)`);
+
+  for (const thumbShard of handJoint.userData.thumbShards) {
+    assert.strictEqual(thumbShard.userData.part, 'chassis_suit');
+    const edgeChild = thumbShard.children.find(c => c.userData.part === 'chassis_trim');
+    assert.ok(edgeChild, 'Thumb shard must contain chassis_trim edge lines');
+  }
+
+  for (const fingerShard of handJoint.userData.fingerShards) {
+    assert.strictEqual(fingerShard.userData.part, 'chassis_suit');
+    const edgeChild = fingerShard.children.find(c => c.userData.part === 'chassis_trim');
+    assert.ok(edgeChild, 'Finger shard must contain chassis_trim edge lines');
+  }
+}
+
 console.log('✓ Group 1: Hierarchical joint tree, faceted plates, and part tagging verified.');
 
 // =========================================================================

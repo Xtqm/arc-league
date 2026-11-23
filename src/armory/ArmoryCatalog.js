@@ -178,6 +178,28 @@ export const ARMORY_CATALOG = Object.freeze({
         sparkColorHex: '#ff0055',
         sparkCount: 24
       })
+    }),
+    Object.freeze({
+      id: 'disc_custom_01',
+      displayName: 'Custom Kinetic Disc',
+      category: ARMORY_CATEGORIES.DISC_SKINS,
+      description: 'Custom prototype kinetic disc created in developer studio.',
+      shape: 'hexagon',
+      unlockType: UNLOCK_TYPES.FREE,
+      cost: 0,
+      achievementId: null,
+      shader: Object.freeze({
+        primaryHex: '#ff0000ff',
+        secondaryEmissiveHex: '#000000ff',
+        trailOpacity: 0.7,
+        wireframeToggle: true,
+        glowIntensity: 2.1
+      }),
+      particles: Object.freeze({
+        ricochetSparks: true,
+        sparkColorHex: '#ff0000',
+        sparkCount: 20
+      })
     })
   ]),
 

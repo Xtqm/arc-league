@@ -198,9 +198,73 @@ function buildConstructLimbs(torso, pelvis, suit, lit, edgeMat, archetype, float
     hand.userData.name = isLeft ? 'leftHand' : 'rightHand';
     elbow.add(hand);
 
-    addFacetedShard(hand, new THREE.BoxGeometry(0.085, 0.09, 0.036), suit, edgeMat, {
-      pos: [0, -0.02, 0]
-    });
+    if (archetype === 'player') {
+      // Articulated 5-finger humanoid hand for player athlete rig
+      // 1. Faceted Palm Chassis
+      const palmMesh = addFacetedShard(hand, new THREE.BoxGeometry(0.076, 0.075, 0.034), suit, edgeMat, {
+        pos: [0, -0.025, 0],
+        part: 'chassis_suit'
+      });
+      palmMesh.userData.handPart = 'palm';
+
+      // 2. Opposable Thumb (Proximal + Distal phalanges)
+      const thumbProx = addFacetedShard(hand, new THREE.BoxGeometry(0.018, 0.032, 0.018), suit, edgeMat, {
+        pos: [s * 0.038, -0.02, 0.012],
+        rot: [0.35, 0, -s * 0.55],
+        part: 'chassis_suit'
+      });
+      thumbProx.userData.handPart = 'thumb_proximal';
+
+      const thumbDist = addFacetedShard(hand, new THREE.BoxGeometry(0.016, 0.026, 0.016), suit, edgeMat, {
+        pos: [s * 0.052, -0.038, 0.022],
+        rot: [0.48, 0, -s * 0.65],
+        part: 'chassis_suit'
+      });
+      thumbDist.userData.handPart = 'thumb_distal';
+
+      // 3. Four Segmented Digits (Index, Middle, Ring, Pinky)
+      const fingerDefs = [
+        { name: 'index',  xOffset: 0.024,  fanAngle: 0.08, scale: 0.92 },
+        { name: 'middle', xOffset: 0.008,  fanAngle: 0.00, scale: 1.00 },
+        { name: 'ring',   xOffset: -0.008, fanAngle: -0.06, scale: 0.90 },
+        { name: 'pinky',  xOffset: -0.024, fanAngle: -0.14, scale: 0.76 }
+      ];
+
+      const fingerShards = [];
+      for (const f of fingerDefs) {
+        const xBase = s * f.xOffset;
+        const pLen = 0.028 * f.scale;
+        const dLen = 0.024 * f.scale;
+        const width = 0.014 * f.scale;
+
+        // Proximal phalanx
+        const prox = addFacetedShard(hand, new THREE.BoxGeometry(width, pLen, width), suit, edgeMat, {
+          pos: [xBase, -0.066 - (pLen * 0.5), 0.006 + (0.004 * f.scale)],
+          rot: [0.22, 0, -s * f.fanAngle],
+          part: 'chassis_suit'
+        });
+        prox.userData.handPart = `${f.name}_proximal`;
+        fingerShards.push(prox);
+
+        // Distal phalanx (curled forward to naturally cradle hover-palm disc)
+        const dist = addFacetedShard(hand, new THREE.BoxGeometry(width * 0.88, dLen, width * 0.88), suit, edgeMat, {
+          pos: [xBase + s * (f.fanAngle * 0.02), -0.066 - pLen - (dLen * 0.45), 0.014 + (0.008 * f.scale)],
+          rot: [0.44, 0, -s * f.fanAngle],
+          part: 'chassis_suit'
+        });
+        dist.userData.handPart = `${f.name}_distal`;
+        fingerShards.push(dist);
+      }
+
+      hand.userData.palmMesh = palmMesh;
+      hand.userData.thumbShards = [thumbProx, thumbDist];
+      hand.userData.fingerShards = fingerShards;
+      hand.userData.hasHumanoidFingers = true;
+    } else {
+      addFacetedShard(hand, new THREE.BoxGeometry(0.085, 0.09, 0.036), suit, edgeMat, {
+        pos: [0, -0.02, 0]
+      });
+    }
 
     if (isLeft) leftHand = hand;
     else rightHand = hand;

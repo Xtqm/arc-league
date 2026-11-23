@@ -101,6 +101,12 @@ assert.ok(indexHtml.includes('.rail-header'), 'index.html must style .rail-heade
 assert.ok(indexHtml.includes('.mode-directives'), 'index.html must style .mode-directives');
 assert.ok(indexHtml.includes('.utility-dock'), 'index.html must style .utility-dock');
 assert.ok(indexHtml.includes('@media (max-width: 768px)'), 'index.html must have responsive mobile media query');
+
+// Verify chamfered geometry, neon sheen keyframes, and identity-header static positioning
+assert.ok(indexHtml.includes('clip-path: polygon('), 'index.html must define chamfered polygon geometry');
+assert.ok(indexHtml.includes('tacticalSheen'), 'index.html must define tacticalSheen hover keyframes');
+assert.ok(indexHtml.includes('.tactical-rail .identity-header') || indexHtml.includes('.rail-identity'), 'index.html must fix identity-header inside rail');
+assert.ok(indexHtml.includes('.survival-variant-toggle'), 'index.html must style survival-variant-toggle tab strip');
 console.log('✓ index.html defines tactical-rail, mode-directives, utility-dock, and responsive breakpoints');
 
 // Test 3: Utility dock click bindings open respective modals
@@ -141,6 +147,15 @@ settingsBtn.click();
 assert.strictEqual(settingsOpened, true, 'Clicking #settingsBtn must open settingsModal');
 
 console.log('✓ Clicking utility dock buttons opens armoryModal, achievementsModal, directivesModal, and settingsModal');
+
+// Test 4: Tactical rail button interaction & audio hook listeners
+console.log('\n[Test 4] Testing tactical rail button audio hook bindings...');
+assert.ok(armoryBtn.listeners.has('mouseenter'), '#armoryBtn must have mouseenter listener for audio feedback');
+assert.ok(armoryBtn.listeners.has('click'), '#armoryBtn must have click listener for audio feedback');
+const mouseenterHandlers = armoryBtn.listeners.get('mouseenter');
+assert.ok(mouseenterHandlers.length > 0, 'mouseenter listener must be registered');
+mouseenterHandlers[0]();
+console.log('✓ Tactical rail buttons have mouseenter and click audio hook listeners attached');
 
 console.log('\n======================================================');
 console.log('ALL TACTICAL RAIL MENU TESTS PASSED (100%)');

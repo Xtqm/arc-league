@@ -328,6 +328,10 @@ export function updatePlayer(dt) {
           }
         }
       }
+
+      if (disc.userData?.wireframeOverlay) {
+        disc.userData.wireframeOverlay.visible = disc.visible;
+      }
     }
   }
 }
@@ -620,6 +624,9 @@ export function resetRound(spawnX = 0, spawnZ = 14, yaw = Math.PI) {
     state.player.obj.visible = true;
     if (state.player.obj.userData && state.player.obj.userData.backDisc) {
       state.player.obj.userData.backDisc.visible = true;
+      if (state.player.obj.userData.backDisc.userData?.wireframeOverlay) {
+        state.player.obj.userData.backDisc.userData.wireframeOverlay.visible = true;
+      }
     }
   }
 

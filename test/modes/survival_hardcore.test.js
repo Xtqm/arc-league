@@ -10,7 +10,6 @@ import { state } from '../../src/core/state.js';
 import { config } from '../../src/core/config.js';
 import { storageManager } from '../../src/core/storage/StorageManager.js';
 import { isHardcoreUnlocked, getMainMenuHtml, startSoloSwarm } from '../../src/ui/menus.js';
-import { lobbyCoresManager } from '../../src/ui/lobbyCores.js';
 import { dynamicDirector, DynamicDirector } from '../../src/ai/DynamicDirector.js';
 import { spawnWave, updateFoes, killFoe } from '../../src/entities/Bot.js';
 import { BotCombatBrain } from '../../src/ai/BotCombatBrain.js';
@@ -63,22 +62,11 @@ menuHtml = getMainMenuHtml();
 assert(menuHtml.includes('display:flex'), 'Variant selector must be displayed in main menu when unlocked');
 assert(menuHtml.includes('btnSurvivalHardcore'), 'Hardcore selector button must exist when unlocked');
 
-// Test lobby core confirm modal variant selector
-if (typeof document !== 'undefined') {
-  const dummyModal = document.createElement('div');
-  dummyModal.id = 'coreConfirmModal';
-  const card = document.createElement('div');
-  card.className = 'card';
-  const actions = document.createElement('div');
-  actions.style.display = 'flex';
-  card.appendChild(actions);
-  dummyModal.appendChild(card);
-  document.body.appendChild(dummyModal);
-
-  lobbyCoresManager.showConfirmModal({ id: 'survival', name: 'SURVIVAL (SWARM)' });
-  const variantSelector = document.getElementById('coreVariantSelector');
-  assert(variantSelector && variantSelector.style.display === 'flex', 'Lobby core confirm modal must reveal variant selector for survival');
-}
+// Test tactical rail menu variant selector
+menuHtml = getMainMenuHtml();
+assert.ok(menuHtml.includes('id="survivalVariantToggle"'), 'Tactical rail menu must contain survivalVariantToggle');
+assert.ok(menuHtml.includes('id="btnSurvivalStandard"'), 'Tactical rail menu must contain btnSurvivalStandard');
+assert.ok(menuHtml.includes('id="btnSurvivalHardcore"'), 'Tactical rail menu must contain btnSurvivalHardcore');
 
 console.log('✓ Hardcore unlock prerequisite (Wave 10) and UI variant selector verified');
 

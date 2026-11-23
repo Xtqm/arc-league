@@ -8,8 +8,9 @@ import { gridSelectorModal, levelSelectView, campaignHUD, trialDebriefModal } fr
 import { armoryModal } from './modals/ArmoryModal.js';
 import { achievementsModal } from './modals/AchievementsModal.js';
 import { settingsModal } from './modals/SettingsModal.js';
+import { directivesModal } from './modals/DirectivesModal.js';
+import { spawnStagingDisc, despawnStagingDisc, resetMatchCamera } from '../graphics/ambientLobby.js';
 import { updateSteamRichPresence, syncGameStateRichPresence } from '../core/steamTelemetry.js';
-import { lobbyCoresManager } from './lobbyCores.js';
 import { storageManager } from '../core/storage/StorageManager.js';
 
 // Setup Campaign UI navigation transitions
@@ -21,8 +22,14 @@ campaignHUD.setOnCancelBrief(() => levelSelectView.show());
 trialDebriefModal.setOnReturnToGrid((gridId) => levelSelectView.show(gridId));
 armoryModal.setOnBackToMenu(() => showModeSelectMenu());
 achievementsModal.setOnBackToMenu(() => showModeSelectMenu());
+directivesModal.setOnClose(() => {
+  if (typeof document !== 'undefined') {
+    const rail = document.getElementById('mainMenu') || document.getElementById('directivesBtn');
+    if (rail && typeof rail.focus === 'function') rail.focus();
+  }
+});
 
-export { armoryModal, achievementsModal, settingsModal };
+export { armoryModal, achievementsModal, settingsModal, directivesModal };
 
 export {
   ARENA_MAP_METADATA,
@@ -47,7 +54,7 @@ function teardownSectorArena() {
 }
 
 export function startMode(mode) {
-  lobbyCoresManager.despawnCores();
+  despawnStagingDisc();
   state.gameMode = (mode === 'duel' || mode === 'duel_ai') ? 'duel_ai' : mode;
   if (state.gameMode === 'swarm') {
     teardownSectorArena();
@@ -66,12 +73,15 @@ export function startMode(mode) {
   }
   armoryModal.hide();
   achievementsModal.hide();
+  directivesModal.hide();
+  settingsModal.hide();
   state.authModalOpen = false;
   state.armoryModalOpen = false;
   state.achievementsModalOpen = false;
   if (typeof window !== 'undefined' && window.__tronResetGame) {
     window.__tronResetGame();
   }
+  resetMatchCamera();
   state.paused = false;
   state.justResumed = true;
   syncGameStateRichPresence();
@@ -134,33 +144,18 @@ export function isHardcoreUnlocked(storage = storageManager) {
 
 export function getMainMenuHtml() {
   const isUnlocked = isHardcoreUnlocked();
-  return `<div id="identityHeader" class="identity-header"></div>
-<div class="card" id="mainMenu">
-  <h1>ARC</h1><h2>L E A G U E</h2>
-  <div class="keys desktop-keys">
-    <b>W A S D</b><span>Move &amp; strafe across the Arcfield</span>
-    <b>Q / E</b><span>Apply curve spin — hook discs around pillars &amp; obstacles</span>
-    <b>Mouse</b><span>Turn the camera freely — the crosshair is your aim point</span>
-    <b>Wheel</b><span>Adjust look sensitivity</span>
-    <b>Arc</b><span>A live dotted trajectory shows every bounce before you throw</span>
-    <b>Left Click</b><span>Throw kinetic disc (it ricochets &amp; returns)</span>
-    <b>Right Click</b><span>Raise disc shield — deflects incoming</span>
-    <b>Space</b><span>Jump — tap twice to air-jump, hold for height</span>
-    <b>Shift</b><span>Dash (costs energy)</span>
-    <b>P / ESC</b><span>Pause simulation &amp; release cursor</span>
+  return `<div class="card tactical-rail" id="mainMenu" tabindex="-1">
+  <div class="rail-header">
+    <div class="rail-brand">
+      <img src="assets/branding/arc_league_title_logo.png" alt="ARC LEAGUE" class="rail-logo">
+      <div class="rail-fallback-title" style="display:none;">
+        <h1>ARC</h1><h2>L E A G U E</h2>
+      </div>
+      <div class="rail-tagline">PURE CONSTRUCT // ARCFIELD ARENA</div>
+    </div>
+    <div id="identityHeader" class="identity-header rail-identity"></div>
   </div>
-  <div class="keys mobile-keys" style="display:none">
-    <b>DRAG LEFT</b><span>Virtual Analog Stick — Move &amp; strafe</span>
-    <b>DRAG RIGHT</b><span>Swipe anywhere to turn &amp; aim camera</span>
-    <b>THROW</b><span>Tap to throw, or hold &amp; drag to aim/charge disc</span>
-    <b>L / R</b><span>Curve spin — hook disc around obstacles</span>
-    <b>SHIELD</b><span>Raise disc shield — deflect incoming attacks</span>
-    <b>JUMP</b><span>Tap to air-jump, hold for maximum height</span>
-    <b>DASH</b><span>Instant directional sprint impulse</span>
-    <b>PAUSE</b><span>Tap top right II button to suspend simulation</span>
-  </div>
-  <div class="mode-select" id="mainMenuButtons">
-    <button id="btnEnter3DLobby" class="mode-btn" style="width:100%;margin-bottom:14px;border-color:var(--cyan);color:#fff;background:rgba(79,242,255,0.22);box-shadow:0 0 16px rgba(79,242,255,0.4);letter-spacing:3px;">[ ENTER 3D PLAYABLE LOBBY ]</button>
+  <div class="mode-directives mode-select" id="mainMenuButtons">
     <button id="campaignBtn" class="mode-btn campaign-btn">LEAGUE CIRCUIT</button>
     <div id="survivalModeContainer" class="survival-mode-container" style="display:flex;flex-direction:column;gap:6px;width:100%;">
       <button id="swarmBtn" class="mode-btn swarm-btn">${state.isHardcoreSurvival ? 'ENTER ARCFIELD (HARDCORE)' : 'ENTER ARCFIELD (SURVIVAL)'}</button>
@@ -170,44 +165,49 @@ export function getMainMenuHtml() {
       </div>
     </div>
     <button id="practiceBtn" class="mode-btn duel-btn" style="width:100%;">PRACTICE (SOLO AI)</button>
-    <button id="quickMatchBtn" class="mode-btn multi-btn quick-match-primary" style="width:100%;border-color:#00ffff;color:#00ffff;box-shadow:0 0 10px rgba(0,255,255,0.3);letter-spacing:2px;">[ QUICK MATCH // PLAY NOW ]</button>
+    <button id="quickMatchBtn" class="mode-btn multi-btn quick-match-primary" style="width:100%;letter-spacing:2px;">[ QUICK MATCH // PLAY NOW ]</button>
     <div class="friendly-duels-row" style="display:flex;gap:8px;width:100%;">
       <button id="hostMatchBtn" class="mode-btn multi-btn" style="flex:1;">HOST FRIENDLY MATCH</button>
       <button id="joinOnlineBtn" class="mode-btn multi-btn" style="flex:1;">JOIN FRIENDLY MATCH</button>
     </div>
-    <!-- Legacy compatibility elements for tests & programmatic navigation -->
-    <button id="armoryBtn" class="mode-btn armory-btn" style="display:none;min-width:44px;min-height:44px;" aria-hidden="true">OUTFITTING</button>
-    <button id="achievementsBtn" class="mode-btn achievements-btn" style="display:none;min-width:44px;min-height:44px;" aria-hidden="true">TROPHY MATRIX</button>
-    <button id="duelBtn" style="display:none;min-width:44px;min-height:44px;" aria-hidden="true"></button>
-    <button id="btnSwarmSolo" style="display:none;min-width:44px;min-height:44px;" aria-hidden="true"></button>
-    <button id="btnDuelSolo" style="display:none;min-width:44px;min-height:44px;" aria-hidden="true"></button>
-    <button id="joinRoomBtn" style="display:none;min-width:44px;min-height:44px;" aria-hidden="true"></button>
+  </div>
+
+  <div class="utility-dock" id="utilityDock">
+    <button id="armoryBtn" class="dock-btn armory-btn" title="Outfitting &amp; Cosmetics">
+      <span class="dock-icon">🛡</span>
+      <span class="dock-label">OUTFITTING</span>
+    </button>
+    <button id="achievementsBtn" class="dock-btn achievements-btn" title="Trophy Matrix">
+      <span class="dock-icon">🏆</span>
+      <span class="dock-label">TROPHIES</span>
+    </button>
+    <button id="directivesBtn" class="dock-btn directives-btn" title="Directives &amp; Controls [?]">
+      <span class="dock-icon">?</span>
+      <span class="dock-label">DIRECTIVES</span>
+    </button>
+    <button id="settingsBtn" class="dock-btn settings-btn" title="System Settings">
+      <span class="dock-icon">⚙</span>
+      <span class="dock-label">SETTINGS</span>
+    </button>
+  </div>
+
+  <!-- Legacy compatibility elements for tests & programmatic navigation -->
+  <div style="display:none;" aria-hidden="true">
+    <button id="btnEnter3DLobby" style="min-width:44px;min-height:44px;"></button>
+    <button id="duelBtn" style="min-width:44px;min-height:44px;"></button>
+    <button id="btnSwarmSolo" style="min-width:44px;min-height:44px;"></button>
+    <button id="btnDuelSolo" style="min-width:44px;min-height:44px;"></button>
+    <button id="joinRoomBtn" style="min-width:44px;min-height:44px;"></button>
   </div>
 </div>`;
 }
 
 export function activate3DLobbyView() {
-  const overlay = document.getElementById('overlay');
-  if (overlay) {
-    overlay.classList.add('lobby-3d');
-  }
-  const hint = document.getElementById('hint');
-  if (hint) {
-    hint.innerHTML = 'WASD Move & Strafe &nbsp;·&nbsp; Mouse Look &nbsp;·&nbsp; LMB Throw Disc at Energy Core &nbsp;·&nbsp; MMB 1P/3P &nbsp;·&nbsp; ESC 2D Menu';
-    hint.style.display = 'block';
-    hint.style.opacity = '1';
-  }
-  const btn2D = document.getElementById('btnToggle2DMenu');
-  if (btn2D) btn2D.style.display = 'inline-block';
+  // Deprecated: 3D playable lobby scrapped in favor of Left-Aligned Tactical Rail
 }
 
 export function deactivate3DLobbyView() {
-  const overlay = document.getElementById('overlay');
-  if (overlay) {
-    overlay.classList.remove('lobby-3d');
-  }
-  const btn2D = document.getElementById('btnToggle2DMenu');
-  if (btn2D) btn2D.style.display = 'none';
+  // Deprecated: 3D playable lobby scrapped in favor of Left-Aligned Tactical Rail
 }
 
 export function showModeSelectMenu(options = {}) {
@@ -225,9 +225,7 @@ export function showModeSelectMenu(options = {}) {
   state.cameraPerspective = 'first_person';
   state.cameraPerspectiveBlend = 0.0;
   rebuildArenaTiles();
-
-  lobbyCoresManager.init();
-  lobbyCoresManager.spawnCores();
+  spawnStagingDisc();
 
   const hm = document.getElementById('hostModal');
   if (hm) hm.style.display = 'none';
@@ -242,6 +240,8 @@ export function showModeSelectMenu(options = {}) {
   trialDebriefModal.hide();
   armoryModal.hide();
   achievementsModal.hide();
+  directivesModal.hide();
+  settingsModal.hide();
   state.authModalOpen = false;
   state.armoryModalOpen = false;
   state.achievementsModalOpen = false;
@@ -256,18 +256,6 @@ export function showModeSelectMenu(options = {}) {
   const card = overlay.querySelector('.card');
   if (card) card.scrollTop = 0;
   bindMainMenuEvents();
-
-  const isHeadless = typeof window !== 'undefined' && (
-    window.__TRON_HEADLESS__ ||
-    (typeof navigator !== 'undefined' && navigator.webdriver && !window.__tronEnforcePlayableLobby)
-  );
-
-  const should3D = options.force3D || (!state.isTouchDevice && !isHeadless && !options.force2D);
-  if (should3D) {
-    activate3DLobbyView();
-  } else {
-    deactivate3DLobbyView();
-  }
 }
 
 export function startSoloSwarm(options = {}) {
@@ -361,18 +349,32 @@ export function bindMainMenuEvents() {
   const openArmory = (e) => {
     e.stopPropagation();
     if (e.cancelable) e.preventDefault();
-    showAuthTerminal('loadout');
+    armoryModal.show();
   };
 
   const openAchievements = (e) => {
     e.stopPropagation();
     if (e.cancelable) e.preventDefault();
-    showAuthTerminal('directives');
+    achievementsModal.show();
+  };
+
+  const openDirectives = (e) => {
+    e.stopPropagation();
+    if (e.cancelable) e.preventDefault();
+    directivesModal.show();
+  };
+
+  const openSettings = (e) => {
+    e.stopPropagation();
+    if (e.cancelable) e.preventDefault();
+    settingsModal.show();
   };
 
   bind('campaignBtn', openCampaign);
   bind('armoryBtn', openArmory);
   bind('achievementsBtn', openAchievements);
+  bind('directivesBtn', openDirectives);
+  bind('settingsBtn', openSettings);
   bind('swarmBtn', startSwarm);
   bind('hostMatchBtn', openHostModal);
   bind('joinOnlineBtn', openJoinModal);

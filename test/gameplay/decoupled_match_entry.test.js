@@ -189,55 +189,43 @@ async function runDecoupledMatchEntryTests() {
     console.log('>>> TEST 4 PASSED: Friendly room hosting displays 4-character code with no warm-up bot or queue HUD!');
 
     // =============================================================
-    // TEST 5: 3D Lobby Energy Core Duels Decoupling
+    // TEST 5: Tactical Rail Instantaneous Mode Launching & Decommissioned Cores
     // =============================================================
-    console.log('\n--- TEST 5: 3D Lobby Energy Core Duels Decoupling ---');
-    const lobbyCoreResult = await page.evaluate(async () => {
+    console.log('\n--- TEST 5: Tactical Rail Instantaneous Mode Launching & Decommissioned Cores ---');
+    const tacticalRailResult = await page.evaluate(async () => {
       window.__dbg.showModeSelect();
-      const lobbyManager = window.__tronLobbyCores;
-      if (!lobbyManager) return { hasLobbyManager: false };
 
-      // Trigger duels core confirmation modal
-      const duelsCore = { id: 'duels', name: 'DUEL ARENA', color: 0x00ffff };
-      lobbyManager.showConfirmModal(duelsCore);
-
+      const hasLobbyCores = typeof window.__tronLobbyCores !== 'undefined' && window.__tronLobbyCores !== null;
+      const mainMenu = document.getElementById('mainMenu');
+      const isTacticalRail = mainMenu && mainMenu.classList.contains('tactical-rail');
       const confirmModal = document.getElementById('coreConfirmModal');
-      const quickBtn = document.getElementById('btnCoreDuelQuick');
-      const friendlyBtn = document.getElementById('btnCoreDuelFriendly');
+      const hasCoreConfirm = !!(confirmModal && confirmModal.style.display !== 'none');
 
-      const modalVisible = confirmModal && confirmModal.style.display === 'flex';
-      const defaultMode = lobbyManager.duelLaunchMode;
-
-      // Select friendly room mode
-      if (friendlyBtn) friendlyBtn.click();
-      const friendlySelectedMode = lobbyManager.duelLaunchMode;
-
-      // Select quick match mode
-      if (quickBtn) quickBtn.click();
-      const quickSelectedMode = lobbyManager.duelLaunchMode;
-
-      lobbyManager.hideConfirmModal();
+      const practiceBtn = document.getElementById('practiceBtn');
+      const quickMatchBtn = document.getElementById('quickMatchBtn');
+      const hostMatchBtn = document.getElementById('hostMatchBtn');
+      const joinOnlineBtn = document.getElementById('joinOnlineBtn');
 
       return {
-        hasLobbyManager: true,
-        modalVisible,
-        hasQuickBtn: !!quickBtn,
-        hasFriendlyBtn: !!friendlyBtn,
-        defaultMode,
-        friendlySelectedMode,
-        quickSelectedMode
+        hasLobbyCores,
+        isTacticalRail,
+        hasCoreConfirm,
+        hasPracticeBtn: !!practiceBtn,
+        hasQuickMatchBtn: !!quickMatchBtn,
+        hasHostMatchBtn: !!hostMatchBtn,
+        hasJoinOnlineBtn: !!joinOnlineBtn
       };
     });
 
-    console.log('Lobby Core Result:', lobbyCoreResult);
-    assert.strictEqual(lobbyCoreResult.hasLobbyManager, true, 'Lobby cores manager must be available');
-    assert.strictEqual(lobbyCoreResult.modalVisible, true, 'Confirm modal must display when duels core triggered');
-    assert.strictEqual(lobbyCoreResult.hasQuickBtn, true, 'Duels core confirmation must provide QUICK MATCH choice');
-    assert.strictEqual(lobbyCoreResult.hasFriendlyBtn, true, 'Duels core confirmation must provide FRIENDLY ROOM choice');
-    assert.strictEqual(lobbyCoreResult.defaultMode, 'quick', 'Default duel mode must be quick match');
-    assert.strictEqual(lobbyCoreResult.friendlySelectedMode, 'friendly', 'Clicking friendly button must select friendly mode');
-    assert.strictEqual(lobbyCoreResult.quickSelectedMode, 'quick', 'Clicking quick button must select quick mode');
-    console.log('>>> TEST 5 PASSED: 3D Lobby Energy Core supports decoupled quick match & friendly room choices!');
+    console.log('Tactical Rail Result:', tacticalRailResult);
+    assert.strictEqual(tacticalRailResult.hasLobbyCores, false, '3D lobby cores manager must be decommissioned');
+    assert.strictEqual(tacticalRailResult.isTacticalRail, true, 'Main menu must use .tactical-rail layout');
+    assert.strictEqual(tacticalRailResult.hasCoreConfirm, false, 'Core confirmation modal must not be active');
+    assert.strictEqual(tacticalRailResult.hasPracticeBtn, true, 'Tactical rail must provide #practiceBtn');
+    assert.strictEqual(tacticalRailResult.hasQuickMatchBtn, true, 'Tactical rail must provide #quickMatchBtn');
+    assert.strictEqual(tacticalRailResult.hasHostMatchBtn, true, 'Tactical rail must provide #hostMatchBtn');
+    assert.strictEqual(tacticalRailResult.hasJoinOnlineBtn, true, 'Tactical rail must provide #joinOnlineBtn');
+    console.log('>>> TEST 5 PASSED: Instantaneous mode launching verified on Tactical Rail with lobby cores decommissioned!');
 
     console.log('\n======================================================');
     console.log('ALL DECOUPLED MATCH ENTRY TESTS PASSED (100% SUCCESS) 🎉');

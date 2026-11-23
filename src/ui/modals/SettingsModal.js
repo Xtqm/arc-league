@@ -90,7 +90,6 @@ export class SettingsModal {
     const currentParticles = this.settings.get('particles', true);
     const currentTouchSens = Math.round(Number(this.settings.get('touchSensitivity', 1.0)) * 100);
     const currentMouseSens = Math.round(Number(this.settings.get('mouseSensitivity', 1.0)) * 100);
-    const currentCoreConfirm = Boolean(this.settings.get('coreLaunchConfirmation', true));
     const currentMenuParallax = Boolean(this.settings.get('menuParallax', true));
     const currentPerspective = String(this.settings.get('defaultCameraPerspective', 'third_person')).toLowerCase();
     const currentInertia = String(this.settings.get('touchInertia', 'smooth')).toLowerCase();
@@ -207,14 +206,6 @@ export class SettingsModal {
               <button class="btn perspective-btn ${currentPerspective === 'third_person' ? 'hot' : ''}" data-perspective="third_person" style="padding:4px 8px; font-size:10px; cursor:pointer;">3RD PERSON</button>
               <button class="btn perspective-btn ${currentPerspective === 'first_person' ? 'hot' : ''}" data-perspective="first_person" style="padding:4px 8px; font-size:10px; cursor:pointer;">1ST PERSON</button>
             </div>
-          </div>
-
-          <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; margin-bottom:12px;">
-            <div>
-              <span>LOBBY CORE CONFIRMATION</span>
-              <div style="font-size:9px; color:rgba(79,242,255,0.6); margin-top:2px;">PROMPT BEFORE LAUNCHING MODE</div>
-            </div>
-            <button id="toggleCoreConfirmBtn" class="btn" style="padding:4px 12px; font-size:11px; cursor:pointer;">${currentCoreConfirm ? 'ENABLED' : 'DISABLED'}</button>
           </div>
 
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; margin-bottom:12px;">
@@ -372,10 +363,6 @@ export class SettingsModal {
       if (mouseSensSlider) mouseSensSlider.value = ms;
       if (mouseSensReadout) mouseSensReadout.textContent = `${ms}%`;
 
-      if (coreConfirmBtn) {
-        coreConfirmBtn.textContent = this.settings.get('coreLaunchConfirmation', true) ? 'ENABLED' : 'DISABLED';
-      }
-
       const cp = String(this.settings.get('defaultCameraPerspective', 'third_person')).toLowerCase();
       perspectiveButtons.forEach((b) => {
         b.classList.toggle('hot', b.getAttribute('data-perspective') === cp);
@@ -434,15 +421,6 @@ export class SettingsModal {
         const val = Number(e.target.value);
         if (mouseSensReadout) mouseSensReadout.textContent = `${val}%`;
         this.settings.set('mouseSensitivity', val / 100);
-      };
-    }
-
-    const coreConfirmBtn = el.querySelector('#toggleCoreConfirmBtn');
-    if (coreConfirmBtn) {
-      coreConfirmBtn.onclick = () => {
-        const next = !this.settings.get('coreLaunchConfirmation', true);
-        this.settings.set('coreLaunchConfirmation', next);
-        coreConfirmBtn.textContent = next ? 'ENABLED' : 'DISABLED';
       };
     }
 

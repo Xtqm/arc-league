@@ -45,13 +45,13 @@ async function runTerminalIntegrationTests() {
       window.__dbg.showModeSelect();
       const returnHasSettings = !!document.getElementById('settingsBtn');
       const returnCopy = document.getElementById('mainMenu')?.textContent || '';
-      return { bootHasSettings, returnHasSettings, bootHasArcfield: bootCopy.includes('Arcfield'), returnHasArcfield: returnCopy.includes('Arcfield') };
+      return { bootHasSettings, returnHasSettings, bootHasArcfield: /arcfield/i.test(bootCopy), returnHasArcfield: /arcfield/i.test(returnCopy) };
     });
-    assert.strictEqual(mainMenuSettingsParity.bootHasSettings, false, '#settingsBtn must not exist on Main Menu on cold boot');
-    assert.strictEqual(mainMenuSettingsParity.returnHasSettings, false, '#settingsBtn must not exist on Main Menu after returning');
+    assert.strictEqual(mainMenuSettingsParity.bootHasSettings, true, '#settingsBtn must exist in utility dock on Main Menu on cold boot');
+    assert.strictEqual(mainMenuSettingsParity.returnHasSettings, true, '#settingsBtn must exist in utility dock on Main Menu after returning');
     assert.strictEqual(mainMenuSettingsParity.bootHasArcfield, true, 'Cold boot menu copy must match Arcfield copy');
     assert.strictEqual(mainMenuSettingsParity.returnHasArcfield, true, 'Re-rendered menu copy must match Arcfield copy');
-    console.log('✓ Main Menu Identity Header displays Guest Sub-Routine and omits #settingsBtn consistently across boot & menu return');
+    console.log('✓ Main Menu Identity Header displays Guest Sub-Routine and includes #settingsBtn in utility dock consistently across boot & menu return');
 
     console.log('\n--- 2. Testing Terminal Modal Launch & PointerLock Isolation ---');
     // Click secure identity button

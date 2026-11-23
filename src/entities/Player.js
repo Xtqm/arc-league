@@ -116,7 +116,7 @@ export function updatePlayer(dt) {
   const right = _playerRight.set(-fwd.z, 0, fwd.x);
   const wish = _playerWish.set(0, 0, 0);
 
-  if (state.countdownTimer <= 0) {
+  if (state.countdownTimer <= 0 && state.gameMode !== 'lobby') {
     if (state.keys.KeyW) wish.add(fwd);
     if (state.keys.KeyS) wish.sub(fwd);
     if (state.keys.KeyD) wish.add(right);
@@ -355,7 +355,7 @@ export function cancelChargingThrow() {
 }
 
 export function throwDisc(customCharge = null) {
-  if (state.countdownTimer > 0) return;
+  if (state.countdownTimer > 0 || state.gameMode === 'lobby') return;
   if (!state.player.hasDisc || !state.player.alive) return;
   state.player.hasDisc = false;
   if (state.player.obj && state.player.obj.userData && state.player.obj.userData.backDisc) {

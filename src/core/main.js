@@ -32,10 +32,10 @@ import { storageManager } from './storage/StorageManager.js';
 import { getAudioCtx } from '../audio/synth.js';
 import { tryLock } from '../input/mouse.js';
 import { calibrationMode } from '../modes/CalibrationMode.js';
-import { lobbyCoresManager } from '../ui/lobbyCores.js';
 import { dynamicDirector } from '../ai/DynamicDirector.js';
 import { armoryManager } from '../armory/ArmoryManager.js';
 import { economyManager } from './economy/EconomyManager.js';
+import { updateAmbientLobby } from '../graphics/ambientLobby.js';
 
 
 export const clock = new THREE.Clock();
@@ -245,7 +245,7 @@ export function update(dt) {
   updateFoes(dt);
   updateDiscs(dt);
   calibrationMode.update(dt);
-  lobbyCoresManager.update(dt);
+  updateAmbientLobby(dt);
   if (state.gameMode === 'swarm' && state.isHardcoreSurvival) {
     dynamicDirector.update(dt);
   }
@@ -457,7 +457,7 @@ if (typeof document !== 'undefined') {
 // Debug hooks for headless puppeteer test harness
 if (typeof window !== 'undefined') {
   window.__dbg = {
-  cores: () => lobbyCoresManager,
+  cores: () => null,
   calibration: () => calibrationMode,
   bootTerminal: () => document.getElementById('bootTerminal'),
   triggerBootClick: () => window.__tronTriggerBootClick && window.__tronTriggerBootClick(),

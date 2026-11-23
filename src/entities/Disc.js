@@ -334,9 +334,6 @@ export function updateDiscs(dt) {
     // Disc collision against characters
     let discCaught = false;
     if (D.owner === 'player') {
-      if (state.gameMode === 'lobby' && typeof window !== 'undefined' && window.__tronLobbyCores) {
-        window.__tronLobbyCores.checkDiscIntersection(D);
-      }
       for (const f of state.foes) {
         if (D.hitFoes && D.hitFoes.has(f)) continue;
         const fCenter = tmp.copy(f.pos).setY(1.5 + (f.y || 0));

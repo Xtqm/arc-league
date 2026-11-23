@@ -97,14 +97,21 @@ export function onDown(e) {
       e.preventDefault();
       return;
     }
+    if (e.key === '?' || (c === 'Slash' && e.shiftKey)) {
+      e.preventDefault();
+      if (typeof window !== 'undefined' && typeof window.__tronToggleDirectives === 'function') {
+        window.__tronToggleDirectives();
+      }
+      return;
+    }
     if (c === 'Escape') {
       e.preventDefault();
-      const coreModal = typeof document !== 'undefined' ? document.getElementById('coreConfirmModal') : null;
-      if (coreModal && coreModal.style && coreModal.style.display !== 'none') {
-        if (typeof window !== 'undefined' && window.__tronLobbyCores) {
-          window.__tronLobbyCores.cancelLaunch();
+      const directivesModalEl = typeof document !== 'undefined' ? document.getElementById('directivesModal') : null;
+      if (directivesModalEl && directivesModalEl.style && directivesModalEl.style.display !== 'none') {
+        if (typeof window !== 'undefined' && window.__tronCloseDirectives) {
+          window.__tronCloseDirectives();
         } else {
-          coreModal.style.display = 'none';
+          directivesModalEl.style.display = 'none';
         }
         return;
       }

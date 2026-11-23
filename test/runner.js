@@ -43,7 +43,8 @@ const TEST_DOMAINS = {
     'graphics/cinematic_pipeline.test.js',
     'graphics/settings_modal_interaction.test.js',
     'graphics/render_scale_benchmark.test.js',
-    'graphics/arena_floor_instancing.test.js'
+    'graphics/arena_floor_instancing.test.js',
+    'graphics/ambient_staging_lobby.test.js'
   ],
   network: [
     'network/webrtc_peer.test.js',
@@ -67,6 +68,8 @@ const TEST_DOMAINS = {
     'ui/achievements_modal.test.js'
   ],
   desktop: [
+    'ui/tactical_rail_menu.test.js',
+    'ui/directives_modal.test.js',
     'ui/update_notification.test.js',
     'desktop/desktop_auth_ipc.test.js',
     'desktop/preload_bridge.test.js'

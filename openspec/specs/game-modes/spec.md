@@ -103,52 +103,6 @@ The system SHALL render an interactive map selector in Duel, Practice, and Host 
 - **WHEN** a host creates an online `1v1` or `2v2` room from the Host Match modal, or starts Quick Match instead
 - **THEN** the hosted room persists and instantiates the selected arena map for room participants, while Quick Match tears down any previewed sector hazards so paired peers compete on the symmetric default arena
 
-### Requirement: Interactive Playable Arena Lobby
-The system SHALL operate a persistent 3D Parallax Holo-Deck lobby environment upon main menu activation, anchoring the player in a stationary first-person perspective with unlocked mouse parallax camera damping, while rendering an interactive holographic arc of Energy Cores for League Circuit, Survival, Online Duels, Armory Outfitting, and System Settings.
-
-#### Scenario: Entering the playable arena lobby
-- **WHEN** the player launches the application after initial calibration or returns to the menu from an active match
-- **THEN** the camera anchors at the central Holo-Deck terminal in first-person view, pointer lock is disengaged, and the mouse cursor is free to navigate both DOM controls and 3D holographic cores.
-
-#### Scenario: Striking an Energy Core with a kinetic disc
-- **WHEN** a player clicks or taps on an Energy Core in the Holo-Deck lobby
-- **THEN** the system launches an Identity Disc projectile from off-screen into the targeted core, locks further canvas click input during flight, and shatters the core into glowing neon voxel particles on impact.
-
-#### Scenario: Direct pointer interaction with Energy Cores
-- **WHEN** a player hovers or clicks directly on an Energy Core or its floating nameplate without locking the pointer
-- **THEN** the system triggers the kinetic disc throw sequence toward the targeted core.
-
-#### Scenario: Mouse parallax camera movement
-- **WHEN** the player moves the mouse cursor across the Holo-Deck lobby screen
-- **THEN** the camera smoothly parallaxes with exponentially damped tilt up to 8 degrees yaw and 5 degrees pitch without locking the pointer or triggering mouse look warps.
-
-#### Scenario: Suppressing 3D raycasting behind UI headers
-- **WHEN** the player clicks or hovers on the top identity header, settings gear icon, or an active modal overlay
-- **THEN** 3D core raycasting is suppressed and the underlying Energy Core is not targeted or activated.
-
-#### Scenario: Disabling locomotion inputs in the lobby
-- **WHEN** the player presses locomotion keys (W, A, S, D, Arrow keys, Spacebar) while in the Holo-Deck lobby
-- **THEN** locomotion movement is ignored and the player remains anchored at the Holo-Deck terminal.
-
-### Requirement: Energy Core Launch Confirmation
-The system SHALL present a holographic launch confirmation drawer when an Energy Core is activated if `coreLaunchConfirmation` is enabled, initiating immediate mode transition when `coreLaunchConfirmation` is disabled, and cinematically re-assembling the shattered Energy Core whenever launch is canceled or dismissed.
-
-#### Scenario: Launching mode with confirmation modal enabled
-- **WHEN** an Energy Core is shattered by a kinetic disc while `coreLaunchConfirmation` is enabled in system settings
-- **THEN** the mode drawer slides onto the screen displaying game mode details, confirm action, and cancel action, while releasing input debounce locks.
-
-#### Scenario: Launching mode with confirmation modal disabled
-- **WHEN** an Energy Core is shattered by a kinetic disc while `coreLaunchConfirmation` is disabled in system settings
-- **THEN** the system skips the confirmation drawer and immediately initiates the 3-second match countdown for the selected mode.
-
-#### Scenario: Canceling or dismissing mode launch
-- **WHEN** the player clicks Cancel or presses Escape while the mode confirmation drawer is displayed
-- **THEN** the drawer dismisses, a reverse-particle glitch re-assembly effect restores the shattered Energy Core to pristine condition, and lobby interaction resets to idle.
-
-#### Scenario: Debouncing rapid click input during launch flight
-- **WHEN** the player rapidly clicks multiple times or targets another core while a disc projectile is in flight
-- **THEN** secondary clicks are ignored until the current throw resolves into a drawer opening or match transition.
-
 ### Requirement: Survival Hardcore Mode and Dynamic Director
 The system SHALL provide an optional Survival: Hardcore mode unlocked after clearing Wave 10 in Standard Survival, initializing at baseline difficulty Level 5 and utilizing a Dynamic Director AI to actively counter player combat patterns.
 
@@ -165,16 +119,16 @@ The system SHALL provide an optional Survival: Hardcore mode unlocked after clea
 - **THEN** the Director elevates bot charged throw frequency to enforce guard crush attempts.
 
 ### Requirement: Decoupled Duel Entry Modalities
-The system SHALL provide distinct, non-conflated user entry paths for Solo AI Practice, automated Quick Match, and Friendly Custom Rooms, ensuring each mode initializes strictly within its own gameplay and networking lifecycle.
+The system SHALL provide distinct, non-conflated user entry paths for Solo AI Practice, automated Quick Match, and Friendly Custom Rooms on the Tactical Rail menu, ensuring each mode initializes strictly within its own gameplay and networking lifecycle.
 
 #### Scenario: Direct activation of Solo AI Practice from Main Menu
-- **WHEN** a player clicks the `PRACTICE (SOLO AI)` button (`#practiceBtn`) on the primary main menu
+- **WHEN** a player clicks the `PRACTICE (SOLO AI)` button (`#practiceBtn`) on the primary tactical rail menu
 - **THEN** the system immediately starts offline endless tiered bot combat (`duel_ai`) starting at Tier 1 (250 HP) without opening a multiplayer modal or initializing network signaling.
 
 #### Scenario: Direct activation of Quick Match from Main Menu
-- **WHEN** a player clicks the `QUICK MATCH` button (`#quickMatchBtn`) on the primary main menu
+- **WHEN** a player clicks the `QUICK MATCH` button (`#quickMatchBtn`) on the primary tactical rail menu
 - **THEN** the system immediately initiates automated matchmaking with the interactive warm-up sparring bot and active search HUD banner.
 
 #### Scenario: Activation of Friendly Room Host Modal
-- **WHEN** a player clicks the `HOST ARCFIELD MATCH` button (`#hostMatchBtn`) on the primary main menu
+- **WHEN** a player clicks the `HOST ARCFIELD MATCH` button (`#hostMatchBtn`) on the primary tactical rail menu
 - **THEN** the system opens `#hostModal` configured specifically for custom friendly room creation (arena sector and series length selection for 1v1 / 2v2 friend invites) without starting an automated matchmaking queue or spawning a warm-up bot.

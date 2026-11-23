@@ -122,10 +122,6 @@ export function initMouse(targetCanvas) {
         return;
       }
     }
-    if (state.gameMode === 'lobby' && typeof window !== 'undefined' && window.__tronLobbyCores) {
-      const hit = window.__tronLobbyCores.checkPointerIntersection(e.clientX, e.clientY, camera);
-      if (hit) return;
-    }
     if (state.gameMode !== 'lobby' && !state.isTouchDevice && state.running && !isLocked()) {
       tryLock();
     }

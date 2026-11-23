@@ -626,7 +626,7 @@ export function updateDiscs(dt) {
           playGamepadHaptics({ duration: 160, weakMagnitude: 0.6, strongMagnitude: 0.85 });
           state.score += 50;
           duelEconomyBridge.rewardParry();
-          if (state.gameMode === 'calibration' && typeof window !== 'undefined' && window.__tronCalibrationMode) {
+          if ((state.gameMode === 'calibration' || (state.gameMode === 'campaign' && state.campaignLevelId === 'level_01_01')) && typeof window !== 'undefined' && window.__tronCalibrationMode) {
             window.__tronCalibrationMode.onDiscDeflected();
           }
           D.originalOwner = (D.owner !== 'player') ? D.owner : (D.originalOwner || state.foes[0]);

@@ -203,7 +203,7 @@ export function onDown(e) {
   }
   if (c === 'KeyP' || c === 'Escape') {
     if (state.running) {
-      if (state.gameMode === 'calibration' && c === 'Escape') {
+      if (state.gameMode === 'calibration' && c === 'Escape' && !state.campaignLevelId) {
         e.preventDefault();
         if (typeof window !== 'undefined' && window.__tronBypassCalibration) {
           window.__tronBypassCalibration();

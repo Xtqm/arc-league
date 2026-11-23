@@ -90,7 +90,7 @@ export function handleGamepadInput(dt) {
 
   // Edge-triggered Pause (Options / Start Button 9)
   if (isButtonJustPressed(GAMEPAD_BUTTONS.START)) {
-    if (state.running && state.gameMode === 'calibration') {
+    if (state.running && state.gameMode === 'calibration' && !state.campaignLevelId) {
       calibrationMode.bypass();
       return;
     }
@@ -219,7 +219,7 @@ export function update(dt) {
           spawnDuelBoss(state.tier || state.duelTier || 1);
         } else if (state.gameMode === 'swarm') {
           spawnWave();
-        } else if (state.gameMode === 'calibration') {
+        } else if (state.gameMode === 'calibration' || (state.gameMode === 'campaign' && state.campaignLevelId === 'level_01_01')) {
           // Calibration mode manages its own drones
         }
       }

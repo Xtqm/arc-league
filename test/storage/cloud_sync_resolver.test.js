@@ -8,7 +8,9 @@ import {
   mergeCampaign,
   resolveLoadout,
   mergeTelemetry,
-  evaluateMonotonicInvariants
+  evaluateMonotonicInvariants,
+  saveStateToRow,
+  rowToSaveState
 } from '../../src/storage/CloudSyncResolver.js';
 
 console.log('--- Running CloudSyncResolver (Master Grid Protocol) Test Suite ---');
@@ -256,5 +258,45 @@ assert.strictEqual(mergedCal.calibration_completed, true, 'calibration_completed
 const uncal = CloudSyncResolver.resolve({ calibration_bypassed: false }, { calibration_bypassed: false });
 assert.strictEqual(uncal.calibration_bypassed, false);
 console.log('✓ Monotonic calibration_bypassed and calibration_completed resolution verified');
+
+// Test 9: Bidirectional serialization and round-trip restoration of calibration flags
+const stateWithFlags = {
+  userId: 'user_cal_test',
+  calibration_completed: true,
+  calibration_bypassed: false
+};
+const rowFromState = saveStateToRow(stateWithFlags);
+assert.strictEqual(rowFromState.calibration_completed, true, 'saveStateToRow must serialize calibration_completed');
+assert.strictEqual(rowFromState.calibration_bypassed, false, 'saveStateToRow must serialize calibration_bypassed');
+
+const restoredState = rowToSaveState(rowFromState);
+assert.strictEqual(restoredState.calibration_completed, true, 'rowToSaveState must restore calibration_completed');
+assert.strictEqual(restoredState.calibration_bypassed, false, 'rowToSaveState must restore calibration_bypassed');
+
+const stateBypassedOnly = {
+  userId: 'user_cal_bypass',
+  calibration_completed: false,
+  calibration_bypassed: true
+};
+const rowBypassed = saveStateToRow(stateBypassedOnly);
+assert.strictEqual(rowBypassed.calibration_completed, false);
+assert.strictEqual(rowBypassed.calibration_bypassed, true);
+
+const restoredBypassed = rowToSaveState(rowBypassed);
+assert.strictEqual(restoredBypassed.calibration_completed, false);
+assert.strictEqual(restoredBypassed.calibration_bypassed, true);
+
+const stateBothTrue = {
+  userId: 'user_cal_both',
+  calibration_completed: true,
+  calibration_bypassed: true
+};
+const rowBoth = saveStateToRow(stateBothTrue);
+assert.strictEqual(rowBoth.calibration_completed, true);
+assert.strictEqual(rowBoth.calibration_bypassed, true);
+const restoredBoth = rowToSaveState(rowBoth);
+assert.strictEqual(restoredBoth.calibration_completed, true);
+assert.strictEqual(restoredBoth.calibration_bypassed, true);
+console.log('✓ Bidirectional serialization and round-trip restoration of calibration flags verified');
 
 console.log('--- CloudSyncResolver Test Suite PASSED ---\n');

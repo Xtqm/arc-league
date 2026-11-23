@@ -10,6 +10,7 @@ import { rebuildArenaTiles } from '../entities/Arena.js';
 import { SFX, playDeRezSound } from '../audio/sfx.js';
 import { storageManager } from '../core/storage/StorageManager.js';
 import { economyManager } from '../economy/EconomyManager.js';
+import { campaignManager } from '../campaign/CampaignManager.js';
 
 export class CalibrationMode {
   constructor() {
@@ -20,6 +21,10 @@ export class CalibrationMode {
     this.beat3Spawned = false;
     this.slowMoTriggered = false;
     this._bypassEl = null;
+    this.isCampaign = false;
+    this.manager = null;
+    this.startTime = 0;
+    this.precisionHits = 0;
   }
 
   getBypassElement() {
@@ -39,8 +44,14 @@ export class CalibrationMode {
     }
   }
 
-  start() {
-    state.gameMode = 'calibration';
+  start(options = {}) {
+    this.isCampaign = Boolean(options && options.isCampaign);
+    this.manager = (options && options.manager) || null;
+    this.startTime = Date.now();
+    this.precisionHits = 0;
+    if (!this.isCampaign) {
+      state.gameMode = 'calibration';
+    }
     state.running = true;
     state.paused = false;
     state.timeScale = 1.0;
@@ -60,7 +71,7 @@ export class CalibrationMode {
     this.cleanupEntities();
     rebuildArenaTiles();
 
-    this.showBypassPrompt(true);
+    this.showBypassPrompt(!this.isCampaign);
     this.startBeat1();
   }
 
@@ -131,7 +142,7 @@ export class CalibrationMode {
   }
 
   update(dt) {
-    if (state.gameMode !== 'calibration' || this.beat === 0 || this.beat === 'completed') {
+    if ((state.gameMode !== 'calibration' && !(this.isCampaign && state.gameMode === 'campaign')) || this.beat === 0 || this.beat === 'completed') {
       return;
     }
 
@@ -166,6 +177,7 @@ export class CalibrationMode {
 
   onDiscDeflected() {
     if (this.beat === 2) {
+      this.precisionHits++;
       state.timeScale = 1.0;
       state.slowMoActive = false;
       message('DEFLECTION CONFIRMED!');
@@ -186,14 +198,15 @@ export class CalibrationMode {
     if (this.beat === 1) {
       SFX.accessGranted();
       setTimeout(() => {
-        if (state.gameMode === 'calibration') this.startBeat2();
+        if (state.gameMode === 'calibration' || (this.isCampaign && state.gameMode === 'campaign')) this.startBeat2();
       }, 500);
     } else if (this.beat === 2) {
       SFX.accessGranted();
       setTimeout(() => {
-        if (state.gameMode === 'calibration') this.startBeat3();
+        if (state.gameMode === 'calibration' || (this.isCampaign && state.gameMode === 'campaign')) this.startBeat3();
       }, 500);
     } else if (this.beat === 3) {
+      this.precisionHits++;
       SFX.accessGranted();
       this.complete();
     }
@@ -222,6 +235,56 @@ export class CalibrationMode {
     state.timeScale = 1.0;
     state.slowMoActive = false;
     this.showBypassPrompt(false);
+
+    // Mark calibration completed & bypassed in persistent storage
+    storageManager.set('calibration_completed', true, { immediate: true });
+    storageManager.set('calibration_bypassed', true, { immediate: true });
+
+    if (this.isCampaign) {
+      this.cleanupEntities();
+      state.running = false;
+      const elapsedSeconds = this.startTime ? Math.max(0.1, (Date.now() - this.startTime) / 1000) : 10;
+      const finalHp = state.player ? state.player.hp : 100;
+      const maxHp = (state.player && state.player.maxHp) ? state.player.maxHp : 100;
+      const telemetry = {
+        cleared: true,
+        elapsedSeconds,
+        finalHp,
+        maxHp,
+        precisionHits: this.precisionHits
+      };
+
+      const mgr = this.manager || (typeof window !== 'undefined' && window.__tronCampaignManager) || (typeof globalThis !== 'undefined' && globalThis.__tronCampaignManager) || campaignManager;
+      let outcome = null;
+      try {
+        outcome = mgr.completeTrial(telemetry);
+      } catch (err) {
+        console.error('[CalibrationMode] Error completing campaign trial:', err);
+      }
+
+      if (typeof document !== 'undefined' && document.pointerLockElement) {
+        try {
+          document.exitPointerLock();
+        } catch (_) {}
+      }
+
+      if (outcome) {
+        if (typeof window !== 'undefined' && typeof window.__tronShowTrialDebrief === 'function') {
+          window.__tronShowTrialDebrief(outcome);
+        } else if (typeof globalThis !== 'undefined' && typeof globalThis.__tronShowTrialDebrief === 'function') {
+          globalThis.__tronShowTrialDebrief(outcome);
+        } else if (typeof window !== 'undefined' && window.__tronTrialDebriefModal) {
+          window.__tronTrialDebriefModal.show(outcome);
+        } else if (typeof globalThis !== 'undefined' && globalThis.__tronTrialDebriefModal) {
+          globalThis.__tronTrialDebriefModal.show(outcome);
+        } else {
+          import('../ui/campaign/TrialDebriefModal.js').then(({ trialDebriefModal }) => {
+            if (trialDebriefModal) trialDebriefModal.show(outcome);
+          });
+        }
+      }
+      return outcome;
+    }
 
     // 1. Award 100 Arc Bits
     try {
@@ -271,10 +334,6 @@ export class CalibrationMode {
       console.warn('Calibration campaign award error:', e);
     }
 
-    // 3. Mark calibration completed in persistent storage
-    storageManager.set('calibration_completed', true, { immediate: true });
-    storageManager.set('calibration_bypassed', true, { immediate: true });
-
     message('CALIBRATION COMPLETE // 100 ARC BITS ACCRUED // GRID 01 STAR 1 SECURED');
     SFX.achievementFanfare();
 
@@ -295,6 +354,6 @@ export const calibrationMode = new CalibrationMode();
 const globalScope = typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null);
 if (globalScope) {
   globalScope.__tronCalibrationMode = calibrationMode;
-  globalScope.__tronStartCalibration = () => calibrationMode.start();
+  globalScope.__tronStartCalibration = (opts) => calibrationMode.start(opts);
   globalScope.__tronBypassCalibration = () => calibrationMode.bypass();
 }

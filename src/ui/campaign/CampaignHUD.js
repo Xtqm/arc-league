@@ -13,6 +13,16 @@ import { state, player } from '../../core/state.js';
 import { tryLock, focusGame, setCursor } from '../../input/InputManager.js';
 import { ARBITER_CONFIGS } from '../../ai/ArbiterBossController.js';
 
+function teardownSectorArena() {
+  if (typeof window !== 'undefined' && typeof window.__tronTeardownSectorArena === 'function') {
+    return window.__tronTeardownSectorArena();
+  }
+  if (typeof globalThis !== 'undefined' && typeof globalThis.__tronTeardownSectorArena === 'function') {
+    return globalThis.__tronTeardownSectorArena();
+  }
+  state.activeGridId = null;
+}
+
 export class CampaignHUD {
   /**
    * @param {object} [options]
@@ -248,8 +258,29 @@ export class CampaignHUD {
 
     if (levelId === 'level_01_01') {
       this.hideMissionBrief();
+
+      // Clean up lingering sector arena hazards and apply Grid 01
+      if (typeof window !== 'undefined' && typeof window.__tronTeardownSectorArena === 'function') {
+        window.__tronTeardownSectorArena();
+      } else if (typeof teardownSectorArena === 'function') {
+        teardownSectorArena();
+      }
+
+      if (typeof window !== 'undefined' && typeof window.__tronApplySectorArena === 'function') {
+        window.__tronApplySectorArena('grid_01');
+      } else if (typeof globalThis !== 'undefined' && typeof globalThis.__tronApplySectorArena === 'function') {
+        globalThis.__tronApplySectorArena('grid_01');
+      }
+
+      // Initialize active trial in CampaignManager
+      this.manager.startTrial('level_01_01');
+      state.gameMode = 'campaign';
+      state.campaignLevelId = 'level_01_01';
+      state.activeGridId = 'grid_01';
+
       tryLock();
       focusGame();
+
       const startCal = (typeof window !== 'undefined' && typeof window.__tronStartCalibration === 'function')
         ? window.__tronStartCalibration
         : (typeof globalThis !== 'undefined' && typeof globalThis.__tronStartCalibration === 'function')
@@ -257,10 +288,10 @@ export class CampaignHUD {
           : null;
 
       if (startCal) {
-        startCal();
+        startCal({ isCampaign: true, manager: this.manager });
       } else {
         import('../../modes/CalibrationMode.js').then(({ calibrationMode }) => {
-          calibrationMode.start();
+          calibrationMode.start({ isCampaign: true, manager: this.manager });
         });
       }
 

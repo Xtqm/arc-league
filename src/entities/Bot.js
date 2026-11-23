@@ -407,7 +407,7 @@ export function killFoe(f) {
     storageManager.set('stats.totalDerezzes', currentDerezzes + 1);
   } catch (_) {}
 
-  if (state.gameMode === 'calibration') {
+  if (state.gameMode === 'calibration' || (state.gameMode === 'campaign' && state.campaignLevelId === 'level_01_01')) {
     if (typeof window !== 'undefined' && window.__tronCalibrationMode) {
       window.__tronCalibrationMode.destroyTarget(f);
     }

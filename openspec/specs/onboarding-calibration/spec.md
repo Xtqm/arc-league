@@ -43,6 +43,10 @@ The system SHALL display an unobtrusive bypass action (`[ESC / START] BYPASS TO 
 - **WHEN** the player presses ESC, Gamepad Start, or taps the mobile bypass button during calibration
 - **THEN** the calibration session terminates cleanly, the system sets `calibration_bypassed: true` in persistent storage, and the player immediately transitions to the Playable 3D Arena Lobby.
 
+#### Scenario: Escape action contextualization during campaign trial execution
+- **WHEN** the player presses ESC during calibration while executing Grid 01 Stage 1 (`level_01_01`) from Campaign Mode
+- **THEN** the system invokes the campaign pause handler instead of triggering an immediate bypass to the lobby.
+
 ### Requirement: Calibration Completion Progression Award
 The system SHALL award Grid 01 Star 1 in campaign progression, credit 100 Arc Bits to the player's balance, set the persistent calibration completion flag, and transition to the Playable 3D Lobby upon Beat 3 completion.
 
@@ -55,8 +59,8 @@ The system SHALL support launching the 3-beat combat calibration gauntlet on-dem
 
 #### Scenario: Initiating calibration from Circuit League menu
 - **WHEN** a player selects Grid 01 Stage 1 (`level_01_01`, "Boot Diagnostic") in the Circuit League and launches the trial
-- **THEN** the system initializes the three-beat calibration arena starting at Beat 1 with full instructional prompts and bypass controls.
+- **THEN** the system resets active sector arena hazards, initializes the three-beat calibration arena starting at Beat 1, presents tactical objectives, and coordinates with CampaignManager.
 
 #### Scenario: Earning progression rewards from on-demand calibration
-- **WHEN** a player who previously bypassed initial calibration completes Beat 3 via the Circuit League stage
-- **THEN** the system sets `calibration_completed: true`, awards 100 Arc Bits, grants Grid 01 Star 1 in campaign storage, and returns the player to the lobby.
+- **WHEN** a player completes Beat 3 via the Circuit League stage
+- **THEN** the system sets `calibration_completed: true`, sets `calibration_bypassed: true`, delegates completion to `CampaignManager.completeTrial()`, evaluates 1 to 3 stars against defined thresholds, distributes differentiated payouts (100 Bits for first clear, 25 Bits for repeat clear), and renders the trial debrief modal.

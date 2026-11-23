@@ -365,3 +365,7 @@ export class TrialDebriefModal {
 }
 
 export const trialDebriefModal = new TrialDebriefModal();
+const globalScope = typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null);
+if (globalScope) {
+  globalScope.__tronTrialDebriefModal = trialDebriefModal;
+}

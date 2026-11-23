@@ -80,7 +80,7 @@ The system SHALL manage the active trial lifecycle across initiation, wave spawn
 
 #### Scenario: Launching Boot Diagnostic calibration trial
 - **WHEN** `startTrial('level_01_01')` completes countdown or is launched from the mission brief
-- **THEN** the system transitions into the continuous three-beat calibration gauntlet under CalibrationMode rather than standard random wave combat.
+- **THEN** the system tears down prior sector hazards, applies the Grid 01 sector arena theme, and transitions into the continuous three-beat calibration gauntlet under CalibrationMode rather than standard random wave combat.
 
 #### Scenario: Recording live gameplay metrics during a trial
 - **WHEN** combat events occur (damage taken, enemy de-rezzed, curve throw hit, ricochet hit) and are reported via `recordMetric(type, amount)`

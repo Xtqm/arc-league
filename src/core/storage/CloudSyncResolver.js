@@ -726,6 +726,8 @@ export function saveStateToRow(saveState) {
   return {
     user_id: normalized.userId,
     handle: normalized.handle,
+    calibration_completed: normalized.calibration_completed,
+    calibration_bypassed: normalized.calibration_bypassed,
     bits: normalized.bits,
     level: normalized.level,
     star_mastery: normalized.starMastery,

@@ -79,14 +79,27 @@ for (const handKey of ['leftHand', 'rightHand']) {
   assert.strictEqual(handJoint.userData.hasHumanoidFingers, true, `${handKey} must have humanoid fingers on player rig`);
   assert.ok(handJoint.userData.palmMesh, `${handKey} must possess palmMesh`);
   assert.strictEqual(handJoint.userData.palmMesh.userData.part, 'chassis_suit', 'Palm mesh must have chassis_suit part tag');
+  const palmEdge = handJoint.userData.palmMesh.children.find(c => c.userData.part === 'chassis_trim');
+  assert.ok(palmEdge, 'Palm mesh must contain chassis_trim edge lines');
+
   assert.strictEqual(handJoint.userData.thumbShards.length, 2, `${handKey} must have 2 thumb phalanges`);
-  assert.strictEqual(handJoint.userData.fingerShards.length, 8, `${handKey} must have 8 finger phalanges (4 digits x 2 segments)`);
+  assert.strictEqual(handJoint.userData.fingerShards.length, 12, `${handKey} must have 12 finger phalanges (4 digits x 3 segments)`);
 
   for (const thumbShard of handJoint.userData.thumbShards) {
     assert.strictEqual(thumbShard.userData.part, 'chassis_suit');
     const edgeChild = thumbShard.children.find(c => c.userData.part === 'chassis_trim');
     assert.ok(edgeChild, 'Thumb shard must contain chassis_trim edge lines');
   }
+
+  // Verify 3 distinct phalanges per digit
+  const expectedParts = [
+    'index_proximal', 'index_intermediate', 'index_distal',
+    'middle_proximal', 'middle_intermediate', 'middle_distal',
+    'ring_proximal', 'ring_intermediate', 'ring_distal',
+    'pinky_proximal', 'pinky_intermediate', 'pinky_distal'
+  ];
+  const actualParts = handJoint.userData.fingerShards.map(f => f.userData.handPart);
+  assert.deepStrictEqual(actualParts, expectedParts, `${handKey} must feature correct 3-segment anatomical phalanx tags`);
 
   for (const fingerShard of handJoint.userData.fingerShards) {
     assert.strictEqual(fingerShard.userData.part, 'chassis_suit');

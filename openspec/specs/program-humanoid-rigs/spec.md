@@ -7,7 +7,7 @@ Defines the hierarchical anatomical humanoid 3D rig, movie-authentic Tron: Legac
 ## Requirements
 
 ### Requirement: Hierarchical Anatomical Humanoid Rig
-The system SHALL construct character 3D construct rigs with an articulated parent-child joint hierarchy consisting of pelvis, abdomen, torso with glowing central core, invisible neck pivot, floating head, articulated shoulders, upper arms, forearms, hands, hips, thighs, shins, and tapered hover tips. On Player Athlete Rigs, hands SHALL be articulated 5-finger humanoid hands featuring a faceted palm chassis, an opposable thumb, and four segmented digits cupped to cradle the hover disc.
+The system SHALL construct character 3D construct rigs with an articulated parent-child joint hierarchy consisting of pelvis, abdomen, torso with glowing central core, invisible neck pivot, floating head, articulated shoulders, upper arms, forearms, hands, hips, thighs, shins, and tapered hover tips. On Player Athlete Rigs, hands SHALL be articulated 5-finger humanoid hands featuring a tapered trapezoidal palm, an opposable thumb, and long 3-segment digits with radial splay.
 
 #### Scenario: Rig hierarchy initialization
 - **WHEN** a character avatar is instantiated via `makeProgram`
@@ -15,7 +15,7 @@ The system SHALL construct character 3D construct rigs with an articulated paren
 
 #### Scenario: Player athlete humanoid hand articulation
 - **WHEN** a Player Athlete Rig (`archetype: 'player'`) is instantiated
-- **THEN** each hand construct contains a faceted palm chassis with five distinct articulated digits (an opposable thumb and four segmented fingers) posed in a relaxed, athletic cradle framing the wrist and palm zone.
+- **THEN** each hand construct contains a compact tapered trapezoidal palm chassis (`~0.044m` at wrist to `~0.072m` at knuckles) and five distinct articulated digits including an opposable thumb and four long, slender 3-segment fingers (proximal, intermediate, distal) with natural radial splay and an arched knuckle bridge framing the palm.
 
 #### Scenario: Part tag preservation for cosmetic engine compatibility
 - **WHEN** the construct rig is constructed

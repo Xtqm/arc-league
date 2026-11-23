@@ -118,6 +118,32 @@ function addFacetedShard(parent, geometry, suitMat, edgeMat, opts = {}) {
 }
 
 /**
+ * Creates a tapered box (trapezoidal prism) geometry.
+ * @param {number} topWidth Width at +Y (top)
+ * @param {number} bottomWidth Width at -Y (bottom)
+ * @param {number} height Total height along Y
+ * @param {number} topDepth Depth at +Y (top)
+ * @param {number} bottomDepth Depth at -Y (bottom)
+ */
+function createTrapezoidBoxGeometry(topWidth, bottomWidth, height, topDepth, bottomDepth) {
+  const geo = new THREE.BoxGeometry(1, 1, 1);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    const sx = Math.sign(pos.getX(i));
+    const sz = Math.sign(pos.getZ(i));
+    if (y > 0) {
+      pos.setXYZ(i, sx * topWidth * 0.5, height * 0.5, sz * topDepth * 0.5);
+    } else {
+      pos.setXYZ(i, sx * bottomWidth * 0.5, -height * 0.5, sz * bottomDepth * 0.5);
+    }
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/**
  * Builds shared detached construct limbs (shoulders, arms, hands, hips, knees, hover points).
  */
 function buildConstructLimbs(torso, pelvis, suit, lit, edgeMat, archetype, floatingShards) {
@@ -200,56 +226,92 @@ function buildConstructLimbs(torso, pelvis, suit, lit, edgeMat, archetype, float
 
     if (archetype === 'player') {
       // Articulated 5-finger humanoid hand for player athlete rig
-      // 1. Faceted Palm Chassis
-      const palmMesh = addFacetedShard(hand, new THREE.BoxGeometry(0.076, 0.075, 0.034), suit, edgeMat, {
-        pos: [0, -0.025, 0],
+      // 1. Faceted Palm Chassis (compact tapered trapezoidal prism)
+      // width: 0.044m at wrist base expanding to 0.072m at knuckle line, height: 0.048m, depth: 0.022m tapering to 0.015m
+      const palmGeo = createTrapezoidBoxGeometry(0.044, 0.072, 0.048, 0.022, 0.015);
+      const palmMesh = addFacetedShard(hand, palmGeo, suit, edgeMat, {
+        pos: [0, -0.024, 0],
         part: 'chassis_suit'
       });
       palmMesh.userData.handPart = 'palm';
 
-      // 2. Opposable Thumb (Proximal + Distal phalanges)
-      const thumbProx = addFacetedShard(hand, new THREE.BoxGeometry(0.018, 0.032, 0.018), suit, edgeMat, {
-        pos: [s * 0.038, -0.02, 0.012],
-        rot: [0.35, 0, -s * 0.55],
+      // 2. Opposable Thumb (lateral abduction ~45° (0.78 rad), forward elevation ~24° (0.42 rad))
+      const thumbProx = addFacetedShard(hand, new THREE.BoxGeometry(0.015, 0.034, 0.015), suit, edgeMat, {
+        pos: [s * 0.038, -0.018, 0.012],
+        rot: [0.42, 0, -s * 0.78],
         part: 'chassis_suit'
       });
       thumbProx.userData.handPart = 'thumb_proximal';
 
-      const thumbDist = addFacetedShard(hand, new THREE.BoxGeometry(0.016, 0.026, 0.016), suit, edgeMat, {
-        pos: [s * 0.052, -0.038, 0.022],
-        rot: [0.48, 0, -s * 0.65],
+      const thumbDist = addFacetedShard(hand, createTrapezoidBoxGeometry(0.013, 0.010, 0.026, 0.013, 0.010), suit, edgeMat, {
+        pos: [s * 0.052, -0.036, 0.022],
+        rot: [0.55, 0, -s * 0.88],
         part: 'chassis_suit'
       });
       thumbDist.userData.handPart = 'thumb_distal';
 
-      // 3. Four Segmented Digits (Index, Middle, Ring, Pinky)
+      // 3. Arched Knuckle Bridge & Four 3-Segment Articulated Slender Digits
+      // Middle: ~0.070m, Index: ~0.063m, Ring: ~0.066m, Pinky: ~0.053m
+      // Radial splay angles: Index: ~+22° (0.38 rad), Middle: ~+6° (0.10 rad), Ring: ~-14° (-0.24 rad), Pinky: ~-30° (-0.52 rad)
       const fingerDefs = [
-        { name: 'index',  xOffset: 0.024,  fanAngle: 0.08, scale: 0.92 },
-        { name: 'middle', xOffset: 0.008,  fanAngle: 0.00, scale: 1.00 },
-        { name: 'ring',   xOffset: -0.008, fanAngle: -0.06, scale: 0.90 },
-        { name: 'pinky',  xOffset: -0.024, fanAngle: -0.14, scale: 0.76 }
+        { name: 'index',  xOffset: 0.025,  yOffset: -0.048, zOffset: 0.002,  splay: 0.38,  scale: 0.90 },
+        { name: 'middle', xOffset: 0.008,  yOffset: -0.052, zOffset: 0.004,  splay: 0.10,  scale: 1.00 },
+        { name: 'ring',   xOffset: -0.008, yOffset: -0.050, zOffset: 0.001,  splay: -0.24, scale: 0.94 },
+        { name: 'pinky',  xOffset: -0.025, yOffset: -0.046, zOffset: -0.002, splay: -0.52, scale: 0.76 }
       ];
 
       const fingerShards = [];
       for (const f of fingerDefs) {
         const xBase = s * f.xOffset;
-        const pLen = 0.028 * f.scale;
-        const dLen = 0.024 * f.scale;
-        const width = 0.014 * f.scale;
+        const yKnuckle = f.yOffset;
+        const zKnuckle = f.zOffset;
+        const splaySin = Math.sin(f.splay);
 
-        // Proximal phalanx
-        const prox = addFacetedShard(hand, new THREE.BoxGeometry(width, pLen, width), suit, edgeMat, {
-          pos: [xBase, -0.066 - (pLen * 0.5), 0.006 + (0.004 * f.scale)],
-          rot: [0.22, 0, -s * f.fanAngle],
+        const pLen = 0.028 * f.scale;
+        const iLen = 0.023 * f.scale;
+        const dLen = 0.019 * f.scale;
+
+        const pWidth = 0.011 * f.scale;
+        const iWidth = 0.009 * f.scale;
+        const dWidth = 0.007 * f.scale;
+
+        // 1. Proximal phalanx (slight forward tilt ~0.14 rad)
+        const proxGeo = createTrapezoidBoxGeometry(pWidth, iWidth, pLen, pWidth, iWidth);
+        const prox = addFacetedShard(hand, proxGeo, suit, edgeMat, {
+          pos: [
+            xBase + s * splaySin * (pLen * 0.45),
+            yKnuckle - (pLen * 0.5),
+            zKnuckle + 0.005 + 0.003 * f.scale
+          ],
+          rot: [0.14, 0, -s * f.splay],
           part: 'chassis_suit'
         });
         prox.userData.handPart = `${f.name}_proximal`;
         fingerShards.push(prox);
 
-        // Distal phalanx (curled forward to naturally cradle hover-palm disc)
-        const dist = addFacetedShard(hand, new THREE.BoxGeometry(width * 0.88, dLen, width * 0.88), suit, edgeMat, {
-          pos: [xBase + s * (f.fanAngle * 0.02), -0.066 - pLen - (dLen * 0.45), 0.014 + (0.008 * f.scale)],
-          rot: [0.44, 0, -s * f.fanAngle],
+        // 2. Intermediate phalanx (curled forward ~0.26 rad)
+        const interGeo = createTrapezoidBoxGeometry(iWidth, dWidth, iLen, iWidth, dWidth);
+        const inter = addFacetedShard(hand, interGeo, suit, edgeMat, {
+          pos: [
+            xBase + s * splaySin * (pLen + iLen * 0.45),
+            yKnuckle - pLen - (iLen * 0.5),
+            zKnuckle + 0.013 + 0.005 * f.scale
+          ],
+          rot: [0.26, 0, -s * f.splay],
+          part: 'chassis_suit'
+        });
+        inter.userData.handPart = `${f.name}_intermediate`;
+        fingerShards.push(inter);
+
+        // 3. Distal phalanx (curled further forward ~0.38 rad, tapering to slender tip)
+        const distGeo = createTrapezoidBoxGeometry(dWidth, dWidth * 0.72, dLen, dWidth, dWidth * 0.72);
+        const dist = addFacetedShard(hand, distGeo, suit, edgeMat, {
+          pos: [
+            xBase + s * splaySin * (pLen + iLen + dLen * 0.45),
+            yKnuckle - pLen - iLen - (dLen * 0.5),
+            zKnuckle + 0.022 + 0.007 * f.scale
+          ],
+          rot: [0.38, 0, -s * f.splay],
           part: 'chassis_suit'
         });
         dist.userData.handPart = `${f.name}_distal`;

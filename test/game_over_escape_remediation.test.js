@@ -151,7 +151,7 @@ function resetState() {
   state.authModalOpen = false;
   state.armoryModalOpen = false;
   state.achievementsModalOpen = false;
-  state.lastPauseToggle = 0;
+  state.lastPauseToggle = -1000;
 
   for (const id in mockElements) {
     mockElements[id].style.display = 'none';

@@ -1,5 +1,45 @@
 import { state } from '../core/state.js';
 import { setLastInputDevice } from '../ui/hud.js';
+import { isLocked } from './mouse.js';
+
+export function isFullScreen() {
+  if (typeof window !== 'undefined' && typeof window.__tronIsFullScreen === 'function') {
+    return window.__tronIsFullScreen();
+  }
+  return typeof document !== 'undefined' && !!(
+    document.fullscreenElement ||
+    document.webkitFullscreenElement ||
+    document.webkitCurrentFullScreenElement ||
+    document.mozFullScreenElement ||
+    document.msFullscreenElement
+  );
+}
+
+export function exitFullScreen() {
+  if (typeof window !== 'undefined' && typeof window.__tronExitFullScreen === 'function') {
+    return window.__tronExitFullScreen();
+  }
+  if (typeof document !== 'undefined') {
+    try {
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    } catch (_) {}
+  }
+}
+
+function triggerPauseGame() {
+  if (typeof window !== 'undefined' && typeof window.__tronPauseGame === 'function') {
+    window.__tronPauseGame();
+  } else if (typeof document !== 'undefined' && document.exitPointerLock) {
+    document.exitPointerLock();
+  }
+}
+
+function triggerResumeGame() {
+  if (typeof window !== 'undefined' && typeof window.__tronResumeGame === 'function') {
+    window.__tronResumeGame();
+  }
+}
 
 export const EAT = ['Space','KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','KeyP','KeyT','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','F1'];
 
@@ -138,6 +178,11 @@ export function onDown(e) {
         return;
       }
 
+      if (isFullScreen()) {
+        exitFullScreen();
+        return;
+      }
+
       // Root lobby Escape handling: Electron shell exit confirmation vs browser inertness
       const isDesktop = typeof window !== 'undefined' && (
         !!window.electronDesktop?.isDesktop ||
@@ -208,30 +253,73 @@ export function onDown(e) {
       window.__arcMessage(state.slowMoActive ? 'CINEMATIC SLOW-MO: 0.2x' : 'NORMAL SPEED: 1.0x');
     }
   }
-  if (c === 'KeyP' || c === 'Escape') {
+  if (c === 'KeyP') {
     if (state.running) {
-      if (state.gameMode === 'calibration' && c === 'Escape' && !state.campaignLevelId) {
+      const now = performance.now();
+      if (now - state.lastPauseToggle > 180) {
+        state.lastPauseToggle = now;
+        if (state.gameMode !== 'duel_multi' && state.gameMode !== 'duos_multi') {
+          if (state.paused) {
+            triggerResumeGame();
+          } else {
+            triggerPauseGame();
+          }
+        }
+      }
+    }
+    return;
+  }
+
+  if (c === 'Escape') {
+    if (state.running) {
+      if (state.gameMode === 'calibration' && !state.campaignLevelId) {
         e.preventDefault();
         if (typeof window !== 'undefined' && window.__tronBypassCalibration) {
           window.__tronBypassCalibration();
         }
         return;
       }
-      const now = performance.now();
-      if (now - state.lastPauseToggle > 180) {
-        state.lastPauseToggle = now;
-        if (state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi') {
-          e.preventDefault();
-          if (typeof document !== 'undefined' && document.pointerLockElement) {
-            document.exitPointerLock();
-          }
+
+      const inFullscreen = isFullScreen();
+      const pointerLocked = typeof document !== 'undefined' && (!!document.pointerLockElement || isLocked());
+
+      if (inFullscreen) {
+        e.preventDefault();
+        if (state.paused || !pointerLocked) {
+          exitFullScreen();
+          return;
         } else {
-          if (state.paused) {
-            if (typeof window !== 'undefined' && window.__tronResumeGame) window.__tronResumeGame();
+          const now = performance.now();
+          if (now - state.lastPauseToggle > 180) {
+            state.lastPauseToggle = now;
+            if (state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi') {
+              if (typeof document !== 'undefined' && document.exitPointerLock) {
+                document.exitPointerLock();
+              }
+            } else {
+              triggerPauseGame();
+            }
+          }
+          return;
+        }
+      } else {
+        const now = performance.now();
+        if (now - state.lastPauseToggle > 180) {
+          state.lastPauseToggle = now;
+          if (state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi') {
+            e.preventDefault();
+            if (typeof document !== 'undefined' && document.pointerLockElement) {
+              document.exitPointerLock();
+            }
           } else {
-            if (typeof window !== 'undefined' && window.__tronPauseGame) window.__tronPauseGame();
+            if (state.paused) {
+              triggerResumeGame();
+            } else {
+              triggerPauseGame();
+            }
           }
         }
+        return;
       }
     }
   }

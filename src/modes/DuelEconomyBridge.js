@@ -49,7 +49,7 @@ export class DuelEconomyBridge {
     this.storage = options.storage || defaultStorageManager;
     this.floatingIndicatorFn = typeof options.floatingIndicatorFn === 'function'
       ? options.floatingIndicatorFn
-      : showFloatingNeonBits;
+      : (...args) => showFloatingNeonBits(...args);
     this._listeners = new Map();
   }
 

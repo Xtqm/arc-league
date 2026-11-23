@@ -71,6 +71,21 @@ export function resetHUDDirtyState() {
   _lastHazardActive = null;
 }
 
+export function setCombatHUDVisibility(visible) {
+  if (typeof document === 'undefined') return;
+  const ids = ['tr', 'bottomDock', 'reticle', 'crosshair', 'lockPrompt', 'lockstate', 'keymon'];
+  for (const id of ids) {
+    const element = getCachedElement(id);
+    if (element) {
+      element.style.display = visible ? '' : 'none';
+    }
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.__tronSetCombatHUDVisibility = setCombatHUDVisibility;
+}
+
 export function message(t) {
   const msg = msgEl || el('msg');
   if (!msg) return;
@@ -105,6 +120,10 @@ export function getOrCreateNetPingDisplay() {
 
 export function updateHUD() {
   if (typeof document === 'undefined') return;
+
+  if (state.gameMode === 'lobby') {
+    setCombatHUDVisibility(false);
+  }
 
   const hazardActive = !!(state.player && state.player.hazardActive && state.player.alive);
   if (hazardActive !== _lastHazardActive) {
@@ -519,8 +538,17 @@ export function updateArenaNameplates() {
 }
 
 export function updateCrosshair(aim, traj) {
-  const ch = getCachedElement('crosshair');
+  const ch = getCachedElement('crosshair') || getCachedElement('reticle');
   if (ch) {
+    if (state.gameMode === 'lobby') {
+      ch.style.display = 'none';
+    } else {
+      ch.style.display = '';
+    }
+    const reticleEl = getCachedElement('reticle');
+    if (reticleEl && reticleEl !== ch) {
+      reticleEl.style.display = state.gameMode === 'lobby' ? 'none' : '';
+    }
     const onFoe = !!aim.foe || !!(traj && traj.willHit);
     ch.classList.toggle('hot', onFoe);
     ch.classList.toggle('bank', !!(traj && traj.willHit && traj.bounces > 0));
@@ -583,19 +611,31 @@ export function updateCrosshair(aim, traj) {
 
 export function updateKeyMonitor() {
   const km = getCachedElement('keymon');
-  if (km && km.style.display === 'block') {
-    const on = k => state.keys[k] ? 'style="color:#fff;text-shadow:0 0 8px #fff"' : 'style="opacity:.3"';
-    km.innerHTML = `<b ${on('KeyW')}>W</b> <b ${on('KeyA')}>A</b> <b ${on('KeyS')}>S</b> <b ${on('KeyD')}>D</b>
-      <b ${on('KeyQ')}>Q</b> <b ${on('KeyE')}>E</b>
-      <b ${on('Space')}>SPACE</b> <b ${on('ShiftLeft')}>SHIFT</b><br>
-      curve ${getPlayerCurveIntent().toFixed(2)} · y ${player.y.toFixed(2)} · jumps ${player.jumps} · grounded ${player.grounded}<br>
-      pointerlock ${isLocked()} · focus ${document.hasFocus()}`;
+  if (km) {
+    if (state.gameMode === 'lobby') {
+      km.style.display = 'none';
+      return;
+    }
+    if (km.style.display === 'block') {
+      const on = k => state.keys[k] ? 'style="color:#fff;text-shadow:0 0 8px #fff"' : 'style="opacity:.3"';
+      km.innerHTML = `<b ${on('KeyW')}>W</b> <b ${on('KeyA')}>A</b> <b ${on('KeyS')}>S</b> <b ${on('KeyD')}>D</b>
+        <b ${on('KeyQ')}>Q</b> <b ${on('KeyE')}>E</b>
+        <b ${on('Space')}>SPACE</b> <b ${on('ShiftLeft')}>SHIFT</b><br>
+        curve ${getPlayerCurveIntent().toFixed(2)} · y ${player.y.toFixed(2)} · jumps ${player.jumps} · grounded ${player.grounded}<br>
+        pointerlock ${isLocked()} · focus ${document.hasFocus()}`;
+    }
   }
 }
 
 export function updateLockStateBanner() {
-  const lb = getCachedElement('lockstate');
-  if (lb) lb.style.display = (state.isTouchDevice || isLocked()) ? 'none' : 'block';
+  const lb = getCachedElement('lockstate') || getCachedElement('lockPrompt');
+  if (lb) {
+    if (state.gameMode === 'lobby') {
+      lb.style.display = 'none';
+      return;
+    }
+    lb.style.display = (state.isTouchDevice || isLocked()) ? 'none' : 'block';
+  }
 }
 
 export function updateOfflineBanner(isOnline, pendingCount = 0) {

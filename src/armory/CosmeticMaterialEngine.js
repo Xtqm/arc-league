@@ -224,6 +224,14 @@ export class CosmeticMaterialEngine {
         this.applyChassisSkin(this.playerObj, itemId);
       }
     }
+
+    if (typeof window !== 'undefined' && typeof window.__tronRefreshDioramaCosmetics === 'function') {
+      try {
+        window.__tronRefreshDioramaCosmetics();
+      } catch (err) {
+        console.warn('Failed to refresh diorama cosmetics on loadout change:', err);
+      }
+    }
   }
 
   /**

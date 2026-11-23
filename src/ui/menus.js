@@ -1,6 +1,6 @@
 import { state } from '../core/state.js';
 import { tryLock, focusGame, setCursor, resetTouchInputs } from '../input/InputManager.js';
-import { resetHintVisibility, clearArenaNameplates, clearSeriesIntermission, updateHUD } from './hud.js';
+import { resetHintVisibility, clearArenaNameplates, clearSeriesIntermission, updateHUD, setCombatHUDVisibility } from './hud.js';
 import { requestFullScreen, toggleFullScreen, isFullScreen, bindPauseAndModalEvents } from './modals.js';
 import { showJoinInputModal, onClickCreateRoom, onClickConfirmJoin, copyRoomCode, teardownMultiplayer, startMatchmakingWithWarmup } from '../network/roomManager.js';
 import { updateIdentityHeader, showAuthTerminal } from './authTerminal.js';
@@ -9,9 +9,12 @@ import { armoryModal } from './modals/ArmoryModal.js';
 import { achievementsModal } from './modals/AchievementsModal.js';
 import { settingsModal } from './modals/SettingsModal.js';
 import { directivesModal } from './modals/DirectivesModal.js';
-import { spawnStagingDisc, despawnStagingDisc, resetMatchCamera } from '../graphics/ambientLobby.js';
+import { spawnStagingDisc, despawnStagingDisc, spawnDiorama, despawnDiorama, refreshDioramaCosmetics, resetMatchCamera } from '../graphics/ambientLobby.js';
 import { updateSteamRichPresence, syncGameStateRichPresence } from '../core/steamTelemetry.js';
 import { storageManager } from '../core/storage/StorageManager.js';
+import { scene } from '../graphics/scene.js';
+import { disposeDiscEntity } from '../entities/Disc.js';
+import { disposeHierarchy } from '../armory/CosmeticMaterialEngine.js';
 
 // Setup Campaign UI navigation transitions
 gridSelectorModal.setOnSelectGrid((gridId) => levelSelectView.show(gridId));
@@ -53,8 +56,59 @@ function teardownSectorArena() {
   state.activeGridId = null;
 }
 
+export function teardownActiveMatch() {
+  if (Array.isArray(state.discs)) {
+    for (const d of state.discs) {
+      try {
+        disposeDiscEntity(d);
+      } catch (err) {
+        console.warn('Error disposing disc entity in teardownActiveMatch:', err);
+      }
+    }
+    state.discs.length = 0;
+  }
+
+  if (Array.isArray(state.foes)) {
+    for (const f of state.foes) {
+      try {
+        if (f && f.obj) {
+          if (typeof scene !== 'undefined' && scene) {
+            scene.remove(f.obj);
+          }
+          disposeHierarchy(f.obj);
+        }
+      } catch (err) {
+        console.warn('Error disposing foe entity in teardownActiveMatch:', err);
+      }
+    }
+    state.foes.length = 0;
+  }
+
+  state.spawnTimer = 0;
+  state.countdownTimer = 0;
+  state.timeScale = 1.0;
+  state.slowMoActive = false;
+
+  try {
+    rebuildArenaTiles();
+  } catch (err) {
+    console.warn('Error rebuilding arena tiles in teardownActiveMatch:', err);
+  }
+
+  try {
+    setCombatHUDVisibility(false);
+  } catch (err) {
+    console.warn('Error hiding combat HUD in teardownActiveMatch:', err);
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.__tronTeardownActiveMatch = teardownActiveMatch;
+}
+
 export function startMode(mode) {
-  despawnStagingDisc();
+  despawnDiorama();
+  setCombatHUDVisibility(true);
   state.gameMode = (mode === 'duel' || mode === 'duel_ai') ? 'duel_ai' : mode;
   if (state.gameMode === 'swarm') {
     teardownSectorArena();
@@ -101,6 +155,7 @@ export function startGame() {
 }
 
 export function showModeSelect() {
+  teardownActiveMatch();
   const pm = document.getElementById('pauseMenu');
   if (pm) pm.style.display = 'none';
   const hm = document.getElementById('hostModal');
@@ -211,6 +266,7 @@ export function deactivate3DLobbyView() {
 }
 
 export function showModeSelectMenu(options = {}) {
+  teardownActiveMatch();
   updateSteamRichPresence('In Main Menu');
   state.gameMode = 'lobby';
   state.running = true;
@@ -225,7 +281,8 @@ export function showModeSelectMenu(options = {}) {
   state.cameraPerspective = 'first_person';
   state.cameraPerspectiveBlend = 0.0;
   rebuildArenaTiles();
-  spawnStagingDisc();
+  refreshDioramaCosmetics();
+  spawnDiorama();
 
   const hm = document.getElementById('hostModal');
   if (hm) hm.style.display = 'none';

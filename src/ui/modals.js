@@ -29,6 +29,20 @@ export function requestFullScreen() {
     console.warn("Fullscreen request failed or was blocked:", err);
   }
 
+  // Request keyboard lock for Escape key to enable 2-tier Escape handling
+  if (typeof navigator !== 'undefined' && navigator.keyboard && typeof navigator.keyboard.lock === 'function') {
+    try {
+      const lockP = navigator.keyboard.lock(['Escape']);
+      if (lockP && typeof lockP.catch === 'function') {
+        lockP.catch(err => {
+          console.warn("Keyboard lock for Escape failed or was not allowed:", err);
+        });
+      }
+    } catch (err) {
+      console.warn("Keyboard lock for Escape failed:", err);
+    }
+  }
+
   try {
     if (typeof window !== 'undefined' && window.scrollTo) {
       window.scrollTo(0, 1);
@@ -37,6 +51,15 @@ export function requestFullScreen() {
 }
 
 export function exitFullScreen() {
+  // Release keyboard lock when exiting fullscreen
+  if (typeof navigator !== 'undefined' && navigator.keyboard && typeof navigator.keyboard.unlock === 'function') {
+    try {
+      navigator.keyboard.unlock();
+    } catch (err) {
+      console.warn("Keyboard unlock failed:", err);
+    }
+  }
+
   try {
     let p;
     if (document.exitFullscreen) {
@@ -160,6 +183,9 @@ export function restartMatch() {
 if (typeof window !== 'undefined') {
   window.__tronPauseGame = pauseGame;
   window.__tronResumeGame = resumeGame;
+  window.__tronRequestFullScreen = requestFullScreen;
+  window.__tronExitFullScreen = exitFullScreen;
+  window.__tronIsFullScreen = isFullScreen;
 }
 
 export function showGameOver(customTitle, customSubtitle) {
@@ -217,6 +243,9 @@ export function showGameOver(customTitle, customSubtitle) {
   if (rm) rm.onclick = (e) => {
     e.stopPropagation();
     if (state.player.obj) state.player.obj.visible = true;
+    if (typeof window !== 'undefined' && window.__tronTeardownActiveMatch) {
+      window.__tronTeardownActiveMatch();
+    }
     if (typeof window !== 'undefined' && window.__tronShowModeSelectMenu) {
       window.__tronShowModeSelectMenu();
     }
@@ -270,6 +299,9 @@ export const onRestartClick = (e) => {
 export const onModeSelectClick = (e) => {
   e.stopPropagation();
   if (e.cancelable) e.preventDefault();
+  if (typeof window !== 'undefined' && window.__tronTeardownActiveMatch) {
+    window.__tronTeardownActiveMatch();
+  }
   if (typeof window !== 'undefined' && window.__tronShowModeSelect) {
     window.__tronShowModeSelect();
   }

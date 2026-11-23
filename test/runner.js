@@ -44,7 +44,8 @@ const TEST_DOMAINS = {
     'graphics/settings_modal_interaction.test.js',
     'graphics/render_scale_benchmark.test.js',
     'graphics/arena_floor_instancing.test.js',
-    'graphics/ambient_staging_lobby.test.js'
+    'graphics/ambient_staging_lobby.test.js',
+    'ambient_character_diorama.test.js'
   ],
   network: [
     'network/webrtc_peer.test.js',

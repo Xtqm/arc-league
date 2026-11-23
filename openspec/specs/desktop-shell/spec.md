@@ -18,11 +18,19 @@ The system SHALL launch the game within a dedicated Electron native desktop wind
 - **THEN** command-line switches (`force_high_performance_gpu`) instruct the underlying Chromium engine to bind rendering to dedicated discrete graphics hardware.
 
 ### Requirement: Window Mode and Fullscreen Toggle
-The system SHALL support borderless fullscreen execution by default and provide hotkeys to toggle between fullscreen and windowed display modes.
+The system SHALL support borderless fullscreen execution, provide hotkeys to toggle display modes, and manage Escape key interactions such that pressing Escape during an active fullscreen match releases pointer lock and triggers the pause menu without exiting fullscreen, while pressing Escape when the cursor is already released exits fullscreen.
 
 #### Scenario: Fullscreen hotkey toggle
 - **WHEN** the player presses `Alt+Enter` or `F11`
 - **THEN** the application window toggles between borderless fullscreen and windowed mode while maintaining viewport scaling.
+
+#### Scenario: First Escape press in fullscreen combat releases cursor
+- **WHEN** the player presses Escape while in an active match with pointer lock engaged in fullscreen mode
+- **THEN** pointer lock is released, the pause menu opens, and the display remains in fullscreen mode.
+
+#### Scenario: Second Escape press exits fullscreen
+- **WHEN** the player presses Escape while the game is already in a paused or unlocked state in fullscreen mode
+- **THEN** the application exits fullscreen mode cleanly.
 
 ### Requirement: Browser Quirk and Shortcut Suppression
 The system SHALL suppress browser context menus, accidental page reload hotkeys, and HTML asset drag-and-drop interactions to ensure uninterrupted desktop gameplay, and SHALL intercept the Escape key at root lobby in the desktop shell to present a native application exit confirmation prompt.

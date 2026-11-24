@@ -277,8 +277,6 @@ export class CampaignHUD {
       state.gameMode = 'campaign';
       state.campaignLevelId = 'level_01_01';
       state.activeGridId = 'grid_01';
-      state.running = true;
-      state.paused = false;
 
       tryLock();
       focusGame();

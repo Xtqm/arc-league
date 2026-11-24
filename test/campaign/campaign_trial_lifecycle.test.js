@@ -141,6 +141,7 @@ console.log('\n[Test 5] Testing contextual Escape key handling...');
 // 5a: During Campaign level_01_01, ESC triggers pause, NOT lobby bypass
 hud.launchTrial('level_01_01');
 pauseCalled = false;
+state.lastPauseToggle = performance.now() - 1000;
 let bypassTriggered = false;
 window.__tronBypassCalibration = () => { bypassTriggered = true; };
 

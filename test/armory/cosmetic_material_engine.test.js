@@ -305,6 +305,7 @@ assert.strictEqual(preview.stagedType, 'disc');
 assert.strictEqual(preview.currentSkinId, 'disc_plasma_violet');
 assert.ok(preview.stagedMesh, 'Staged mesh must be present');
 assert.strictEqual(preview.pivot.children.includes(preview.stagedMesh), true);
+assert.strictEqual(preview.stagedMesh.userData.pointLight.intensity, 0.8, 'Preview turntable PointLight radiance must be calibrated to 0.8');
 
 // 7.2 Stage Chassis Skin (replaces disc and disposes prior)
 let prevDiscDisposed = false;
@@ -431,6 +432,7 @@ assert.strictEqual(oldPalmFaceDisposed, true, 'Prior palm face geometry must be 
 if (palmDisc.userData.hubMesh) {
   assert.strictEqual(oldPalmHubDisposed, true, 'Prior palm hub geometry must be disposed');
   assert.strictEqual('#' + palmDisc.userData.hubMesh.material.color.getHexString(), '#aa2200', 'Palm hub must match secondaryEmissiveHex');
+  assert.ok(palmDisc.userData.hubMesh.material.emissiveIntensity >= 1.5, 'Palm hub must have calibrated emissive');
 }
 
 // 8.4 Revert to legacy / circle shape
@@ -625,10 +627,10 @@ assert.strictEqual(stealthDisc.userData.outerMesh.material.metalness, 0.82, 'Air
 assert.strictEqual(stealthDisc.userData.faceMesh.material.color.getHexString(), '04080e', 'Face must be styled as a smoked dark lens (#04080e)');
 assert.strictEqual(stealthDisc.userData.faceMesh.material.transparent, true, 'Face must be translucent');
 
-// 3. Piercing White Concentric Induction Rotor Hub
-assert.strictEqual(stealthDisc.userData.hubMesh.material.color.getHexString(), 'ffffff', 'Induction core rotor must be tinted piercing white (#ffffff)');
-assert.strictEqual(stealthDisc.userData.hubMesh.material.emissive.getHexString(), 'ffffff', 'Induction core emissive must shine piercing white');
-assert.ok(stealthDisc.userData.hubMesh.material.emissiveIntensity >= 2.2, 'Induction core rotor must have HDR emissive boost');
+// 3. Piercing White Faceted Hardlight Energy Core Hub
+assert.strictEqual(stealthDisc.userData.hubMesh.material.color.getHexString(), 'ffffff', 'Energy core must be tinted piercing white (#ffffff)');
+assert.strictEqual(stealthDisc.userData.hubMesh.material.emissive.getHexString(), 'ffffff', 'Energy core emissive must shine piercing white');
+assert.ok(stealthDisc.userData.hubMesh.material.emissiveIntensity >= 1.5, 'Energy core must have calibrated emissive boost');
 
 // 4. White Telemetry Wireframe Overlay
 const stealthWf = stealthDisc.userData.wireframeOverlay;

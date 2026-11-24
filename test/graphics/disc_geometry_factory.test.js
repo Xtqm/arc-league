@@ -14,6 +14,7 @@ import {
   normalizeShapeName,
   getShape2DPoints,
   normalizeGeometryRadius,
+  getShapeInnerClearance,
   createOuterGeometry,
   createFaceGeometry,
   createHubGeometry,
@@ -152,11 +153,36 @@ for (const shape of SUPPORTED_DISC_SHAPES) {
   );
   assert.doesNotThrow(() => faceGeo.dispose(), `${shape} face geometry must dispose cleanly`);
 
-  // Hub Geometry
+  // Hub Geometry (Faceted hardlight crystal + micro-containment ring)
+  const clearance = getShapeInnerClearance(shape, targetRadius);
+  assert.ok(clearance > 0, `${shape} clearance must be positive`);
+  assert.ok(clearance < targetRadius, `${shape} clearance (${clearance}) must be less than outer radius (${targetRadius})`);
+
+  // Dynamic clearance sizing (default when no hubRadius passed)
+  const dynamicHubGeo = createHubGeometry(shape, { radius: targetRadius });
+  assert.ok(dynamicHubGeo instanceof THREE.BufferGeometry, `${shape} dynamic hub must be a BufferGeometry`);
+  assert.ok(dynamicHubGeo.attributes.position.count > 50, `${shape} dynamic hub must contain faceted crystal and containment ring vertices`);
+
+  const dynamicMaxR = getMaxXYRadius(dynamicHubGeo);
+  assert.ok(
+    dynamicMaxR <= clearance * 0.48 + 1e-4,
+    `${shape} dynamic hub max radius (${dynamicMaxR}) must be within clearance * 0.48 (${clearance * 0.48})`
+  );
+  assert.ok(
+    dynamicMaxR <= 0.12 + 1e-4,
+    `${shape} dynamic hub max radius (${dynamicMaxR}) must not exceed 0.12m cap`
+  );
+  assert.ok(
+    dynamicMaxR < clearance,
+    `${shape} dynamic hub must never overlap or touch inner boundary of outer hull`
+  );
+  assert.doesNotThrow(() => dynamicHubGeo.dispose(), `${shape} dynamic hub geometry must dispose cleanly`);
+
+  // Explicit hubRadius override support
   const hubRadius = 0.2;
   const hubGeo = createHubGeometry(shape, { radius: targetRadius, hubRadius });
   assert.ok(hubGeo instanceof THREE.BufferGeometry, `${shape} hub must be a BufferGeometry`);
-  assert.ok(hubGeo.attributes.position.count > 100, `${shape} hub must be an intricate concentric rotor (>100 vertices)`);
+  assert.ok(hubGeo.attributes.position.count > 50, `${shape} hub must contain crystal and containment ring vertices`);
 
   const hubMaxR = getMaxXYRadius(hubGeo);
   assert.ok(

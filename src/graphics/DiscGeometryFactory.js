@@ -217,9 +217,44 @@ export function createFaceGeometry(shape = DISC_SHAPES.CIRCLE, options = {}) {
 }
 
 /**
- * Creates central induction rotor hub geometry.
- * Constructs an intricate concentric induction rotor (stator collar, induction coil vents, and magnetic eye)
- * rather than echoing the outer polygon silhouette, maintaining normalizeGeometryRadius parity across all shapes.
+ * Computes minimum inner clearance radius for procedural disc shapes to guarantee
+ * floating clearance margin between central components and the outer hull.
+ * @param {string} [shape='circle']
+ * @param {number} [baseRadius=0.6]
+ * @returns {number} Minimum inner clearance radius
+ */
+export function getShapeInnerClearance(shape = DISC_SHAPES.CIRCLE, baseRadius = config.DISC_R || 0.6) {
+  const normShape = normalizeShapeName(shape);
+  const R = baseRadius > 0 ? baseRadius : (config.DISC_R || 0.6);
+
+  switch (normShape) {
+    case DISC_SHAPES.TRIANGLE:
+      return R * 0.68 * Math.sin(Math.PI / 6);
+
+    case DISC_SHAPES.SQUARE:
+      return R * 0.68 * Math.cos(Math.PI / 4);
+
+    case DISC_SHAPES.HEXAGON:
+      return R * 0.68 * Math.cos(Math.PI / 6);
+
+    case DISC_SHAPES.SHURIKEN_3:
+    case DISC_SHAPES.SHURIKEN_4: {
+      const notch = normShape === DISC_SHAPES.SHURIKEN_3 ? Math.PI / 6 : Math.PI / 4;
+      return R * 0.38 * Math.cos(notch);
+    }
+
+    case DISC_SHAPES.CIRCLE:
+    default: {
+      const tube = 0.085;
+      return Math.max(0.05, R - tube);
+    }
+  }
+}
+
+/**
+ * Creates central faceted hardlight energy crystal core framed by a micro-containment ring.
+ * Dynamically sizes the hub geometry to Math.min(0.12, clearance * 0.48) to guarantee
+ * floating clearance margin without touching or overlapping the outer hull across all shapes.
  * @param {string} [shape='circle']
  * @param {object} [options={}]
  * @returns {THREE.BufferGeometry}
@@ -227,60 +262,71 @@ export function createFaceGeometry(shape = DISC_SHAPES.CIRCLE, options = {}) {
 export function createHubGeometry(shape = DISC_SHAPES.CIRCLE, options = {}) {
   const normShape = normalizeShapeName(shape);
   const baseRadius = options.radius ?? (config.DISC_R || 0.6);
-  const hubRadius = options.hubRadius ?? Math.min(0.2, baseRadius * 0.35);
+  const clearance = getShapeInnerClearance(normShape, baseRadius);
+  const dynamicRadius = Math.min(0.12, clearance * 0.48);
+  const hubRadius = options.hubRadius ?? dynamicRadius;
 
-  const shapes = [];
+  // 1. Floating 3D faceted energy crystal (OctahedronGeometry), slightly flattened on Z-axis
+  const crystalRadius = hubRadius * 0.75;
+  const octGeo = new THREE.OctahedronGeometry(crystalRadius, 0);
+  octGeo.scale(1, 1, 0.65);
 
-  // 1. Stator collar (outer concentric structural ring)
-  const collarShape = new THREE.Shape();
-  collarShape.absarc(0, 0, hubRadius, 0, Math.PI * 2, false);
-  const collarHole = new THREE.Path();
-  collarHole.absarc(0, 0, hubRadius * 0.82, 0, Math.PI * 2, true);
-  collarShape.holes.push(collarHole);
-  shapes.push(collarShape);
+  // 2. Slender magnetic containment ring framing the crystal
+  const ringTube = Math.max(0.002, hubRadius * 0.08);
+  const ringR = Math.max(0.005, hubRadius - ringTube);
+  const ringGeo = new THREE.TorusGeometry(
+    ringR,
+    ringTube,
+    options.radialSegments ?? 8,
+    options.tubularSegments ?? 32
+  );
 
-  // 2. Central magnetic eye (inner magnetic core)
-  const eyeShape = new THREE.Shape();
-  eyeShape.absarc(0, 0, hubRadius * 0.42, 0, Math.PI * 2, false);
-  const eyeHole = new THREE.Path();
-  eyeHole.absarc(0, 0, hubRadius * 0.16, 0, Math.PI * 2, true);
-  eyeShape.holes.push(eyeHole);
-  shapes.push(eyeShape);
+  // Combine both into a single BufferGeometry
+  const nonIndexed = [
+    octGeo.index ? octGeo.toNonIndexed() : octGeo,
+    ringGeo.index ? ringGeo.toNonIndexed() : ringGeo
+  ];
 
-  // 3. Induction coil vents (radial inductive spokes with vent apertures)
-  const spokeCount = options.spokeCount ?? 6;
-  const rIn = hubRadius * 0.40;
-  const rOut = hubRadius * 0.84;
-  const halfArc = (Math.PI / spokeCount) * 0.52;
-
-  for (let i = 0; i < spokeCount; i++) {
-    const angle = (i * 2 * Math.PI) / spokeCount;
-    const a1 = angle - halfArc;
-    const a2 = angle + halfArc;
-    const spoke = new THREE.Shape();
-    spoke.absarc(0, 0, rOut, a1, a2, false);
-    spoke.lineTo(rIn * Math.cos(a2), rIn * Math.sin(a2));
-    spoke.absarc(0, 0, rIn, a2, a1, true);
-    spoke.lineTo(rOut * Math.cos(a1), rOut * Math.sin(a1));
-    shapes.push(spoke);
+  let totalVertices = 0;
+  for (const g of nonIndexed) {
+    totalVertices += g.attributes.position.count;
   }
 
-  const depth = options.depth ?? 0.024;
-  const bevelThickness = options.bevelThickness ?? 0.006;
-  const bevelSize = options.bevelSize ?? 0.006;
+  const positions = new Float32Array(totalVertices * 3);
+  const normals = new Float32Array(totalVertices * 3);
+  const uvs = new Float32Array(totalVertices * 2);
 
-  const geo = new THREE.ExtrudeGeometry(shapes, {
-    depth,
-    bevelEnabled: options.bevelEnabled !== false,
-    bevelThickness,
-    bevelSize,
-    bevelSegments: options.bevelSegments ?? 1,
-    curveSegments: options.curveSegments ?? 16
-  });
+  let offset = 0;
+  for (const g of nonIndexed) {
+    positions.set(g.attributes.position.array, offset * 3);
+    if (g.attributes.normal) {
+      normals.set(g.attributes.normal.array, offset * 3);
+    }
+    if (g.attributes.uv) {
+      uvs.set(g.attributes.uv.array, offset * 2);
+    }
+    offset += g.attributes.position.count;
+  }
 
-  geo.center();
-  normalizeGeometryRadius(geo, hubRadius);
-  return geo;
+  const merged = new THREE.BufferGeometry();
+  merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+  merged.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+
+  merged.center();
+  if (options.normalize !== false) {
+    normalizeGeometryRadius(merged, hubRadius);
+  } else {
+    merged.computeVertexNormals();
+  }
+
+  octGeo.dispose();
+  ringGeo.dispose();
+  for (const g of nonIndexed) {
+    if (g !== octGeo && g !== ringGeo) g.dispose();
+  }
+
+  return merged;
 }
 
 /**
@@ -324,6 +370,7 @@ export const DiscGeometryFactory = Object.freeze({
   normalizeShapeName,
   getShape2DPoints,
   normalizeGeometryRadius,
+  getShapeInnerClearance,
   createOuterGeometry,
   createFaceGeometry,
   createHubGeometry,

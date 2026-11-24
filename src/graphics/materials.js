@@ -119,7 +119,7 @@ export function makeDisc(color, options = {}) {
   const outerMat = new THREE.MeshStandardMaterial({
     color: baseColor.clone(),
     emissive: baseColor.clone(),
-    emissiveIntensity: 2.4,
+    emissiveIntensity: 1.3,
     roughness: 0.32,
     metalness: 0.82
   });
@@ -141,11 +141,11 @@ export function makeDisc(color, options = {}) {
   );
   face.userData.part = 'disc_face';
 
-  // Concentric induction rotor (magnetic tether induction core)
+  // Faceted hardlight energy core (faceted prism + containment halo)
   const hubMat = new THREE.MeshStandardMaterial({
     color: secondaryColor.clone(),
     emissive: secondaryColor.clone(),
-    emissiveIntensity: 2.2,
+    emissiveIntensity: 1.5,
     roughness: 0.2,
     metalness: 0.85
   });
@@ -764,6 +764,7 @@ export function makeProgram(color, options = {}) {
   const palmOuterMat = lit.clone();
   palmOuterMat.roughness = 0.32;
   palmOuterMat.metalness = 0.82;
+  palmOuterMat.emissiveIntensity = 1.3;
   const disc = new THREE.Mesh(createOuterGeometry(palmShape, { radius: palmDiscRadius, tube: 0.042 }), palmOuterMat);
   disc.position.set(0, -0.06, 0.18);
   disc.rotation.set(-0.04, 0, 0);
@@ -790,7 +791,7 @@ export function makeProgram(color, options = {}) {
     new THREE.MeshStandardMaterial({
       color: 0x0066ff,
       emissive: 0x0066ff,
-      emissiveIntensity: 2.2,
+      emissiveIntensity: 1.5,
       roughness: 0.2,
       metalness: 0.85
     })

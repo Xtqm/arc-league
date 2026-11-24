@@ -109,7 +109,11 @@ export class ArmoryPreviewScene {
         if (this._envHandle) {
           this.scene.environment = this._envHandle.texture;
         }
-        this.composer = new CinematicComposer(this.renderer, { enabled: settingsManager.get('bloom', true) });
+        this.composer = new CinematicComposer(this.renderer, {
+          enabled: settingsManager.get('bloom', true),
+          threshold: 1.15,
+          strength: 0.32
+        });
 
         if (this.container) {
           this.container.appendChild(this.renderer.domElement);
@@ -165,6 +169,11 @@ export class ArmoryPreviewScene {
 
     const disc = makeDisc(0x00f3ff);
     this.cosmetics.applyDiscSkin(disc, discSkinIdOrConfig);
+
+    // Calibrate internal PointLight radiance down from 2.4 to 0.8 to eliminate point-blank self-illumination glare
+    if (disc.userData?.pointLight) {
+      disc.userData.pointLight.intensity = 0.8;
+    }
 
     // Aesthetic showcase tilt for disc rotation
     disc.rotation.x = 0.55;

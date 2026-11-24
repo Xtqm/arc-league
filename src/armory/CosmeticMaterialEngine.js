@@ -313,7 +313,7 @@ export class CosmeticMaterialEngine {
       }
       if ('emissive' in discMesh.material && discMesh.material.emissive) {
         discMesh.material.emissive.copy(primaryColor);
-        discMesh.material.emissiveIntensity = 2.0 * (glowScale / 1.5);
+        discMesh.material.emissiveIntensity = 1.3 * (glowScale / 1.5);
       }
       discMesh.traverse((child) => {
         if (child !== discMesh && child.userData?.part === 'chassis_back_disc_face' && child.material) {
@@ -326,7 +326,7 @@ export class CosmeticMaterialEngine {
           if (child.material.color) child.material.color.copy(secondaryColor);
           if ('emissive' in child.material && child.material.emissive) {
             child.material.emissive.copy(secondaryColor);
-            child.material.emissiveIntensity = 2.2 * (glowScale / 1.5);
+            child.material.emissiveIntensity = 1.5 * (glowScale / 1.5);
           }
           if ('roughness' in child.material) child.material.roughness = 0.2;
           if ('metalness' in child.material) child.material.metalness = 0.85;
@@ -441,7 +441,7 @@ export class CosmeticMaterialEngine {
       outerMesh.material.metalness = 0.82;
       if ('emissive' in outerMesh.material && outerMesh.material.emissive) {
         outerMesh.material.emissive.copy(primaryColor);
-        outerMesh.material.emissiveIntensity = 2.4 * (glowScale / 1.5);
+        outerMesh.material.emissiveIntensity = 1.3 * (glowScale / 1.5);
       }
     }
 
@@ -454,12 +454,12 @@ export class CosmeticMaterialEngine {
       if ('metalness' in faceMesh.material) faceMesh.material.metalness = 0.9;
     }
 
-    // 3. Central hub color (concentric induction rotor with secondaryColor)
+    // 3. Central hub color (faceted hardlight energy core with secondaryColor)
     if (hubMesh && hubMesh.material && hubMesh.material.color) {
       hubMesh.material.color.copy(secondaryColor);
       if ('emissive' in hubMesh.material && hubMesh.material.emissive) {
         hubMesh.material.emissive.copy(secondaryColor);
-        hubMesh.material.emissiveIntensity = 2.2 * (glowScale / 1.5);
+        hubMesh.material.emissiveIntensity = 1.5 * (glowScale / 1.5);
       }
       if ('roughness' in hubMesh.material) hubMesh.material.roughness = 0.2;
       if ('metalness' in hubMesh.material) hubMesh.material.metalness = 0.85;

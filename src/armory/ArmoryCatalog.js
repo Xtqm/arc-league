@@ -189,15 +189,15 @@ export const ARMORY_CATALOG = Object.freeze({
       cost: 0,
       achievementId: null,
       shader: Object.freeze({
-        primaryHex: '#ff0000ff',
-        secondaryEmissiveHex: '#000000ff',
+        primaryHex: '#000000',
+        secondaryEmissiveHex: '#ffffff',
         trailOpacity: 0.7,
         wireframeToggle: true,
         glowIntensity: 2.1
       }),
       particles: Object.freeze({
         ricochetSparks: true,
-        sparkColorHex: '#ff0000',
+        sparkColorHex: '#ffffff',
         sparkCount: 20
       })
     })

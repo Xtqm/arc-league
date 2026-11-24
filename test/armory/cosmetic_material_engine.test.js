@@ -11,7 +11,8 @@ import {
   CosmeticMaterialEngine,
   cosmeticMaterialEngine,
   disposeHierarchy,
-  CHASSIS_PBR_PRESETS
+  CHASSIS_PBR_PRESETS,
+  parseCosmeticColor
 } from '../../src/armory/CosmeticMaterialEngine.js';
 import { ArmoryPreviewScene } from '../../src/armory/ArmoryPreviewScene.js';
 import { ArmoryManager, ArmoryEvents } from '../../src/armory/ArmoryManager.js';
@@ -138,6 +139,8 @@ const sampleDisc = makeDisc(0x00f3ff);
 engine.applyDiscSkin(sampleDisc, 'disc_plasma_violet');
 assert.strictEqual('#' + sampleDisc.userData.outerMesh.material.color.getHexString(), '#bd00ff');
 assert.strictEqual('#' + sampleDisc.userData.pointLight.color.getHexString(), '#bd00ff');
+assert.strictEqual('#' + sampleDisc.userData.hubMesh.material.color.getHexString(), '#7700ff', 'Hub must be tinted with secondaryEmissiveHex');
+assert.strictEqual('#' + sampleDisc.userData.faceMesh.material.color.getHexString(), '#04080e', 'Face must be styled as a smoked hardlight lens');
 assert.strictEqual(sampleDisc.userData.wireframeOverlay, undefined);
 
 // 3.2 Retro wireframe skin application (disc_corrupted_void)
@@ -175,6 +178,7 @@ assert.strictEqual('#' + sampleRig.userData.litMaterial.color.getHexString(), '#
 assert.strictEqual('#' + sampleRig.userData.litMaterial.emissive.getHexString(), '#ffea00');
 assert.ok(sampleRig.userData.litMaterial.emissiveIntensity > 2.2, 'Glowing chassis skin must scale HDR emissiveIntensity');
 assert.ok(sampleRig.userData.edgeMaterial, 'Construct rig must expose edgeMaterial for hairline trim tinting');
+assert.strictEqual('#' + sampleRig.userData.edgeMaterial.color.getHexString(), '#ff8800', 'Edge trim must match secondaryEmissiveHex');
 assert.strictEqual('#' + sampleRig.userData.halo.color.getHexString(), '#ffea00');
 
 // 4.2 Apply Infiltrator (matte stealth)
@@ -405,8 +409,12 @@ assert.strictEqual(palmDisc.userData.currentShape, 'circle');
 
 let oldPalmOuterDisposed = false;
 let oldPalmFaceDisposed = false;
+let oldPalmHubDisposed = false;
 palmDisc.geometry.dispose = () => { oldPalmOuterDisposed = true; };
 palmDisc.userData.faceMesh.geometry.dispose = () => { oldPalmFaceDisposed = true; };
+if (palmDisc.userData.hubMesh) {
+  palmDisc.userData.hubMesh.geometry.dispose = () => { oldPalmHubDisposed = true; };
+}
 
 engine.applyDiscSkin(palmDisc, {
   id: 'disc_test_shuriken_palm',
@@ -420,6 +428,10 @@ engine.applyDiscSkin(palmDisc, {
 assert.strictEqual(palmDisc.userData.currentShape, 'shuriken_4', 'Palm disc must mirror equipped shuriken_4 shape');
 assert.strictEqual(oldPalmOuterDisposed, true, 'Prior palm rim geometry must be disposed');
 assert.strictEqual(oldPalmFaceDisposed, true, 'Prior palm face geometry must be disposed');
+if (palmDisc.userData.hubMesh) {
+  assert.strictEqual(oldPalmHubDisposed, true, 'Prior palm hub geometry must be disposed');
+  assert.strictEqual('#' + palmDisc.userData.hubMesh.material.color.getHexString(), '#aa2200', 'Palm hub must match secondaryEmissiveHex');
+}
 
 // 8.4 Revert to legacy / circle shape
 let prevHexOuterDisposed = false;
@@ -541,6 +553,109 @@ assert.strictEqual(standardSparks.custom, false);
 assert.strictEqual(standardSparks.count, 10);
 
 console.log('✓ Group 9: Catalog ricochet particles, custom spark traits, and fallback behavior verified.');
+
+// =========================================================================
+// Test Group 10: Centralized Hex Sanitization & Normalization (parseCosmeticColor)
+// =========================================================================
+console.log('\n[Group 10] Testing parseCosmeticColor Hex Sanitization & Fallback Routing...');
+
+// 10.1 8-digit hex (#rrggbbaa) - alpha stripping, no default white
+const c8Black = parseCosmeticColor('#000000ff');
+assert.strictEqual(c8Black.getHexString(), '000000', '8-digit #000000ff must parse to black 000000, not white');
+const c8Red = parseCosmeticColor('#ff0055aa');
+assert.strictEqual(c8Red.getHexString(), 'ff0055', '8-digit #ff0055aa must strip alpha to ff0055');
+
+// 10.2 4-digit hex (#rgba) - expansion and alpha stripping
+const c4Black = parseCosmeticColor('#000f');
+assert.strictEqual(c4Black.getHexString(), '000000', '4-digit #000f must expand to 000000');
+const c4Cyan = parseCosmeticColor('#0f8a');
+assert.strictEqual(c4Cyan.getHexString(), '00ff88', '4-digit #0f8a must expand to 00ff88');
+
+// 10.3 6-digit hex (#rrggbb)
+const c6Cyan = parseCosmeticColor('#00f3ff');
+assert.strictEqual(c6Cyan.getHexString(), '00f3ff');
+const c6HexNumberStr = parseCosmeticColor('0x123456');
+assert.strictEqual(c6HexNumberStr.getHexString(), '123456');
+
+// 10.4 3-digit hex (#rgb)
+const c3Red = parseCosmeticColor('#f00');
+assert.strictEqual(c3Red.getHexString(), 'ff0000');
+const c3Cyan = parseCosmeticColor('#0f5');
+assert.strictEqual(c3Cyan.getHexString(), '00ff55');
+
+// 10.5 Number hex inputs
+const cNumCyan = parseCosmeticColor(0x00f3ff);
+assert.strictEqual(cNumCyan.getHex(), 0x00f3ff);
+const cNumBlack = parseCosmeticColor(0x000000);
+assert.strictEqual(cNumBlack.getHex(), 0x000000);
+const cNumInt = parseCosmeticColor(16711680); // 0xff0000
+assert.strictEqual(cNumInt.getHex(), 0xff0000);
+
+// 10.6 Invalid input strings & safe fallback (never defaulting to white)
+const cInvalidDefault = parseCosmeticColor('invalid-string');
+assert.strictEqual(cInvalidDefault.getHex(), 0x00f3ff, 'Invalid string must fallback to default cyan, not white');
+const cInvalidEmpty = parseCosmeticColor('');
+assert.strictEqual(cInvalidEmpty.getHex(), 0x00f3ff);
+const cInvalidNull = parseCosmeticColor(null);
+assert.strictEqual(cInvalidNull.getHex(), 0x00f3ff);
+const cInvalidUndefined = parseCosmeticColor(undefined);
+assert.strictEqual(cInvalidUndefined.getHex(), 0x00f3ff);
+const cCustomFallback = parseCosmeticColor('bad-color', '#ff0000');
+assert.strictEqual(cCustomFallback.getHex(), 0xff0000, 'Invalid string with custom fallback must use custom fallback');
+const cColorInstance = parseCosmeticColor(new THREE.Color(0x123456));
+assert.strictEqual(cColorInstance.getHex(), 0x123456);
+
+console.log('✓ Group 10: Centralized hex sanitization, alpha stripping, and safe fallbacks verified.');
+
+// =========================================================================
+// Test Group 11: Stealth Obsidian (#000000) & Piercing White (#ffffff) Validation
+// =========================================================================
+console.log('\n[Group 11] Testing Stealth Obsidian (#000000) & Piercing White (#ffffff) Validation...');
+
+const stealthDisc = makeDisc(0x00f3ff);
+engine.applyDiscSkin(stealthDisc, 'disc_custom_01');
+
+// 1. Stealth Obsidian Outer Airframe
+assert.strictEqual(stealthDisc.userData.outerMesh.material.color.getHexString(), '000000', 'Outer airframe must render as black obsidian (#000000), not white fallback');
+assert.strictEqual(stealthDisc.userData.outerMesh.material.emissive.getHexString(), '000000', 'Black disc airframe must have zero emissive glow bleed');
+assert.strictEqual(stealthDisc.userData.outerMesh.material.roughness, 0.32, 'Airframe must have tactile PBR roughness (0.32)');
+assert.strictEqual(stealthDisc.userData.outerMesh.material.metalness, 0.82, 'Airframe must have specular catchlight metalness (0.82)');
+
+// 2. Smoked Hardlight Stabilizer Face
+assert.strictEqual(stealthDisc.userData.faceMesh.material.color.getHexString(), '04080e', 'Face must be styled as a smoked dark lens (#04080e)');
+assert.strictEqual(stealthDisc.userData.faceMesh.material.transparent, true, 'Face must be translucent');
+
+// 3. Piercing White Concentric Induction Rotor Hub
+assert.strictEqual(stealthDisc.userData.hubMesh.material.color.getHexString(), 'ffffff', 'Induction core rotor must be tinted piercing white (#ffffff)');
+assert.strictEqual(stealthDisc.userData.hubMesh.material.emissive.getHexString(), 'ffffff', 'Induction core emissive must shine piercing white');
+assert.ok(stealthDisc.userData.hubMesh.material.emissiveIntensity >= 2.2, 'Induction core rotor must have HDR emissive boost');
+
+// 4. White Telemetry Wireframe Overlay
+const stealthWf = stealthDisc.userData.wireframeOverlay;
+assert.ok(stealthWf, 'Telemetry wireframe overlay must be active when wireframeToggle is true');
+assert.strictEqual(stealthWf.visible, true);
+assert.strictEqual(stealthWf.material.color.getHexString(), 'ffffff', 'Wireframe overlay must shine piercing white (#ffffff)');
+
+// 5. Palm Disc Synchronization on Athlete Rig
+const rigWithStealthDisc = makeProgram(0x00f3ff);
+engine.applyDiscSkin(rigWithStealthDisc.userData.backDisc, 'disc_custom_01');
+assert.strictEqual(rigWithStealthDisc.userData.backDisc.material.color.getHexString(), '000000', 'Palm disc airframe must synchronize to stealth obsidian');
+if (rigWithStealthDisc.userData.backDisc.userData.hubMesh) {
+  assert.strictEqual(rigWithStealthDisc.userData.backDisc.userData.hubMesh.material.color.getHexString(), 'ffffff', 'Palm disc rotor must synchronize to white induction core');
+}
+assert.strictEqual(rigWithStealthDisc.userData.backDisc.userData.wireframeOverlay?.material.color.getHexString(), 'ffffff', 'Palm disc wireframe must synchronize to white telemetry wireframe');
+
+// 6. Preview Bay Staging Verification
+const previewBay = new ArmoryPreviewScene();
+previewBay.previewDisc('disc_custom_01');
+const stagedMesh = previewBay.stagedMesh;
+assert.ok(stagedMesh, 'ArmoryPreviewScene must stage custom disc');
+assert.strictEqual(stagedMesh.userData.outerMesh.material.color.getHexString(), '000000', 'Preview bay outer mesh must render stealth obsidian');
+assert.strictEqual(stagedMesh.userData.hubMesh.material.color.getHexString(), 'ffffff', 'Preview bay hub must render piercing white induction rotor');
+assert.strictEqual(stagedMesh.userData.wireframeOverlay.material.color.getHexString(), 'ffffff', 'Preview bay wireframe must render white telemetry wireframe');
+previewBay.dispose();
+
+console.log('✓ Group 11: Stealth obsidian hull, piercing white induction core, and telemetry wireframe verified.');
 
 console.log('\n=================================================================');
 console.log('ALL COSMETIC MATERIAL ENGINE & PREVIEW SCENE TESTS PASSED (100% SUCCESS)');

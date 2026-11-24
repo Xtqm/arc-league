@@ -14,6 +14,85 @@ export const glowMat = new THREE.MeshBasicMaterial({ color: config.CYAN });
 export const tileMatIntact = new THREE.MeshStandardMaterial({ color: 0x07202c, roughness: .28, metalness: .8 });
 export const tileEdgeMatIntact = new THREE.LineBasicMaterial({ color: 0x187588, transparent: true, opacity: .75, depthWrite: false });
 
+/**
+ * Parses and sanitizes cosmetic hex colors into Three.js Color instances.
+ * Strips alpha channels (supporting 8-digit #rrggbbaa -> #rrggbb and 4-digit #rgba -> #rrggbb),
+ * handles 3-digit and 6-digit hexes, number hexes, and guarantees graceful fallback without defaulting to white.
+ * @param {string|number|THREE.Color} hex
+ * @param {string|number|THREE.Color} [fallback=0x00f3ff]
+ * @returns {THREE.Color}
+ */
+export function parseCosmeticColor(hex, fallback = 0x00f3ff) {
+  const resolveFallback = () => {
+    if (fallback instanceof THREE.Color) return fallback.clone();
+    if (typeof fallback === 'number' && !Number.isNaN(fallback)) {
+      return new THREE.Color(fallback);
+    }
+    if (typeof fallback === 'string') {
+      const s = fallback.trim();
+      let hp = s.startsWith('#') ? s.slice(1) : (s.startsWith('0x') || s.startsWith('0X') ? s.slice(2) : s);
+      if (/^[0-9a-fA-F]+$/.test(hp)) {
+        if (hp.length === 8) return new THREE.Color('#' + hp.slice(0, 6));
+        if (hp.length === 6) return new THREE.Color('#' + hp);
+        if (hp.length === 4) return new THREE.Color('#' + hp[0] + hp[0] + hp[1] + hp[1] + hp[2] + hp[2]);
+        if (hp.length === 3) return new THREE.Color('#' + hp[0] + hp[0] + hp[1] + hp[1] + hp[2] + hp[2]);
+      }
+    }
+    return new THREE.Color(0x00f3ff);
+  };
+
+  if (hex === null || hex === undefined) {
+    return resolveFallback();
+  }
+
+  if (hex instanceof THREE.Color) {
+    return hex.clone();
+  }
+
+  if (typeof hex === 'number' && !Number.isNaN(hex)) {
+    return new THREE.Color(hex);
+  }
+
+  if (typeof hex === 'string') {
+    const trimmed = hex.trim();
+    if (!trimmed) {
+      return resolveFallback();
+    }
+
+    let hexPart = trimmed;
+    if (hexPart.startsWith('#')) {
+      hexPart = hexPart.slice(1);
+    } else if (hexPart.startsWith('0x') || hexPart.startsWith('0X')) {
+      hexPart = hexPart.slice(2);
+    }
+
+    if (/^[0-9a-fA-F]+$/.test(hexPart)) {
+      if (hexPart.length === 8) {
+        return new THREE.Color('#' + hexPart.slice(0, 6));
+      }
+      if (hexPart.length === 6) {
+        return new THREE.Color('#' + hexPart);
+      }
+      if (hexPart.length === 4) {
+        const r = hexPart[0];
+        const g = hexPart[1];
+        const b = hexPart[2];
+        return new THREE.Color('#' + r + r + g + g + b + b);
+      }
+      if (hexPart.length === 3) {
+        const r = hexPart[0];
+        const g = hexPart[1];
+        const b = hexPart[2];
+        return new THREE.Color('#' + r + r + g + g + b + b);
+      }
+    }
+
+    return resolveFallback();
+  }
+
+  return resolveFallback();
+}
+
 export function discGeo(radius = config.DISC_R, tube = 0.085, shape = DISC_SHAPES.CIRCLE) {
   return createOuterGeometry(shape, { radius, tube });
 }
@@ -27,38 +106,57 @@ export function makeDisc(color, options = {}) {
   g.userData.part = 'disc_root';
   g.userData.currentShape = shape;
 
-  const baseColor = new THREE.Color(color);
+  const baseColor = parseCosmeticColor(color);
+  const secondaryColor = opts.secondaryColor
+    ? parseCosmeticColor(opts.secondaryColor, 0x0066ff)
+    : (opts.secondaryHex
+      ? parseCosmeticColor(opts.secondaryHex, 0x0066ff)
+      : (opts.secondaryEmissiveHex
+        ? parseCosmeticColor(opts.secondaryEmissiveHex, 0x0066ff)
+        : new THREE.Color(0x0066ff)));
+
+  // Tactile beveled composite PBR airframe (kinetic strike rim)
   const outerMat = new THREE.MeshStandardMaterial({
     color: baseColor.clone(),
     emissive: baseColor.clone(),
     emissiveIntensity: 2.4,
-    roughness: 0.16,
-    metalness: 0.1
+    roughness: 0.32,
+    metalness: 0.82
   });
   const outer = new THREE.Mesh(createOuterGeometry(shape, { radius, ...opts }), outerMat);
   outer.userData.part = 'disc_outer';
 
+  // Smoked hardlight stabilizer face
+  const faceMat = new THREE.MeshStandardMaterial({
+    color: 0x04080e,
+    opacity: 0.32,
+    transparent: true,
+    roughness: 0.1,
+    metalness: 0.9,
+    side: THREE.DoubleSide
+  });
   const face = new THREE.Mesh(
     createFaceGeometry(shape, { radius, ...opts }),
-    new THREE.MeshBasicMaterial({ color: baseColor.clone(), transparent: true, opacity: .24, side: THREE.DoubleSide })
+    faceMat
   );
   face.userData.part = 'disc_face';
 
-  const hubColor = new THREE.Color(config.WHITE);
+  // Concentric induction rotor (magnetic tether induction core)
+  const hubMat = new THREE.MeshStandardMaterial({
+    color: secondaryColor.clone(),
+    emissive: secondaryColor.clone(),
+    emissiveIntensity: 2.2,
+    roughness: 0.2,
+    metalness: 0.85
+  });
   const hub = new THREE.Mesh(
     createHubGeometry(shape, { radius, ...opts }),
-    new THREE.MeshStandardMaterial({
-      color: hubColor,
-      emissive: hubColor.clone(),
-      emissiveIntensity: 2.2,
-      roughness: 0.15,
-      metalness: 0.1
-    })
+    hubMat
   );
   hub.userData.part = 'disc_hub';
 
   g.add(outer, face, hub);
-  const light = new THREE.PointLight(color, 2.4, 10);
+  const light = new THREE.PointLight(baseColor.clone(), 2.4, 10);
   light.userData.part = 'disc_light';
   g.add(light);
   g.userData.outerMesh = outer;
@@ -408,7 +506,7 @@ export function makeProgram(color, options = {}) {
   g.userData.archetype = archetype;
   g.userData.helmetType = options.helmetType || archetype;
 
-  const baseColor = new THREE.Color(color);
+  const baseColor = parseCosmeticColor(color);
   const suitBaseHex = archetype === 'player' ? 0x1e2631 : 0x1a1e26;
   const trimBase = archetype === 'player'
     ? baseColor.clone().multiplyScalar(0.55)
@@ -663,7 +761,10 @@ export function makeProgram(color, options = {}) {
   // 8. Hover-Palm Telekinetic Kinetic Disc (parented to rightHand, floating above upturned open palm)
   const palmDiscRadius = config.DISC_R * 0.46;
   const palmShape = normalizeShapeName(options.discShape || DISC_SHAPES.CIRCLE);
-  const disc = new THREE.Mesh(createOuterGeometry(palmShape, { radius: palmDiscRadius, tube: 0.042 }), lit.clone());
+  const palmOuterMat = lit.clone();
+  palmOuterMat.roughness = 0.32;
+  palmOuterMat.metalness = 0.82;
+  const disc = new THREE.Mesh(createOuterGeometry(palmShape, { radius: palmDiscRadius, tube: 0.042 }), palmOuterMat);
   disc.position.set(0, -0.06, 0.18);
   disc.rotation.set(-0.04, 0, 0);
   disc.userData.part = 'chassis_back_disc';
@@ -671,10 +772,32 @@ export function makeProgram(color, options = {}) {
 
   const discFace = new THREE.Mesh(
     createFaceGeometry(palmShape, { radius: palmDiscRadius, margin: 0.035 }),
-    new THREE.MeshBasicMaterial({ color: baseColor.clone(), transparent: true, opacity: 0.28, side: THREE.DoubleSide })
+    new THREE.MeshStandardMaterial({
+      color: 0x04080e,
+      opacity: 0.32,
+      transparent: true,
+      roughness: 0.1,
+      metalness: 0.9,
+      side: THREE.DoubleSide
+    })
   );
   discFace.userData.part = 'chassis_back_disc_face';
   disc.add(discFace);
+  disc.userData.faceMesh = discFace;
+
+  const palmHub = new THREE.Mesh(
+    createHubGeometry(palmShape, { radius: palmDiscRadius }),
+    new THREE.MeshStandardMaterial({
+      color: 0x0066ff,
+      emissive: 0x0066ff,
+      emissiveIntensity: 2.2,
+      roughness: 0.2,
+      metalness: 0.85
+    })
+  );
+  palmHub.userData.part = 'chassis_back_disc_hub';
+  disc.add(palmHub);
+  disc.userData.hubMesh = palmHub;
   disc.userData.faceMesh = discFace;
 
   limbs.rightHand.add(disc);

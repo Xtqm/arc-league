@@ -229,7 +229,7 @@ mockPointerLockElement = document.createElement('canvas');
 state.running = true;
 state.paused = false;
 state.gameMode = 'swarm';
-state.lastPauseToggle = 0;
+state.lastPauseToggle = performance.now() - 1000;
 
 let exitFullscreenCalled = false;
 const origExitFs = document.exitFullscreen;

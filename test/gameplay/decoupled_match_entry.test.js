@@ -146,7 +146,7 @@ async function runDecoupledMatchEntryTests() {
     // TEST 4: Friendly Room Hosting -> Room Code without Warm-Up Bot
     // =============================================================
     console.log('\n--- TEST 4: Friendly Room Hosting -> Room Code Waiting Screen ---');
-    const hostResult = await page.evaluate(async () => {
+    const hostModalVisible = await page.evaluate(() => {
       window.__dbg.showModeSelect();
       const hostMatchBtn = document.getElementById('hostMatchBtn');
       hostMatchBtn.click();
@@ -156,9 +156,17 @@ async function runDecoupledMatchEntryTests() {
       const host1v1Btn = document.getElementById('host1v1Btn');
 
       if (host1v1Btn) host1v1Btn.click();
+      return hostModalVisible;
+    });
 
-      await new Promise(r => setTimeout(r, 150));
+    await page.waitForFunction(() => {
+      const roomModal = document.getElementById('roomModal');
+      const roomCodeEl = document.getElementById('roomCodeDisplay');
+      const roomCode = roomCodeEl ? roomCodeEl.textContent.trim() : '';
+      return roomModal?.style.display === 'flex' && /^[A-Z0-9]{4}$/.test(roomCode);
+    }, { timeout: 5000 });
 
+    const hostResult = await page.evaluate((hostModalVisible) => {
       const roomModal = document.getElementById('roomModal');
       const roomCodeEl = document.getElementById('roomCodeDisplay');
       const roomCode = roomCodeEl ? roomCodeEl.textContent.trim() : '';
@@ -176,7 +184,7 @@ async function runDecoupledMatchEntryTests() {
         queueHudExists: !!queueHUD && queueHUD.style.display !== 'none',
         mode
       };
-    });
+    }, hostModalVisible);
 
     console.log('Host Result:', hostResult);
     assert.strictEqual(hostResult.hostModalVisible, true, 'Host modal must open when clicking #hostMatchBtn');

@@ -21,11 +21,11 @@ The system SHALL maintain a structured catalog registry indexing cosmetic items 
 - **THEN** the system returns the corresponding catalog item definition or null if not found.
 
 ### Requirement: Shader and Visual Parameter Specification
-The system SHALL define structured visual rendering parameters for all cosmetic items, including primary color, secondary emissive color, trail opacity, and wireframe toggle.
+The system SHALL define structured visual rendering parameters for all cosmetic items, including primary color, secondary emissive color, trail opacity, and wireframe toggle, enforcing sanitized 6-digit hexadecimal format (`#rrggbb`).
 
 #### Scenario: Retrieving visual parameters for rendering
 - **WHEN** a graphics pipeline reads an item's visual properties
-- **THEN** the item definition provides primaryHex, secondaryEmissiveHex, trailOpacity, and wireframeToggle.
+- **THEN** the item definition provides normalized primaryHex, secondaryEmissiveHex, trailOpacity, and wireframeToggle.
 
 #### Scenario: Free baseline cosmetics configuration
 - **WHEN** default baseline items (`disc_default`, `chassis_default`, `arena_grid_01`) are queried
@@ -96,15 +96,15 @@ The system SHALL manage active equipped items across all loadout categories, enf
 - **THEN** the system returns the current equipped item identifiers for disc skins, chassis skins, active map, and disc type.
 
 ### Requirement: Dynamic Identity Disc Cosmetic Material Application
-The system SHALL apply active disc skin cosmetic configurations to the player's 3D Identity Disc mesh instances, updating the outer rim emissive color, core ring glow intensity, internal face translucency, attached PointLight radiance, and optional retro wireframe overlay.
+The system SHALL apply active disc skin cosmetic configurations to the player's 3D Kinetic Disc mesh instances according to the Arc League ballistic implement architecture: rendering the structural airframe with tactile composite PBR properties, channeling primary color into the energized kinetic strike rim, driving secondary emissive color into the magnetic induction tether rotor, and displaying a smoked hardlight stabilizer face.
 
 #### Scenario: Applying standard emissive disc skin
 - **WHEN** an equipped disc skin without wireframe is applied to an Identity Disc mesh
-- **THEN** the outer rim material color matches `shader.primaryHex`, the PointLight color matches `shader.primaryHex`, the core ring glow intensity scales by `shader.glowIntensity`, and any wireframe overlay mesh is hidden or removed.
+- **THEN** the outer airframe displays dark beveled composite PBR material properties, the strike rim channel reflects `shader.primaryHex`, the PointLight radiance matches `shader.primaryHex`, the magnetic induction core rotor is tinted by `shader.secondaryEmissiveHex`, the face displays a smoked hardlight lens, and any wireframe overlay mesh is hidden or removed.
 
 #### Scenario: Applying wireframe overlay disc skin
 - **WHEN** an equipped disc skin with `wireframeToggle: true` (e.g. `disc_corrupted_void`) is applied
-- **THEN** the system attaches or activates an accented wireframe overlay mesh on the disc geometry with secondary emissive coloration while preserving the core ring glow.
+- **THEN** the system attaches or activates an accented vector telemetry wireframe overlay on the disc geometry styled with secondary emissive coloration while preserving the kinetic strike rim and induction core.
 
 #### Scenario: Dynamic skin swap on loadout changed event
 - **WHEN** `ArmoryManager` emits a `LOADOUT_CHANGED` event for category `discSkins`
@@ -122,15 +122,15 @@ The system SHALL configure continuous additive projectile flight ribbon meshes a
 - **THEN** the disc retains its owner's cosmetic skin and continuous ribbon color interpolation until caught or deflected by an opponent.
 
 ### Requirement: Dynamic Program Chassis Material Configuration
-The system SHALL apply equipped chassis skin configurations to the player construct 3D rig, adjusting faceted armor plating PBR properties (roughness, metalness, diffuse tone) and updating HDR emissive colors across the chest core, tilted halo, visor slit, hairline plate edge trims, hover tips, and Hover-Palm disc.
+The system SHALL apply equipped chassis skin configurations to the player construct 3D rig, adjusting faceted armor plating PBR properties (roughness, metalness, diffuse tone) and updating HDR emissive colors across the chest core, tilted halo, visor slit, hairline plate edge trims, hover tips, and Hover-Palm disc using sanitized color values.
 
 #### Scenario: Applying chassis skin to player rig
 - **WHEN** an equipped chassis skin is applied to the player construct model
-- **THEN** the faceted armor plate standard materials receive the skin's roughness, metalness, and tint values while HDR emissives (core, tilted halo, edge trim, hover tips) update to `shader.primaryHex`, `shader.secondaryEmissiveHex`, and scaled `glowIntensity`.
+- **THEN** the faceted armor plate standard materials receive the skin's roughness, metalness, and tint values while HDR emissives (core, tilted halo, edge trim, hover tips) update to sanitized `shader.primaryHex`, `shader.secondaryEmissiveHex`, and scaled `glowIntensity`.
 
 #### Scenario: Synchronizing back-mounted disc with equipped disc skin
 - **WHEN** player construct materials are updated or initialized
-- **THEN** the Hover-Palm held disc mesh floating above the player's right palm synchronizes its visual colors with the active equipped disc skin.
+- **THEN** the Hover-Palm held disc mesh floating above the player's right palm synchronizes its visual colors and ballistic implement architecture with the active equipped disc skin.
 
 ### Requirement: Memory-Safe WebGL Resource Disposal and Uniform Mutation
 The system SHALL mutate Three.js Color instances, scalar uniforms, and opacity properties in-place where materials persist, and SHALL explicitly call `.dispose()` on transient materials, geometries, and textures when items are swapped or discarded.
@@ -340,3 +340,18 @@ The system SHALL trigger customized particle bursts upon disc impact when specif
 #### Scenario: Ricochet impact without custom particle configuration
 - **WHEN** a disc skin without particle overrides strikes a surface
 - **THEN** the system executes the default arena impact particle effect without error.
+
+### Requirement: Centralized Hex Color Normalization and Sanitization
+The system SHALL validate and normalize all hex color strings across cosmetic definitions, stripping alpha channels (converting `#rrggbbaa` to `#rrggbb` and `#rgba` to `#rrggbb`) and returning valid Three.js Color objects with explicit fallbacks rather than defaulting invalid inputs to white.
+
+#### Scenario: Sanitizing 8-digit RGBA hex string
+- **WHEN** a cosmetic definition provides an 8-digit hex string with alpha (such as `#000000ff` or `#ff0000ff`)
+- **THEN** the sanitizer extracts the 6-digit RGB component (`#000000` or `#ff0000`) and constructs a valid Three.js Color instance without throwing or logging invalid color warnings.
+
+#### Scenario: Sanitizing 4-digit RGBA hex string
+- **WHEN** a cosmetic definition provides a 4-digit hex string with alpha (such as `#000f`)
+- **THEN** the sanitizer expands and normalizes the string to standard 6-digit `#rrggbb` representation.
+
+#### Scenario: Handling invalid color inputs gracefully
+- **WHEN** an unparseable or malformed color string is supplied to the cosmetic pipeline
+- **THEN** the system applies a safe designated fallback color rather than defaulting to pure white.

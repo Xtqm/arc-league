@@ -13,7 +13,8 @@ import {
   armoryManager as defaultArmoryManager
 } from '../../armory/ArmoryManager.js';
 import {
-  cosmeticMaterialEngine as defaultCosmeticEngine
+  cosmeticMaterialEngine as defaultCosmeticEngine,
+  parseCosmeticColor
 } from '../../armory/CosmeticMaterialEngine.js';
 import { ArmoryPreviewScene } from '../../armory/ArmoryPreviewScene.js';
 import { state } from '../../core/state.js';
@@ -78,13 +79,17 @@ export function getDefaultConfig(category) {
 
 /**
  * Formats a studio cosmetic configuration into an immutable, schema-compliant JavaScript definition
- * matching src/armory/ArmoryCatalog.js.
+ * matching src/armory/ArmoryCatalog.js, enforcing sanitized 6-digit hexadecimal format (#rrggbb).
  * @param {object} config
  * @returns {string}
  */
 export function formatCatalogCode(config) {
   const isChassis = config.category === ARMORY_CATEGORIES.CHASSIS_SKINS;
   const shader = config.shader || {};
+
+  const toHex6 = (val, fallback) => '#' + parseCosmeticColor(val, fallback).getHexString();
+  const primaryHex = toHex6(shader.primaryHex, '#00f3ff');
+  const secondaryEmissiveHex = toHex6(shader.secondaryEmissiveHex, '#0066ff');
 
   const lines = [
     `    Object.freeze({`,
@@ -103,15 +108,16 @@ export function formatCatalogCode(config) {
     `      cost: ${typeof config.cost === 'number' ? config.cost : 0},`,
     `      achievementId: ${config.achievementId ? `'${config.achievementId}'` : 'null'},`,
     `      shader: Object.freeze({`,
-    `        primaryHex: '${shader.primaryHex || '#00f3ff'}',`,
-    `        secondaryEmissiveHex: '${shader.secondaryEmissiveHex || '#0066ff'}',`,
+    `        primaryHex: '${primaryHex}',`,
+    `        secondaryEmissiveHex: '${secondaryEmissiveHex}',`,
     `        trailOpacity: ${typeof shader.trailOpacity === 'number' ? shader.trailOpacity : 0.85},`,
     `        wireframeToggle: ${Boolean(shader.wireframeToggle)},`,
     `        glowIntensity: ${typeof shader.glowIntensity === 'number' ? shader.glowIntensity : 1.5}${isChassis ? ',' : ''}`
   );
 
   if (isChassis) {
-    lines.push(`        suitHex: '${shader.suitHex || '#1e2631'}',`);
+    const suitHex = toHex6(shader.suitHex, '#1e2631');
+    lines.push(`        suitHex: '${suitHex}',`);
     lines.push(`        roughness: ${typeof shader.roughness === 'number' ? shader.roughness : 0.38},`);
     lines.push(`        metalness: ${typeof shader.metalness === 'number' ? shader.metalness : 0.78}`);
   }
@@ -119,9 +125,10 @@ export function formatCatalogCode(config) {
   lines.push(`      })` + (!isChassis && config.particles?.ricochetSparks ? ',' : ''));
 
   if (!isChassis && config.particles?.ricochetSparks) {
+    const sparkColorHex = toHex6(config.particles.sparkColorHex || primaryHex, primaryHex);
     lines.push(`      particles: Object.freeze({`);
     lines.push(`        ricochetSparks: true,`);
-    lines.push(`        sparkColorHex: '${config.particles.sparkColorHex || shader.primaryHex || '#00f3ff'}',`);
+    lines.push(`        sparkColorHex: '${sparkColorHex}',`);
     lines.push(`        sparkCount: ${config.particles.sparkCount || 16}`);
     lines.push(`      })`);
   }
@@ -519,8 +526,9 @@ export class CosmeticStudioModal {
     const hexPrimary = root.querySelector('#studioHexPrimary');
     if (colorPrimary) {
       colorPrimary.oninput = (e) => {
-        this.currentConfig.shader.primaryHex = e.target.value;
-        if (hexPrimary) hexPrimary.textContent = e.target.value.toUpperCase();
+        const hex6 = '#' + parseCosmeticColor(e.target.value, '#00f3ff').getHexString();
+        this.currentConfig.shader.primaryHex = hex6;
+        if (hexPrimary) hexPrimary.textContent = hex6.toUpperCase();
         this.updateMaterial();
       };
     }
@@ -530,8 +538,9 @@ export class CosmeticStudioModal {
     const hexSecondary = root.querySelector('#studioHexSecondary');
     if (colorSecondary) {
       colorSecondary.oninput = (e) => {
-        this.currentConfig.shader.secondaryEmissiveHex = e.target.value;
-        if (hexSecondary) hexSecondary.textContent = e.target.value.toUpperCase();
+        const hex6 = '#' + parseCosmeticColor(e.target.value, '#0066ff').getHexString();
+        this.currentConfig.shader.secondaryEmissiveHex = hex6;
+        if (hexSecondary) hexSecondary.textContent = hex6.toUpperCase();
         this.updateMaterial();
       };
     }
@@ -601,15 +610,16 @@ export class CosmeticStudioModal {
 
     if (colorSpark) {
       colorSpark.oninput = (e) => {
+        const hex6 = '#' + parseCosmeticColor(e.target.value, '#00f3ff').getHexString();
         if (!this.currentConfig.particles) {
           this.currentConfig.particles = {
             ricochetSparks: true,
-            sparkColorHex: e.target.value,
+            sparkColorHex: hex6,
             sparkCount: 16
           };
         }
-        this.currentConfig.particles.sparkColorHex = e.target.value;
-        if (hexSpark) hexSpark.textContent = e.target.value.toUpperCase();
+        this.currentConfig.particles.sparkColorHex = hex6;
+        if (hexSpark) hexSpark.textContent = hex6.toUpperCase();
         this.updateMaterial();
       };
     }
@@ -635,8 +645,9 @@ export class CosmeticStudioModal {
     const hexSuit = root.querySelector('#studioHexSuit');
     if (colorSuit) {
       colorSuit.oninput = (e) => {
-        this.currentConfig.shader.suitHex = e.target.value;
-        if (hexSuit) hexSuit.textContent = e.target.value.toUpperCase();
+        const hex6 = '#' + parseCosmeticColor(e.target.value, '#1e2631').getHexString();
+        this.currentConfig.shader.suitHex = hex6;
+        if (hexSuit) hexSuit.textContent = hex6.toUpperCase();
         this.updateMaterial();
       };
     }

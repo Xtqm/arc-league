@@ -281,6 +281,25 @@ if (origClipboardDesc) {
   delete globalThis.navigator.clipboard;
 }
 
+// Test 8-digit and 4-digit hex sanitization on catalog export
+const unnormalizedConfig = {
+  id: 'disc_unnormalized',
+  displayName: 'Unnormalized Disc',
+  category: ARMORY_CATEGORIES.DISC_SKINS,
+  shader: {
+    primaryHex: '#000000ff',
+    secondaryEmissiveHex: '#ff0055aa'
+  },
+  particles: {
+    ricochetSparks: true,
+    sparkColorHex: '#000f'
+  }
+};
+const unnormalizedExport = formatCatalogCode(unnormalizedConfig);
+assert(unnormalizedExport.includes("primaryHex: '#000000'"), 'formatCatalogCode must strip alpha to 6-digit primary hex');
+assert(unnormalizedExport.includes("secondaryEmissiveHex: '#ff0055'"), 'formatCatalogCode must strip alpha to 6-digit secondary hex');
+assert(unnormalizedExport.includes("sparkColorHex: '#000000'"), 'formatCatalogCode must expand 4-digit spark hex to 6-digit hex');
+
 console.log('✓ Schema-compliant ArmoryCatalog code generator formatting verified.');
 
 // =========================================================================

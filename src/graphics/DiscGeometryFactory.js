@@ -217,7 +217,9 @@ export function createFaceGeometry(shape = DISC_SHAPES.CIRCLE, options = {}) {
 }
 
 /**
- * Creates central hub geometry for the specified procedural shape.
+ * Creates central induction rotor hub geometry.
+ * Constructs an intricate concentric induction rotor (stator collar, induction coil vents, and magnetic eye)
+ * rather than echoing the outer polygon silhouette, maintaining normalizeGeometryRadius parity across all shapes.
  * @param {string} [shape='circle']
  * @param {object} [options={}]
  * @returns {THREE.BufferGeometry}
@@ -226,31 +228,54 @@ export function createHubGeometry(shape = DISC_SHAPES.CIRCLE, options = {}) {
   const normShape = normalizeShapeName(shape);
   const baseRadius = options.radius ?? (config.DISC_R || 0.6);
   const hubRadius = options.hubRadius ?? Math.min(0.2, baseRadius * 0.35);
-  const hubTube = options.hubTube ?? Math.min(0.05, hubRadius * 0.25);
 
-  if (normShape === DISC_SHAPES.CIRCLE) {
-    return new THREE.TorusGeometry(
-      Math.max(0.05, hubRadius - hubTube),
-      hubTube,
-      options.radialSegments ?? 6,
-      options.tubularSegments ?? 20
-    );
+  const shapes = [];
+
+  // 1. Stator collar (outer concentric structural ring)
+  const collarShape = new THREE.Shape();
+  collarShape.absarc(0, 0, hubRadius, 0, Math.PI * 2, false);
+  const collarHole = new THREE.Path();
+  collarHole.absarc(0, 0, hubRadius * 0.82, 0, Math.PI * 2, true);
+  collarShape.holes.push(collarHole);
+  shapes.push(collarShape);
+
+  // 2. Central magnetic eye (inner magnetic core)
+  const eyeShape = new THREE.Shape();
+  eyeShape.absarc(0, 0, hubRadius * 0.42, 0, Math.PI * 2, false);
+  const eyeHole = new THREE.Path();
+  eyeHole.absarc(0, 0, hubRadius * 0.16, 0, Math.PI * 2, true);
+  eyeShape.holes.push(eyeHole);
+  shapes.push(eyeShape);
+
+  // 3. Induction coil vents (radial inductive spokes with vent apertures)
+  const spokeCount = options.spokeCount ?? 6;
+  const rIn = hubRadius * 0.40;
+  const rOut = hubRadius * 0.84;
+  const halfArc = (Math.PI / spokeCount) * 0.52;
+
+  for (let i = 0; i < spokeCount; i++) {
+    const angle = (i * 2 * Math.PI) / spokeCount;
+    const a1 = angle - halfArc;
+    const a2 = angle + halfArc;
+    const spoke = new THREE.Shape();
+    spoke.absarc(0, 0, rOut, a1, a2, false);
+    spoke.lineTo(rIn * Math.cos(a2), rIn * Math.sin(a2));
+    spoke.absarc(0, 0, rIn, a2, a1, true);
+    spoke.lineTo(rOut * Math.cos(a1), rOut * Math.sin(a1));
+    shapes.push(spoke);
   }
 
-  // Miniature procedural cyber-hub matching the shape
-  const outerPts = getShape2DPoints(normShape, hubRadius);
-  const innerRatio = normShape.startsWith('shuriken') ? 0.25 : 0.52;
-  const innerPts = getShape2DPoints(normShape, hubRadius * innerRatio).reverse();
+  const depth = options.depth ?? 0.024;
+  const bevelThickness = options.bevelThickness ?? 0.006;
+  const bevelSize = options.bevelSize ?? 0.006;
 
-  const hubShape = new THREE.Shape(outerPts);
-  hubShape.holes.push(new THREE.Path(innerPts));
-
-  const geo = new THREE.ExtrudeGeometry(hubShape, {
-    depth: options.depth ?? 0.024,
+  const geo = new THREE.ExtrudeGeometry(shapes, {
+    depth,
     bevelEnabled: options.bevelEnabled !== false,
-    bevelThickness: options.bevelThickness ?? 0.008,
-    bevelSize: options.bevelSize ?? 0.008,
-    bevelSegments: 1
+    bevelThickness,
+    bevelSize,
+    bevelSegments: options.bevelSegments ?? 1,
+    curveSegments: options.curveSegments ?? 16
   });
 
   geo.center();

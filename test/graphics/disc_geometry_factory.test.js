@@ -156,7 +156,7 @@ for (const shape of SUPPORTED_DISC_SHAPES) {
   const hubRadius = 0.2;
   const hubGeo = createHubGeometry(shape, { radius: targetRadius, hubRadius });
   assert.ok(hubGeo instanceof THREE.BufferGeometry, `${shape} hub must be a BufferGeometry`);
-  assert.ok(hubGeo.attributes.position.count > 0, `${shape} hub must contain vertices`);
+  assert.ok(hubGeo.attributes.position.count > 100, `${shape} hub must be an intricate concentric rotor (>100 vertices)`);
 
   const hubMaxR = getMaxXYRadius(hubGeo);
   assert.ok(

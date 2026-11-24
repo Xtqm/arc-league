@@ -18,6 +18,9 @@ import {
   createHubGeometry,
   createWireframeGeometry
 } from '../graphics/DiscGeometryFactory.js';
+import { parseCosmeticColor } from '../graphics/materials.js';
+
+export { parseCosmeticColor };
 
 /**
  * PBR surface presets for Athlete Rig armor plating.
@@ -253,8 +256,8 @@ export class CosmeticMaterialEngine {
       glowIntensity: 1.5
     };
 
-    const primaryColor = new THREE.Color(shader.primaryHex);
-    const secondaryColor = new THREE.Color(shader.secondaryEmissiveHex);
+    const primaryColor = parseCosmeticColor(shader.primaryHex, 0x00f3ff);
+    const secondaryColor = parseCosmeticColor(shader.secondaryEmissiveHex, 0x0066ff);
     const glowScale = typeof shader.glowIntensity === 'number' ? shader.glowIntensity : 1.5;
     const targetShape = normalizeShapeName(item?.shape || shader?.shape || 'circle');
 
@@ -284,20 +287,49 @@ export class CosmeticMaterialEngine {
           }
           discMesh.userData.faceMesh = palmFace;
         }
+
+        let palmHub = discMesh.userData.hubMesh;
+        if (!palmHub) {
+          discMesh.traverse((child) => {
+            if (child !== discMesh && child.userData?.part === 'chassis_back_disc_hub') palmHub = child;
+          });
+        }
+        if (palmHub) {
+          const oldHubGeo = palmHub.geometry;
+          palmHub.geometry = createHubGeometry(targetShape, { radius: palmRadius });
+          if (oldHubGeo && typeof oldHubGeo.dispose === 'function') {
+            oldHubGeo.dispose();
+          }
+          discMesh.userData.hubMesh = palmHub;
+        }
+
         discMesh.userData.currentShape = targetShape;
       }
 
       if (discMesh.material.color) {
         discMesh.material.color.copy(primaryColor);
+        discMesh.material.roughness = 0.32;
+        discMesh.material.metalness = 0.82;
       }
       if ('emissive' in discMesh.material && discMesh.material.emissive) {
         discMesh.material.emissive.copy(primaryColor);
         discMesh.material.emissiveIntensity = 2.0 * (glowScale / 1.5);
       }
       discMesh.traverse((child) => {
-        if (child !== discMesh && child.userData?.part === 'chassis_back_disc_face' && child.material?.color) {
-          child.material.color.copy(primaryColor);
-          child.material.opacity = Math.min(0.65, 0.25 * (glowScale / 1.5));
+        if (child !== discMesh && child.userData?.part === 'chassis_back_disc_face' && child.material) {
+          if (child.material.color) child.material.color.set(0x04080e);
+          child.material.opacity = Math.min(0.65, 0.32 * (glowScale / 1.5));
+          child.material.transparent = true;
+          if ('roughness' in child.material) child.material.roughness = 0.1;
+          if ('metalness' in child.material) child.material.metalness = 0.9;
+        } else if (child !== discMesh && child.userData?.part === 'chassis_back_disc_hub' && child.material) {
+          if (child.material.color) child.material.color.copy(secondaryColor);
+          if ('emissive' in child.material && child.material.emissive) {
+            child.material.emissive.copy(secondaryColor);
+            child.material.emissiveIntensity = 2.2 * (glowScale / 1.5);
+          }
+          if ('roughness' in child.material) child.material.roughness = 0.2;
+          if ('metalness' in child.material) child.material.metalness = 0.85;
         }
       });
 
@@ -402,29 +434,35 @@ export class CosmeticMaterialEngine {
       discMesh.userData.currentShape = targetShape;
     }
 
-    // 1. Outer rim emissive update
+    // 1. Outer rim emissive update (airframe & kinetic strike rim)
     if (outerMesh && outerMesh.material && outerMesh.material.color) {
       outerMesh.material.color.copy(primaryColor);
+      outerMesh.material.roughness = 0.32;
+      outerMesh.material.metalness = 0.82;
       if ('emissive' in outerMesh.material && outerMesh.material.emissive) {
         outerMesh.material.emissive.copy(primaryColor);
         outerMesh.material.emissiveIntensity = 2.4 * (glowScale / 1.5);
       }
     }
 
-    // 2. Translucent face disc update
+    // 2. Translucent face disc update (smoked hardlight stabilizer face)
     if (faceMesh && faceMesh.material && faceMesh.material.color) {
-      faceMesh.material.color.copy(primaryColor);
-      faceMesh.material.opacity = Math.min(0.65, 0.22 * (glowScale / 1.5));
+      faceMesh.material.color.set(0x04080e);
+      faceMesh.material.opacity = Math.min(0.65, 0.32 * (glowScale / 1.5));
       faceMesh.material.transparent = true;
+      if ('roughness' in faceMesh.material) faceMesh.material.roughness = 0.1;
+      if ('metalness' in faceMesh.material) faceMesh.material.metalness = 0.9;
     }
 
-    // 3. Central hub color
+    // 3. Central hub color (concentric induction rotor with secondaryColor)
     if (hubMesh && hubMesh.material && hubMesh.material.color) {
-      hubMesh.material.color.set(config.WHITE || 0xffffff);
+      hubMesh.material.color.copy(secondaryColor);
       if ('emissive' in hubMesh.material && hubMesh.material.emissive) {
-        hubMesh.material.emissive.set(config.WHITE || 0xffffff);
+        hubMesh.material.emissive.copy(secondaryColor);
         hubMesh.material.emissiveIntensity = 2.2 * (glowScale / 1.5);
       }
+      if ('roughness' in hubMesh.material) hubMesh.material.roughness = 0.2;
+      if ('metalness' in hubMesh.material) hubMesh.material.metalness = 0.85;
     }
 
     // 4. Point light radiance update
@@ -503,9 +541,9 @@ export class CosmeticMaterialEngine {
       glowIntensity: 1.2
     };
 
-    const primaryColor = new THREE.Color(shader.primaryHex);
-    const secondaryColor = new THREE.Color(shader.secondaryEmissiveHex);
-    const edgeTrimColor = primaryColor.clone().lerp(secondaryColor, 0.4).multiplyScalar(0.55);
+    const primaryColor = parseCosmeticColor(shader.primaryHex, 0x00f3ff);
+    const secondaryColor = parseCosmeticColor(shader.secondaryEmissiveHex, 0x0066ff);
+    const edgeTrimColor = secondaryColor.clone();
     const glowScale = typeof shader.glowIntensity === 'number' ? shader.glowIntensity : 1.2;
     const hdrEmissiveIntensity = 2.2 * (glowScale / 1.2);
 
@@ -516,7 +554,7 @@ export class CosmeticMaterialEngine {
     const roughness = typeof shader.roughness === 'number' ? shader.roughness : (typeof pbr.roughness === 'number' ? pbr.roughness : preset.roughness);
     const metalness = typeof shader.metalness === 'number' ? shader.metalness : (typeof pbr.metalness === 'number' ? pbr.metalness : preset.metalness);
     const suitHexValue = shader.suitHex ?? shader.suitColor ?? pbr.suitHex ?? pbr.suitColor ?? preset.suitColor;
-    const suitColor = new THREE.Color(suitHexValue);
+    const suitColor = parseCosmeticColor(suitHexValue, preset.suitColor);
 
     // 1. Direct mutation via cached rig materials
     if (playerRig.userData?.suitMaterial) {
@@ -585,11 +623,14 @@ export class CosmeticMaterialEngine {
       glowIntensity: 1.5
     };
 
+    const primaryColor = parseCosmeticColor(shader.primaryHex, 0x00f3ff);
+    const secondaryColor = parseCosmeticColor(shader.secondaryEmissiveHex, 0x0066ff);
+
     return {
-      primaryHex: shader.primaryHex,
-      secondaryEmissiveHex: shader.secondaryEmissiveHex,
-      primaryColor: new THREE.Color(shader.primaryHex),
-      secondaryColor: new THREE.Color(shader.secondaryEmissiveHex),
+      primaryHex: '#' + primaryColor.getHexString(),
+      secondaryEmissiveHex: '#' + secondaryColor.getHexString(),
+      primaryColor,
+      secondaryColor,
       opacity: typeof shader.trailOpacity === 'number' ? shader.trailOpacity : 0.85,
       glowIntensity: typeof shader.glowIntensity === 'number' ? shader.glowIntensity : 1.5,
       particles: item?.particles || null,

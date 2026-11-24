@@ -261,8 +261,17 @@ assert.strictEqual(copiedCode, discCode, 'copyCatalogCode must return formatted 
 
 // Test clipboard write integration
 let writtenClipboardText = '';
-const origClipboardDesc = Object.getOwnPropertyDescriptor(globalThis.navigator, 'clipboard');
-Object.defineProperty(globalThis.navigator, 'clipboard', {
+const hadNavigator = typeof globalThis.navigator !== 'undefined';
+const navigatorObject = hadNavigator ? globalThis.navigator : {};
+if (!hadNavigator) {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: navigatorObject,
+    configurable: true,
+    writable: true
+  });
+}
+const origClipboardDesc = Object.getOwnPropertyDescriptor(navigatorObject, 'clipboard');
+Object.defineProperty(navigatorObject, 'clipboard', {
   value: {
     writeText: async (txt) => {
       writtenClipboardText = txt;
@@ -276,9 +285,12 @@ modal.copyCatalogCode();
 assert.strictEqual(writtenClipboardText, discCode, 'Must write formatted catalog code to system clipboard');
 
 if (origClipboardDesc) {
-  Object.defineProperty(globalThis.navigator, 'clipboard', origClipboardDesc);
+  Object.defineProperty(navigatorObject, 'clipboard', origClipboardDesc);
 } else {
-  delete globalThis.navigator.clipboard;
+  delete navigatorObject.clipboard;
+}
+if (!hadNavigator) {
+  delete globalThis.navigator;
 }
 
 // Test 8-digit and 4-digit hex sanitization on catalog export

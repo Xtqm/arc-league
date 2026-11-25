@@ -3,8 +3,9 @@ import { state } from '../core/state.js';
 import { config } from '../core/config.js';
 import { scene, camera, snapCamera } from './scene.js';
 import { makeDisc, makeProgram, animateProgramKinematics } from './materials.js';
+import { canLoadExternalConstructs, loadConstructAsset } from './ConstructLoader.js';
 import { settingsManager } from '../core/settings.js';
-import { cosmeticMaterialEngine } from '../armory/CosmeticMaterialEngine.js';
+import { cosmeticMaterialEngine, disposeHierarchy } from '../armory/CosmeticMaterialEngine.js';
 import { burst } from './particles.js';
 
 let dioramaGroup = null;
@@ -101,6 +102,22 @@ export function spawnDiorama() {
     stateTimer = 0;
     dioramaTime = 0;
     nextSpecialAction = 'JUMP';
+  }
+
+  if (canLoadExternalConstructs() && dioramaRig && !dioramaRig.userData?.isGLB) {
+    loadConstructAsset('player', { silent: true }).then((record) => {
+      if (record && dioramaGroup && dioramaRig && !dioramaRig.userData?.isGLB) {
+        const prev = dioramaRig;
+        const upgraded = makeProgram(config.CYAN, { archetype: 'player' });
+        upgraded.position.copy(prev.position);
+        upgraded.rotation.copy(prev.rotation);
+        upgraded.visible = prev.visible;
+        disposeHierarchy(prev);
+        dioramaRig = upgraded;
+        dioramaGroup.add(upgraded);
+        refreshDioramaCosmetics();
+      }
+    });
   }
 
   dioramaGroup.visible = true;

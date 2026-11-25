@@ -7,6 +7,11 @@
 import assert from 'assert';
 import * as THREE from '../../vendor/three.module.js';
 import { makeProgram, animateProgramKinematics } from '../../src/graphics/materials.js';
+import {
+  REQUIRED_CONSTRUCT_CLIPS,
+  loadConstructAsset,
+  clearConstructAssetCache
+} from '../../src/graphics/ConstructLoader.js';
 
 console.log('--- Running Magnetic Construct Rig & Kinematics Test Suite ---');
 
@@ -317,6 +322,270 @@ assert.strictEqual(legacyPlayer.userData.archetype, 'player');
 assert.strictEqual(legacyBot.userData.archetype, 'drone');
 
 console.log('✓ Group 4: Boss scaling and legacy option mapping verified.');
+
+// =========================================================================
+// Group 5: Cached GLB Construct Rig & AnimationMixer Blending Path
+// =========================================================================
+console.log('\n[Group 5] Testing Cached GLB Construct Rig & AnimationMixer Path...');
+
+function buildCachedPlayerGlbFixture() {
+  const root = new THREE.Group();
+  root.name = 'AthleteConstructGLB';
+
+  const suitMat = new THREE.MeshStandardMaterial({ color: 0x1e2631 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0x00f3ff, emissive: 0x00f3ff });
+
+  const pelvis = new THREE.Group();
+  pelvis.name = 'pelvis';
+  pelvis.position.set(0, 1.05, 0);
+  root.add(pelvis);
+
+  const abdomen = new THREE.Group();
+  abdomen.name = 'abdomen';
+  abdomen.position.set(0, 0.21, 0);
+  pelvis.add(abdomen);
+
+  const torso = new THREE.Group();
+  torso.name = 'torso';
+  torso.position.set(0, 0.26, 0);
+  abdomen.add(torso);
+
+  const dorsalSocket = new THREE.Group();
+  dorsalSocket.name = 'dorsal_socket';
+  dorsalSocket.position.set(0, 0.12, -0.18);
+  torso.add(dorsalSocket);
+
+  const neck = new THREE.Group();
+  neck.name = 'neck';
+  neck.position.set(0, 0.29, 0);
+  torso.add(neck);
+
+  const head = new THREE.Group();
+  head.name = 'head';
+  head.position.set(0, 0.18, 0);
+  neck.add(head);
+
+  const leftShoulder = new THREE.Group();
+  leftShoulder.name = 'leftShoulder';
+  leftShoulder.position.set(-0.4, 0.13, 0);
+  torso.add(leftShoulder);
+
+  const leftElbow = new THREE.Group();
+  leftElbow.name = 'leftElbow';
+  leftElbow.position.set(0, -0.32, 0);
+  leftShoulder.add(leftElbow);
+
+  const leftHand = new THREE.Group();
+  leftHand.name = 'leftHand';
+  leftHand.position.set(0, -0.3, 0);
+  leftElbow.add(leftHand);
+
+  const rightShoulder = new THREE.Group();
+  rightShoulder.name = 'rightShoulder';
+  rightShoulder.position.set(0.4, 0.13, 0);
+  torso.add(rightShoulder);
+
+  const rightElbow = new THREE.Group();
+  rightElbow.name = 'rightElbow';
+  rightElbow.position.set(0, -0.32, 0);
+  rightShoulder.add(rightElbow);
+
+  const rightHand = new THREE.Group();
+  rightHand.name = 'rightHand';
+  rightHand.position.set(0, -0.3, 0);
+  rightElbow.add(rightHand);
+
+  const palmSocket = new THREE.Group();
+  palmSocket.name = 'palm_socket_r';
+  palmSocket.position.set(0, -0.06, 0.18);
+  rightHand.add(palmSocket);
+
+  const leftHip = new THREE.Group();
+  leftHip.name = 'leftHip';
+  leftHip.position.set(-0.17, -0.08, 0);
+  pelvis.add(leftHip);
+
+  const leftKnee = new THREE.Group();
+  leftKnee.name = 'leftKnee';
+  leftKnee.position.set(0, -0.38, 0);
+  leftHip.add(leftKnee);
+
+  const rightHip = new THREE.Group();
+  rightHip.name = 'rightHip';
+  rightHip.position.set(0.17, -0.08, 0);
+  pelvis.add(rightHip);
+
+  const rightKnee = new THREE.Group();
+  rightKnee.name = 'rightKnee';
+  rightKnee.position.set(0, -0.38, 0);
+  rightHip.add(rightKnee);
+
+  const chestShard = new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0), suitMat);
+  chestShard.name = 'suit_chest';
+  chestShard.position.set(0, 0.08, 0.13);
+  torso.add(chestShard);
+
+  const coreMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.175, 1), trimMat);
+  coreMesh.name = 'core_gyro';
+  torso.add(coreMesh);
+
+  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.04, 0.06), trimMat);
+  visor.name = 'visor_brow';
+  head.add(visor);
+
+  const headHalo = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.02, 8, 24), trimMat);
+  headHalo.name = 'halo_crown';
+  head.add(headHalo);
+
+  const makeQuatTrack = (nodeName, rx0, rx1, ry0 = 0, ry1 = 0) => {
+    const q0 = new THREE.Quaternion().setFromEuler(new THREE.Euler(rx0, ry0, 0));
+    const q1 = new THREE.Quaternion().setFromEuler(new THREE.Euler(rx1, ry1, 0));
+    return new THREE.QuaternionKeyframeTrack(
+      `${nodeName}.quaternion`,
+      [0, 0.4],
+      [q0.x, q0.y, q0.z, q0.w, q1.x, q1.y, q1.z, q1.w]
+    );
+  };
+
+  const clipTracks = {
+    idle_hover: [makeQuatTrack('torso', 0.01, 0.04)],
+    sprint_lean: [
+      makeQuatTrack('leftHip', 0.45, -0.45),
+      makeQuatTrack('rightHip', -0.45, 0.45),
+      makeQuatTrack('leftKnee', 0.35, 0.65)
+    ],
+    throw_windup: [
+      makeQuatTrack('torso', 0, 0, -0.35, -0.45),
+      makeQuatTrack('rightShoulder', 0.3, 0.45)
+    ],
+    throw_release: [makeQuatTrack('rightShoulder', -1.0, -1.2)],
+    catch_recoil: [makeQuatTrack('rightShoulder', -0.7, -0.5)],
+    parry_brace: [
+      makeQuatTrack('leftShoulder', -0.75, -0.75),
+      makeQuatTrack('rightShoulder', -0.85, -0.85)
+    ],
+    dash_burst: [makeQuatTrack('torso', 0.28, 0.35)],
+    aerial_tuck: [makeQuatTrack('leftHip', 0.32, 0.38)]
+  };
+
+  const animations = REQUIRED_CONSTRUCT_CLIPS.map(
+    (clipName) => new THREE.AnimationClip(clipName, 0.4, clipTracks[clipName])
+  );
+
+  return { scene: root, animations };
+}
+
+clearConstructAssetCache();
+await loadConstructAsset('player', {
+  loader: {
+    async loadAsync() {
+      return buildCachedPlayerGlbFixture();
+    }
+  }
+});
+
+// Synchronous makeProgram() must pick up cached GLB construct bundle
+const glbPlayerRig = makeProgram(0x00f3ff, { archetype: 'player' });
+assert.strictEqual(glbPlayerRig.userData.isGLB, true, 'Cached construct must instantiate GLB rig');
+assert.strictEqual(glbPlayerRig.userData.part, 'chassis_root');
+assert.strictEqual(glbPlayerRig.userData.suitMaterial.flatShading, true);
+assert.ok(glbPlayerRig.userData.litMaterial.emissiveIntensity >= 1.5);
+assert.ok(glbPlayerRig.userData.coreMesh, 'GLB rig must expose coreMesh');
+assert.ok(glbPlayerRig.userData.headHalo, 'GLB rig must expose headHalo');
+assert.ok(glbPlayerRig.userData.dorsalWingPivot instanceof THREE.Group);
+assert.strictEqual(glbPlayerRig.userData.backDisc.userData.part, 'chassis_back_disc');
+assert.strictEqual(glbPlayerRig.userData.backDisc.parent, glbPlayerRig.userData.joints.rightHand);
+assert.ok(glbPlayerRig.userData.mixer instanceof THREE.AnimationMixer, 'GLB rig must attach AnimationMixer');
+assert.strictEqual(glbPlayerRig.userData.activeActionName, 'idle_hover', 'Initial clip must start on idle_hover');
+
+// forceProcedural bypasses cached GLB cleanly
+const forcedProcRig = makeProgram(0x00f3ff, { archetype: 'player', forceProcedural: true });
+assert.strictEqual(forcedProcRig.userData.isGLB, undefined, 'forceProcedural must return procedural rig');
+
+// Drive AnimationMixer through locomotion, parry, aerial, windup, release, catch, and dash
+const glbShard = glbPlayerRig.userData.floatingShards[0];
+const glbShardBaseY = glbShard.userData.floatBasePos.y;
+
+animateProgramKinematics(glbPlayerRig, 0.14, {
+  speed: 9.5,
+  grounded: true,
+  vy: 0,
+  blocking: false,
+  time: 0.4,
+  hasDisc: true
+});
+assert.strictEqual(glbPlayerRig.userData.activeActionName, 'sprint_lean');
+assert.notStrictEqual(glbPlayerRig.userData.leftHip.rotation.x, 0, 'AnimationMixer sprint_lean must drive leftHip');
+assert.notStrictEqual(glbPlayerRig.userData.rightHip.rotation.x, 0, 'AnimationMixer sprint_lean must drive rightHip');
+assert.notStrictEqual(glbShard.position.y, glbShardBaseY, 'Layered shard micro-hover must continue on GLB rig');
+assert.notStrictEqual(glbPlayerRig.userData.coreMesh.scale.x, 1, 'Layered coreMesh pulse must continue on GLB rig');
+
+animateProgramKinematics(glbPlayerRig, 0.1, {
+  speed: 0,
+  grounded: true,
+  vy: 0,
+  blocking: true,
+  time: 0.7,
+  hasDisc: true
+});
+assert.strictEqual(glbPlayerRig.userData.activeActionName, 'parry_brace');
+assert.ok(glbPlayerRig.userData.backDisc.rotation.x > 1.0, 'Hover-Palm disc must tilt into shield parry barrier');
+
+animateProgramKinematics(glbPlayerRig, 0.15, {
+  speed: 2,
+  grounded: false,
+  vy: 5,
+  blocking: false,
+  time: 1.0,
+  hasDisc: true
+});
+assert.strictEqual(glbPlayerRig.userData.activeActionName, 'aerial_tuck');
+
+animateProgramKinematics(glbPlayerRig, 0.15, {
+  speed: 0,
+  grounded: true,
+  vy: 0,
+  blocking: false,
+  chargingThrow: true,
+  throwCharge: 0.85,
+  time: 1.3,
+  hasDisc: true
+});
+assert.strictEqual(glbPlayerRig.userData.activeActionName, 'throw_windup');
+
+animateProgramKinematics(glbPlayerRig, 0.05, {
+  speed: 0,
+  grounded: true,
+  vy: 0,
+  blocking: false,
+  chargingThrow: false,
+  throwCharge: 0,
+  time: 1.4,
+  hasDisc: false
+});
+assert.strictEqual(glbPlayerRig.userData.activeActionName, 'throw_release');
+
+animateProgramKinematics(glbPlayerRig, 0.05, {
+  speed: 0,
+  grounded: true,
+  vy: 0,
+  blocking: false,
+  time: 1.8,
+  hasDisc: true
+});
+assert.strictEqual(glbPlayerRig.userData.activeActionName, 'catch_recoil');
+
+animateProgramKinematics(glbPlayerRig, 0.3, {
+  speed: 12,
+  grounded: true,
+  dashing: true,
+  time: 2.2,
+  hasDisc: true
+});
+assert.strictEqual(glbPlayerRig.userData.activeActionName, 'dash_burst');
+
+clearConstructAssetCache();
+console.log('✓ Group 5: Cached GLB rig instantiation and AnimationMixer combat blending verified.');
 
 console.log('\n=============================================================');
 console.log('ALL MAGNETIC CONSTRUCT RIG & KINEMATICS TESTS PASSED (100%)');

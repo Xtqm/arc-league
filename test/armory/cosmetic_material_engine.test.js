@@ -11,9 +11,11 @@ import {
   CosmeticMaterialEngine,
   cosmeticMaterialEngine,
   disposeHierarchy,
+  setRigFirstPersonVisibility,
   CHASSIS_PBR_PRESETS,
   parseCosmeticColor
 } from '../../src/armory/CosmeticMaterialEngine.js';
+import { loadConstructAsset, clearConstructAssetCache } from '../../src/graphics/ConstructLoader.js';
 import { ArmoryPreviewScene } from '../../src/armory/ArmoryPreviewScene.js';
 import { ArmoryManager, ArmoryEvents } from '../../src/armory/ArmoryManager.js';
 import { ARMORY_CATALOG, ARMORY_CATEGORIES } from '../../src/armory/ArmoryCatalog.js';
@@ -658,6 +660,113 @@ assert.strictEqual(stagedMesh.userData.wireframeOverlay.material.color.getHexStr
 previewBay.dispose();
 
 console.log('✓ Group 11: Stealth obsidian hull, piercing white induction core, and telemetry wireframe verified.');
+
+// =========================================================================
+// Test Group 12: GLB Construct Rig Tinting, Wireframe, First-Person Clip & Disposal
+// =========================================================================
+console.log('\n[Group 12] Testing GLB Construct Rig Armory Tinting, First-Person Clip & Disposal...');
+
+clearConstructAssetCache();
+const glbFixtureRoot = new THREE.Group();
+const gSuitMat = new THREE.MeshStandardMaterial({ color: 0x1e2631 });
+const gLitMat = new THREE.MeshStandardMaterial({ color: 0x00f3ff, emissive: 0x00f3ff });
+
+const gPelvis = new THREE.Group(); gPelvis.name = 'pelvis'; glbFixtureRoot.add(gPelvis);
+const gAbdomen = new THREE.Group(); gAbdomen.name = 'abdomen'; gPelvis.add(gAbdomen);
+const gTorso = new THREE.Group(); gTorso.name = 'torso'; gAbdomen.add(gTorso);
+const gNeck = new THREE.Group(); gNeck.name = 'neck'; gTorso.add(gNeck);
+const gHead = new THREE.Group(); gHead.name = 'head'; gNeck.add(gHead);
+const gLShoulder = new THREE.Group(); gLShoulder.name = 'leftShoulder'; gTorso.add(gLShoulder);
+const gRShoulder = new THREE.Group(); gRShoulder.name = 'rightShoulder'; gTorso.add(gRShoulder);
+const gRElbow = new THREE.Group(); gRElbow.name = 'rightElbow'; gRShoulder.add(gRElbow);
+const gRHand = new THREE.Group(); gRHand.name = 'rightHand'; gRElbow.add(gRHand);
+
+const gSuitShard = new THREE.Mesh(new THREE.OctahedronGeometry(0.18, 0), gSuitMat);
+gSuitShard.name = 'suit_chest';
+gTorso.add(gSuitShard);
+
+const gArmShard = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.2, 0.1), gSuitMat);
+gArmShard.name = 'suit_arm_r';
+gRShoulder.add(gArmShard);
+
+const gCore = new THREE.Mesh(new THREE.IcosahedronGeometry(0.15, 0), gLitMat);
+gCore.name = 'core_gyro';
+gTorso.add(gCore);
+
+const gVisor = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.04, 0.05), gLitMat);
+gVisor.name = 'visor_brow';
+gHead.add(gVisor);
+
+const gHalo = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.02, 6, 16), gLitMat);
+gHalo.name = 'halo_crown';
+gHead.add(gHalo);
+
+const clip = new THREE.AnimationClip('idle_hover', 0.5, [
+  new THREE.QuaternionKeyframeTrack('torso.quaternion', [0, 0.5], [0, 0, 0, 1, 0, 0.05, 0, 0.998])
+]);
+
+const cachedRecord = await loadConstructAsset('player', {
+  loader: {
+    async loadAsync() {
+      return { scene: glbFixtureRoot, animations: [clip] };
+    }
+  }
+});
+assert.ok(cachedRecord, 'GLB construct fixture must cache cleanly');
+
+const glbPreview = new ArmoryPreviewScene({ cosmetics: engine });
+glbPreview.previewChassis('chassis_arbiter', 'disc_default');
+const glbRig = glbPreview.stagedMesh;
+assert.strictEqual(glbRig.userData.isGLB, true, 'Preview scene must instantiate cached GLB construct rig');
+assert.strictEqual(glbRig.userData.suitMaterial.wireframe, true, 'chassis_arbiter wireframeToggle must enable wireframe on GLB suitMaterial');
+assert.strictEqual(glbRig.userData.backDisc.parent, glbRig.userData.joints.rightHand, 'Hover-Palm disc must attach to rightHand');
+
+// Verify halo mesh tinted without throwing and matches primaryHex (#ffffff)
+let haloMeshRef = null;
+let suitMeshRef = null;
+let visorMeshRef = null;
+glbRig.traverse((c) => {
+  if (c.userData?.part === 'chassis_halo' && c.isMesh) haloMeshRef = c;
+  if (c.userData?.part === 'chassis_suit' && c.isMesh) suitMeshRef = c;
+  if (c.userData?.part === 'chassis_visor' && c.isMesh) visorMeshRef = c;
+});
+assert.ok(haloMeshRef && haloMeshRef.material.color.getHexString() === 'ffffff', 'GLB halo mesh must tint via chassis_halo');
+assert.ok(suitMeshRef && suitMeshRef.material.wireframe === true, 'GLB suit mesh must honor wireframe toggle');
+
+// Toggle off wireframe with chassis_default
+engine.applyChassisSkin(glbRig, 'chassis_default');
+assert.strictEqual(suitMeshRef.material.wireframe, false, 'Switching to non-wireframe skin must disable wireframe');
+
+// Verify first-person visor & torso clipping keeps right arm & Hover-Palm disc visible
+setRigFirstPersonVisibility(glbRig, true);
+assert.strictEqual(visorMeshRef.visible, false, 'First-person mode must hide GLB visor');
+assert.strictEqual(haloMeshRef.visible, false, 'First-person mode must hide GLB halo mesh');
+assert.strictEqual(glbRig.userData.joints.rightShoulder.visible, true, 'First-person mode must keep rightShoulder visible');
+assert.strictEqual(glbRig.userData.backDisc.visible, true, 'First-person mode must keep Hover-Palm disc visible');
+setRigFirstPersonVisibility(glbRig, false);
+assert.strictEqual(visorMeshRef.visible, true, 'Third-person mode must restore GLB visor');
+
+// Verify leak-free disposal preserves shared cache geometry while uncaching mixer and disposing instance materials
+let sharedGeoDisposeCount = 0;
+const origSuitGeoDispose = gSuitShard.geometry.dispose.bind(gSuitShard.geometry);
+gSuitShard.geometry.dispose = () => {
+  sharedGeoDisposeCount++;
+  origSuitGeoDispose();
+};
+let instanceMatDisposed = false;
+const origMatDispose = suitMeshRef.material.dispose.bind(suitMeshRef.material);
+suitMeshRef.material.dispose = () => {
+  instanceMatDisposed = true;
+  origMatDispose();
+};
+
+glbPreview.dispose();
+assert.strictEqual(sharedGeoDisposeCount, 0, 'Instance disposeHierarchy must NOT dispose shared GLB template geometry');
+assert.strictEqual(instanceMatDisposed, true, 'Instance disposeHierarchy must dispose per-instance materials');
+assert.strictEqual(glbRig.userData.mixer, null, 'Instance disposeHierarchy must clean up AnimationMixer');
+
+clearConstructAssetCache();
+console.log('✓ Group 12: GLB Construct rig tinting, wireframe toggle, first-person clip & leak-free disposal verified.');
 
 console.log('\n=================================================================');
 console.log('ALL COSMETIC MATERIAL ENGINE & PREVIEW SCENE TESTS PASSED (100% SUCCESS)');

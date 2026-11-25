@@ -23,6 +23,7 @@ import {
   clearAllEffects
 } from '../../src/graphics/particles.js';
 import { settingsManager, GRAPHICS_PRESETS } from '../../src/core/settings.js';
+import { tileMatIntact } from '../../src/graphics/materials.js';
 import { scene, setBloomEnabled, setShadowQuality, composer, camera, key, rimLightCool, rimLightWarm, chasmUpLight, onResize } from '../../src/graphics/scene.js';
 
 console.log('--- Running Cinematic Rendering Pipeline Test Suite ---');
@@ -62,6 +63,11 @@ console.log('\n[Group 2] Testing CinematicComposer Direct Fallback & Controls...
 
 const headlessComposer = new CinematicComposer(null, { enabled: true });
 assert.strictEqual(headlessComposer.isSupported, false, 'Headless composer must report unsupported without WebGL context');
+assert.ok(headlessComposer.threshold >= 1.15 && headlessComposer.threshold <= 1.25, 'Calibrated HDR bloom threshold must prevent floor sparkle');
+assert.ok(headlessComposer.knee <= 0.25, 'Calibrated HDR bloom knee must stay tight');
+assert.ok(headlessComposer.strength >= 0.35 && headlessComposer.strength <= 0.42, 'Calibrated HDR bloom strength must avoid blowout');
+assert.ok(tileMatIntact.roughness >= 0.35 && tileMatIntact.roughness <= 0.42, 'Intact floor tile roughness must stay calibrated');
+assert.ok(tileMatIntact.emissiveIntensity <= 0.35, 'Intact floor tile seam emissiveIntensity must stay below bloom blowout');
 headlessComposer.render(new THREE.Scene(), new THREE.PerspectiveCamera());
 headlessComposer.setSize(1920, 1080, 2);
 headlessComposer.setEnabled(false);

@@ -54,15 +54,31 @@ export const CHASSIS_PBR_PRESETS = Object.freeze({
 });
 
 /**
- * Recursively disposes all geometries, materials, and textures attached to an Object3D hierarchy.
+ * Recursively disposes all geometries, materials, and animation mixer bindings attached to an Object3D hierarchy.
+ * Preserves shared GPU geometries owned by `ConstructLoader` / `ArenaAssetLoader` caches.
  * @param {THREE.Object3D} object3D
  */
 export function disposeHierarchy(object3D) {
   if (!object3D) return;
 
+  if (object3D.userData?.mixer) {
+    try {
+      object3D.userData.mixer.stopAllAction();
+      object3D.userData.mixer.uncacheRoot(object3D);
+    } catch {
+      // Ignore mixer cleanup errors on partial mock objects
+    }
+    object3D.userData.mixer = null;
+    object3D.userData.actions = null;
+  }
+
   object3D.traverse((child) => {
-    if (child.isMesh || child.isPoints || child.isLine) {
-      if (child.geometry && typeof child.geometry.dispose === 'function') {
+    if (child.isMesh || child.isPoints || child.isLine || child.isLineSegments) {
+      if (
+        child.geometry &&
+        typeof child.geometry.dispose === 'function' &&
+        !child.geometry.userData?.sharedFromAssetCache
+      ) {
         child.geometry.dispose();
       }
       if (child.material) {
@@ -82,6 +98,53 @@ export function disposeHierarchy(object3D) {
   if (object3D.parent) {
     object3D.parent.remove(object3D);
   }
+}
+
+/**
+ * Applies first-person camera clipping to either procedural or `.glb` Construct rigs:
+ * hides head, neck, visor, halo mesh, abdomen, and torso shards while keeping
+ * shoulder/arm/hand joints and the Hover-Palm disc visible.
+ *
+ * @param {THREE.Object3D} rig
+ * @param {boolean} isFirstPerson
+ */
+export function setRigFirstPersonVisibility(rig, isFirstPerson) {
+  if (!rig || !rig.userData) return;
+  const uData = rig.userData;
+  const visibleInThirdPerson = !isFirstPerson;
+
+  if (uData.head) uData.head.visible = visibleInThirdPerson;
+  if (uData.neck) uData.neck.visible = visibleInThirdPerson;
+  if (uData.headHalo) uData.headHalo.visible = visibleInThirdPerson;
+
+  const ls = uData.leftShoulder || uData.joints?.leftShoulder;
+  const rs = uData.rightShoulder || uData.joints?.rightShoulder;
+  if (uData.torso) {
+    for (let i = 0; i < uData.torso.children.length; i++) {
+      const child = uData.torso.children[i];
+      if (child === ls || child === rs) {
+        child.visible = true;
+      } else {
+        child.visible = visibleInThirdPerson;
+      }
+    }
+  }
+  if (uData.abdomen) {
+    for (let i = 0; i < uData.abdomen.children.length; i++) {
+      const child = uData.abdomen.children[i];
+      if (child !== uData.torso) {
+        child.visible = visibleInThirdPerson;
+      }
+    }
+  }
+
+  // Catch any GLB-placed visor or halo meshes parented outside standard head/torso slots
+  rig.traverse((child) => {
+    const part = child.userData?.part;
+    if (part === 'chassis_visor' || (part === 'chassis_halo' && !child.isPointLight)) {
+      child.visible = visibleInThirdPerson;
+    }
+  });
 }
 
 export class CosmeticMaterialEngine {
@@ -555,12 +618,16 @@ export class CosmeticMaterialEngine {
     const metalness = typeof shader.metalness === 'number' ? shader.metalness : (typeof pbr.metalness === 'number' ? pbr.metalness : preset.metalness);
     const suitHexValue = shader.suitHex ?? shader.suitColor ?? pbr.suitHex ?? pbr.suitColor ?? preset.suitColor;
     const suitColor = parseCosmeticColor(suitHexValue, preset.suitColor);
+    const shouldWireframe = !!shader.wireframeToggle;
 
     // 1. Direct mutation via cached rig materials
     if (playerRig.userData?.suitMaterial) {
       playerRig.userData.suitMaterial.roughness = roughness;
       playerRig.userData.suitMaterial.metalness = metalness;
       playerRig.userData.suitMaterial.color.copy(suitColor);
+      if ('wireframe' in playerRig.userData.suitMaterial) {
+        playerRig.userData.suitMaterial.wireframe = shouldWireframe;
+      }
     }
     if (playerRig.userData?.litMaterial) {
       playerRig.userData.litMaterial.color.copy(primaryColor);
@@ -573,24 +640,48 @@ export class CosmeticMaterialEngine {
       playerRig.userData.edgeMaterial.color.copy(edgeTrimColor);
     }
 
-    // 2. Traversal guard for decoupled or multi-material rigs
+    // 2. Traversal guard for decoupled, GLB, or multi-material rigs
+    const updateMatList = (matOrList, fn) => {
+      if (!matOrList) return;
+      if (Array.isArray(matOrList)) {
+        for (const m of matOrList) if (m) fn(m);
+      } else {
+        fn(matOrList);
+      }
+    };
+
     playerRig.traverse((child) => {
       const part = child.userData?.part;
 
       if (part === 'chassis_suit' && child.material) {
-        if (child.material.color) child.material.color.copy(suitColor);
-        if ('roughness' in child.material) child.material.roughness = roughness;
-        if ('metalness' in child.material) child.material.metalness = metalness;
+        updateMatList(child.material, (mat) => {
+          if (mat.color) mat.color.copy(suitColor);
+          if ('roughness' in mat) mat.roughness = roughness;
+          if ('metalness' in mat) mat.metalness = metalness;
+          if ('wireframe' in mat) mat.wireframe = shouldWireframe;
+        });
       } else if ((part === 'chassis_trim' || part === 'chassis_visor') && child.material) {
         const targetColor = child.userData?.isEdgeTrim ? edgeTrimColor : primaryColor;
-        if (child.material.color) child.material.color.copy(targetColor);
-        if ('emissive' in child.material && child.material.emissive) {
-          child.material.emissive.copy(targetColor);
-          child.material.emissiveIntensity = hdrEmissiveIntensity;
-        }
+        updateMatList(child.material, (mat) => {
+          if (mat.color) mat.color.copy(targetColor);
+          if ('emissive' in mat && mat.emissive) {
+            mat.emissive.copy(targetColor);
+            mat.emissiveIntensity = hdrEmissiveIntensity;
+          }
+        });
       } else if (part === 'chassis_halo' || (child.isPointLight && child !== playerRig.userData?.halo)) {
-        child.color.copy(primaryColor);
-        child.intensity = 1.6 * (glowScale / 1.2);
+        if (child.isPointLight && child.color) {
+          child.color.copy(primaryColor);
+          child.intensity = 1.6 * (glowScale / 1.2);
+        } else if (child.material) {
+          updateMatList(child.material, (mat) => {
+            if (mat.color) mat.color.copy(primaryColor);
+            if ('emissive' in mat && mat.emissive) {
+              mat.emissive.copy(primaryColor);
+              mat.emissiveIntensity = hdrEmissiveIntensity;
+            }
+          });
+        }
       }
     });
 
@@ -599,9 +690,13 @@ export class CosmeticMaterialEngine {
       playerRig.userData.halo.intensity = 1.6 * (glowScale / 1.2);
     }
 
-    // 3. Synchronize back-mounted disc styling with active equipped disc skin
+    // 3. Synchronize Hover-Palm disc attachment & styling with active equipped disc skin
     const activeDisc = this.activeDiscSkinId || this.armory?.getEquippedLoadout?.()?.discSkin || 'disc_default';
     if (playerRig.userData?.backDisc) {
+      const rightHand = playerRig.userData.joints?.rightHand;
+      if (rightHand && playerRig.userData.backDisc.parent !== rightHand) {
+        rightHand.add(playerRig.userData.backDisc);
+      }
       this.applyDiscSkin(playerRig.userData.backDisc, activeDisc);
     }
 

@@ -6,8 +6,9 @@ import { makeProgram } from './materials.js';
 import { createProceduralEnvironment } from './Environment.js';
 import { ArenaBackdrop } from './ArenaBackdrop.js';
 import { canLoadExternalModels } from './ArenaAssetLoader.js';
+import { canLoadExternalConstructs, loadAllConstructAssets } from './ConstructLoader.js';
 import { CinematicComposer } from './PostProcessing.js';
-import { cosmeticMaterialEngine } from '../armory/CosmeticMaterialEngine.js';
+import { cosmeticMaterialEngine, disposeHierarchy, setRigFirstPersonVisibility } from '../armory/CosmeticMaterialEngine.js';
 
 function initRenderer() {
   if (typeof document === 'undefined') return null;
@@ -385,6 +386,23 @@ export function initGraphics() {
     cosmeticMaterialEngine.init({ playerObj: state.player.obj });
   } else {
     cosmeticMaterialEngine.setPlayerRig(state.player.obj);
+  }
+  if (canLoadExternalConstructs()) {
+    loadAllConstructAssets({ silent: true }).then((loaded) => {
+      if (loaded?.player && state.player.obj && !state.player.obj.userData?.isGLB && state.player.obj.parent === scene) {
+        const prev = state.player.obj;
+        const upgraded = makeProgram(config.CYAN, { archetype: 'player' });
+        upgraded.position.copy(prev.position);
+        upgraded.rotation.copy(prev.rotation);
+        upgraded.visible = prev.visible;
+        disposeHierarchy(prev);
+        state.player.obj = upgraded;
+        scene.add(upgraded);
+        cosmeticMaterialEngine.setPlayerRig(upgraded);
+        const blend = state.cameraPerspectiveBlend !== undefined ? state.cameraPerspectiveBlend : 1.0;
+        setRigFirstPersonVisibility(upgraded, blend < 0.2);
+      }
+    });
   }
   if (typeof window !== 'undefined' && window.__tronInitPhysicsVisuals) {
     window.__tronInitPhysicsVisuals(scene);

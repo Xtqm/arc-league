@@ -8,6 +8,7 @@ import {
   createHubGeometry
 } from './DiscGeometryFactory.js';
 import { getArenaTextures } from './ArenaTextures.js';
+import { getCachedConstructAsset } from './ConstructLoader.js';
 
 const arenaTextures = getArenaTextures();
 
@@ -31,14 +32,14 @@ export const trimMat = new THREE.MeshStandardMaterial({
 export const glowMat = new THREE.MeshBasicMaterial({ color: config.CYAN });
 export const tileMatIntact = new THREE.MeshStandardMaterial({
   color: 0x07202c,
-  roughness: 0.28,
+  roughness: 0.38,
   metalness: 0.8,
   normalMap: arenaTextures ? arenaTextures.normalMap : null,
   normalScale: new THREE.Vector2(0.85, 0.85),
   roughnessMap: arenaTextures ? arenaTextures.roughnessMap : null,
   emissive: new THREE.Color(0x0b4f62),
   emissiveMap: arenaTextures ? arenaTextures.emissiveMap : null,
-  emissiveIntensity: arenaTextures ? 0.65 : 0.0
+  emissiveIntensity: arenaTextures ? 0.30 : 0.0
 });
 export const tileEdgeMatIntact = new THREE.LineBasicMaterial({ color: 0x187588, transparent: true, opacity: .75, depthWrite: false });
 
@@ -524,23 +525,16 @@ function buildConstructLimbs(torso, pelvis, suit, lit, edgeMat, archetype, float
   };
 }
 
-export function makeProgram(color, options = {}) {
-  const archetype = resolveConstructArchetype(options);
-  const isPlayer = archetype === 'player';
+const MIXER_SNAP_CLIPS = new Set(['throw_release', 'catch_recoil', 'parry_brace', 'dash_burst', 'eliminated']);
+const MIXER_ONESHOT_CLIPS = new Set(['throw_release', 'catch_recoil', 'dash_burst', 'eliminated']);
 
-  const g = new THREE.Group();
-  g.userData.part = 'chassis_root';
-  g.userData.isPlayer = isPlayer;
-  g.userData.archetype = archetype;
-  g.userData.helmetType = options.helmetType || archetype;
-
+function createConstructMaterials(color, archetype) {
   const baseColor = parseCosmeticColor(color);
   const suitBaseHex = archetype === 'player' ? 0x1e2631 : 0x1a1e26;
   const trimBase = archetype === 'player'
     ? baseColor.clone().multiplyScalar(0.55)
     : new THREE.Color(archetype === 'sentinel' ? color : 0xffb347).multiplyScalar(0.6);
 
-  // Dedicated PBR + HDR emissive materials isolated per rig
   const suit = new THREE.MeshStandardMaterial({
     color: suitBaseHex,
     roughness: 0.38,
@@ -560,6 +554,241 @@ export function makeProgram(color, options = {}) {
     transparent: true,
     opacity: 0.55
   });
+  return { suit, lit, edgeMat };
+}
+
+function createHoverPalmDisc(lit, options = {}) {
+  const palmDiscRadius = config.DISC_R * 0.46;
+  const palmShape = normalizeShapeName(options.discShape || DISC_SHAPES.CIRCLE);
+  const palmOuterMat = lit.clone();
+  palmOuterMat.roughness = 0.32;
+  palmOuterMat.metalness = 0.82;
+  palmOuterMat.emissiveIntensity = 1.3;
+  const disc = new THREE.Mesh(createOuterGeometry(palmShape, { radius: palmDiscRadius, tube: 0.042 }), palmOuterMat);
+  disc.position.set(0, -0.06, 0.18);
+  disc.rotation.set(-0.04, 0, 0);
+  disc.userData.part = 'chassis_back_disc';
+  disc.userData.currentShape = palmShape;
+
+  const discFace = new THREE.Mesh(
+    createFaceGeometry(palmShape, { radius: palmDiscRadius, margin: 0.035 }),
+    new THREE.MeshStandardMaterial({
+      color: 0x04080e,
+      opacity: 0.32,
+      transparent: true,
+      roughness: 0.1,
+      metalness: 0.9,
+      side: THREE.DoubleSide
+    })
+  );
+  discFace.userData.part = 'chassis_back_disc_face';
+  disc.add(discFace);
+  disc.userData.faceMesh = discFace;
+
+  const palmHub = new THREE.Mesh(
+    createHubGeometry(palmShape, { radius: palmDiscRadius }),
+    new THREE.MeshStandardMaterial({
+      color: 0x0066ff,
+      emissive: 0x0066ff,
+      emissiveIntensity: 1.5,
+      roughness: 0.2,
+      metalness: 0.85
+    })
+  );
+  palmHub.userData.part = 'chassis_back_disc_hub';
+  disc.add(palmHub);
+  disc.userData.hubMesh = palmHub;
+
+  return disc;
+}
+
+function disposeReplacedMaterial(mat, keptSet) {
+  if (!mat) return;
+  if (Array.isArray(mat)) {
+    for (const m of mat) disposeReplacedMaterial(m, keptSet);
+    return;
+  }
+  if (!keptSet.has(mat) && typeof mat.dispose === 'function') {
+    mat.dispose();
+  }
+}
+
+function buildCachedConstructRig(cachedAsset, color, options, archetype, isPlayer, mats) {
+  const { suit, lit, edgeMat } = mats;
+  const keptMats = new Set([suit, lit, edgeMat]);
+  const g = cachedAsset.clone();
+
+  g.userData.part = 'chassis_root';
+  g.userData.isPlayer = isPlayer;
+  g.userData.archetype = archetype;
+  g.userData.helmetType = options.helmetType || archetype;
+  g.userData.isGLB = true;
+  g.userData.constructAssetKey = cachedAsset.key;
+  g.userData.suitMaterial = suit;
+  g.userData.litMaterial = lit;
+  g.userData.edgeMaterial = edgeMat;
+
+  g.traverse((child) => {
+    if (child.isLine || child.isLineSegments) {
+      const oldMat = child.material;
+      child.material = edgeMat;
+      disposeReplacedMaterial(oldMat, keptMats);
+      return;
+    }
+    if (!child.isMesh) return;
+    const part = child.userData?.part;
+    const oldMat = child.material;
+    if (part === 'chassis_suit') {
+      if (!oldMat?.map && !oldMat?.normalMap) {
+        child.material = suit;
+        disposeReplacedMaterial(oldMat, keptMats);
+      } else {
+        if (oldMat.color) oldMat.color.copy(suit.color);
+        if ('roughness' in oldMat) oldMat.roughness = suit.roughness;
+        if ('metalness' in oldMat) oldMat.metalness = suit.metalness;
+        if ('flatShading' in oldMat) oldMat.flatShading = true;
+      }
+    } else if (part === 'chassis_trim' || part === 'chassis_visor' || part === 'chassis_halo') {
+      if (!oldMat?.map && !oldMat?.emissiveMap) {
+        child.material = lit;
+        disposeReplacedMaterial(oldMat, keptMats);
+      } else {
+        if (oldMat.color) oldMat.color.copy(lit.color);
+        if ('emissive' in oldMat && oldMat.emissive) {
+          oldMat.emissive.copy(lit.emissive);
+          oldMat.emissiveIntensity = lit.emissiveIntensity;
+        }
+      }
+    }
+  });
+
+  const rightHand = g.userData.joints.rightHand;
+  let disc = g.userData.backDisc;
+  if (!disc) {
+    disc = createHoverPalmDisc(lit, options);
+    const socket = g.userData.palmSocket;
+    if (socket && socket.parent === rightHand && socket.position.lengthSq() > 0) {
+      disc.position.copy(socket.position);
+      disc.quaternion.copy(socket.quaternion);
+    }
+    rightHand.add(disc);
+    g.userData.backDisc = disc;
+  } else if (disc.parent !== rightHand) {
+    rightHand.add(disc);
+  }
+
+  let haloLight = null;
+  g.traverse((child) => {
+    if (child.isPointLight && !haloLight) haloLight = child;
+  });
+  if (!haloLight) {
+    haloLight = new THREE.PointLight(color, isPlayer ? 1.6 : 1.9, 9);
+    haloLight.position.y = 1.5;
+    haloLight.userData.part = 'chassis_halo';
+    g.add(haloLight);
+  }
+  g.userData.halo = haloLight;
+
+  const animations = g.userData.animations || cachedAsset.animations || [];
+  const clips = g.userData.clips || cachedAsset.clips || {};
+  if (animations.length > 0 && Object.keys(clips).length > 0) {
+    const mixer = new THREE.AnimationMixer(g);
+    const actions = {};
+    for (const [clipName, clip] of Object.entries(clips)) {
+      actions[clipName] = mixer.clipAction(clip);
+    }
+    g.userData.mixer = mixer;
+    g.userData.actions = actions;
+    g.userData.activeActionName = null;
+    if (actions.idle_hover) {
+      actions.idle_hover.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).play();
+      g.userData.activeActionName = 'idle_hover';
+      mixer.update(0);
+    }
+  } else {
+    const { rightShoulder, rightElbow } = g.userData.joints;
+    rightShoulder.rotation.set(-0.46, -0.06, 0.36);
+    rightElbow.rotation.set(-1.16, 0, 0);
+    rightHand.rotation.set(0.05, 0, 0);
+  }
+
+  return g;
+}
+
+function updateRigAnimationMixer(rig, dt, state) {
+  const mixer = rig.userData.mixer;
+  const actions = rig.userData.actions;
+  if (!mixer || !actions) return false;
+
+  const actionKeys = Object.keys(actions);
+  if (actionKeys.length === 0) return false;
+
+  let targetName = null;
+  if (state.eliminated && actions.eliminated) targetName = 'eliminated';
+  else if (state.blocking && actions.parry_brace) targetName = 'parry_brace';
+  else if (state.chargingThrow && actions.throw_windup) targetName = 'throw_windup';
+  else if (state.throwTimer > 0 && actions.throw_release) targetName = 'throw_release';
+  else if (state.dashing && actions.dash_burst) targetName = 'dash_burst';
+  else if (state.catchTimer > 0 && actions.catch_recoil) targetName = 'catch_recoil';
+  else if (!state.grounded && actions.aerial_tuck) targetName = 'aerial_tuck';
+  else if (state.grounded && state.speed > 0.4 && actions.sprint_lean) targetName = 'sprint_lean';
+  else if (actions.idle_hover) targetName = 'idle_hover';
+  else targetName = actionKeys[0];
+
+  const nextAction = actions[targetName];
+  if (!nextAction) return false;
+
+  const prevName = rig.userData.activeActionName;
+  const prevAction = prevName ? actions[prevName] : null;
+  const isRetriggeredOneShot =
+    (targetName === 'throw_release' && state.throwTrigger) ||
+    (targetName === 'catch_recoil' && state.catchTrigger);
+
+  if (targetName === 'sprint_lean') {
+    nextAction.setEffectiveTimeScale(THREE.MathUtils.clamp(state.speed / 7.5, 0.45, 1.55));
+  } else {
+    nextAction.setEffectiveTimeScale(1);
+  }
+
+  if (targetName !== prevName || isRetriggeredOneShot) {
+    const fadeSec = MIXER_SNAP_CLIPS.has(targetName) ? 0.06 : 0.12;
+    const isOneShot = MIXER_ONESHOT_CLIPS.has(targetName);
+    nextAction.reset();
+    nextAction.enabled = true;
+    nextAction.setEffectiveWeight(1);
+    nextAction.setLoop(isOneShot ? THREE.LoopOnce : THREE.LoopRepeat, isOneShot ? 1 : Infinity);
+    nextAction.clampWhenFinished = isOneShot;
+    if (prevAction && prevAction !== nextAction) {
+      prevAction.crossFadeTo(nextAction, fadeSec, true);
+    }
+    nextAction.play();
+    rig.userData.activeActionName = targetName;
+  }
+
+  mixer.update(Math.max(dt, 0));
+  return true;
+}
+
+export function makeProgram(color, options = {}) {
+  const archetype = resolveConstructArchetype(options);
+  const isPlayer = archetype === 'player';
+  const mats = createConstructMaterials(color, archetype);
+
+  if (!options.forceProcedural) {
+    const assetKey = options.modelKey || options.constructKey || archetype;
+    const cachedAsset = getCachedConstructAsset(assetKey);
+    if (cachedAsset) {
+      return buildCachedConstructRig(cachedAsset, color, options, archetype, isPlayer, mats);
+    }
+  }
+
+  const g = new THREE.Group();
+  g.userData.part = 'chassis_root';
+  g.userData.isPlayer = isPlayer;
+  g.userData.archetype = archetype;
+  g.userData.helmetType = options.helmetType || archetype;
+
+  const { suit, lit, edgeMat } = mats;
 
   g.userData.suitMaterial = suit;
   g.userData.litMaterial = lit;
@@ -787,48 +1016,7 @@ export function makeProgram(color, options = {}) {
   limbs.rightHand.rotation.set(0.05, 0, 0);
 
   // 8. Hover-Palm Telekinetic Kinetic Disc (parented to rightHand, floating above upturned open palm)
-  const palmDiscRadius = config.DISC_R * 0.46;
-  const palmShape = normalizeShapeName(options.discShape || DISC_SHAPES.CIRCLE);
-  const palmOuterMat = lit.clone();
-  palmOuterMat.roughness = 0.32;
-  palmOuterMat.metalness = 0.82;
-  palmOuterMat.emissiveIntensity = 1.3;
-  const disc = new THREE.Mesh(createOuterGeometry(palmShape, { radius: palmDiscRadius, tube: 0.042 }), palmOuterMat);
-  disc.position.set(0, -0.06, 0.18);
-  disc.rotation.set(-0.04, 0, 0);
-  disc.userData.part = 'chassis_back_disc';
-  disc.userData.currentShape = palmShape;
-
-  const discFace = new THREE.Mesh(
-    createFaceGeometry(palmShape, { radius: palmDiscRadius, margin: 0.035 }),
-    new THREE.MeshStandardMaterial({
-      color: 0x04080e,
-      opacity: 0.32,
-      transparent: true,
-      roughness: 0.1,
-      metalness: 0.9,
-      side: THREE.DoubleSide
-    })
-  );
-  discFace.userData.part = 'chassis_back_disc_face';
-  disc.add(discFace);
-  disc.userData.faceMesh = discFace;
-
-  const palmHub = new THREE.Mesh(
-    createHubGeometry(palmShape, { radius: palmDiscRadius }),
-    new THREE.MeshStandardMaterial({
-      color: 0x0066ff,
-      emissive: 0x0066ff,
-      emissiveIntensity: 1.5,
-      roughness: 0.2,
-      metalness: 0.85
-    })
-  );
-  palmHub.userData.part = 'chassis_back_disc_hub';
-  disc.add(palmHub);
-  disc.userData.hubMesh = palmHub;
-  disc.userData.faceMesh = discFace;
-
+  const disc = createHoverPalmDisc(lit, options);
   limbs.rightHand.add(disc);
   g.userData.backDisc = disc;
 
@@ -917,6 +1105,7 @@ export function animateProgramKinematics(rig, dt, params = {}) {
     animState.catchTimer = 0;
   } else if (catchTrigger || (!animState.prevHasDisc && effectiveHasDisc)) {
     animState.catchTimer = 0.25;
+    animState.throwTimer = 0;
   }
   animState.prevHasDisc = effectiveHasDisc;
   animState.throwTimer = Math.max(0, animState.throwTimer - dt);
@@ -951,193 +1140,208 @@ export function animateProgramKinematics(rig, dt, params = {}) {
     rig.userData.headHalo.rotation.z = 0.22 + Math.sin(time * 1.4) * 0.06;
   }
 
-  let targetTorsoY = 0;
-  let targetTorsoX = 0;
-  let targetRightHandX = 0.15;
-  let targetRightHandZ = 0;
+  const usingMixer = updateRigAnimationMixer(rig, dt, {
+    speed,
+    grounded,
+    blocking,
+    chargingThrow,
+    throwTimer: animState.throwTimer,
+    catchTimer: animState.catchTimer,
+    dashing: !!params.dashing,
+    eliminated: !!params.eliminated,
+    throwTrigger,
+    catchTrigger
+  });
 
-  // 1. Locomotion strides (walking vs running)
-  if (grounded && speed > 0.4) {
-    const isRunning = speed > 6.0;
-    const isWalking = !isRunning;
+  if (!usingMixer) {
+    let targetTorsoY = 0;
+    let targetTorsoX = 0;
+    let targetRightHandX = 0.15;
+    let targetRightHandZ = 0;
 
-    const strideRate = isWalking
-      ? Math.max(4.2, speed * 1.35)
-      : Math.min(speed * 1.15 + 2.5, 13.5);
-    rig.userData._runCycle = (rig.userData._runCycle || 0) + dt * strideRate;
-    const cycle = rig.userData._runCycle;
+    // 1. Locomotion strides (walking vs running)
+    if (grounded && speed > 0.4) {
+      const isRunning = speed > 6.0;
+      const isWalking = !isRunning;
 
-    const strideAmp = isWalking
-      ? (0.28 + 0.12 * Math.min(speed / 6.0, 1.0))
-      : Math.min(speed / 9.0, 1.0) * 0.65;
+      const strideRate = isWalking
+        ? Math.max(4.2, speed * 1.35)
+        : Math.min(speed * 1.15 + 2.5, 13.5);
+      rig.userData._runCycle = (rig.userData._runCycle || 0) + dt * strideRate;
+      const cycle = rig.userData._runCycle;
 
-    const phiL = cycle;
-    const phiR = cycle + Math.PI;
+      const strideAmp = isWalking
+        ? (0.28 + 0.12 * Math.min(speed / 6.0, 1.0))
+        : Math.min(speed / 9.0, 1.0) * 0.65;
 
-    leftHip.rotation.x = Math.cos(phiL) * strideAmp;
-    rightHip.rotation.x = Math.cos(phiR) * strideAmp;
-    leftHip.rotation.y = -Math.sin(phiL) * (isWalking ? 0.03 : 0.05);
-    rightHip.rotation.y = -Math.sin(phiR) * (isWalking ? 0.03 : 0.05);
-    leftHip.rotation.z = -0.03;
-    rightHip.rotation.z = 0.03;
+      const phiL = cycle;
+      const phiR = cycle + Math.PI;
 
-    const swingFlexL = Math.max(0, -Math.sin(phiL - 0.25));
-    const swingFlexR = Math.max(0, -Math.sin(phiR - 0.25));
-    leftKnee.rotation.x = swingFlexL * (isWalking ? 0.85 : 1.35) * strideAmp + 0.05;
-    rightKnee.rotation.x = swingFlexR * (isWalking ? 0.85 : 1.35) * strideAmp + 0.05;
+      leftHip.rotation.x = Math.cos(phiL) * strideAmp;
+      rightHip.rotation.x = Math.cos(phiR) * strideAmp;
+      leftHip.rotation.y = -Math.sin(phiL) * (isWalking ? 0.03 : 0.05);
+      rightHip.rotation.y = -Math.sin(phiR) * (isWalking ? 0.03 : 0.05);
+      leftHip.rotation.z = -0.03;
+      rightHip.rotation.z = 0.03;
 
-    pelvis.position.y = 1.08 - Math.abs(Math.sin(cycle)) * (isWalking ? 0.025 : 0.05);
-    pelvis.rotation.z = Math.sin(cycle) * (isWalking ? 0.03 : 0.055);
-    pelvis.rotation.y = -Math.cos(cycle) * (isWalking ? 0.04 : 0.07);
+      const swingFlexL = Math.max(0, -Math.sin(phiL - 0.25));
+      const swingFlexR = Math.max(0, -Math.sin(phiR - 0.25));
+      leftKnee.rotation.x = swingFlexL * (isWalking ? 0.85 : 1.35) * strideAmp + 0.05;
+      rightKnee.rotation.x = swingFlexR * (isWalking ? 0.85 : 1.35) * strideAmp + 0.05;
 
-    targetTorsoY = Math.cos(cycle) * (isWalking ? 0.06 : 0.11);
-    targetTorsoX = isWalking ? 0.03 : (0.04 + 0.09 * Math.min(speed / 10, 1));
-    torso.rotation.z = -Math.sin(cycle) * (isWalking ? 0.02 : 0.035);
+      pelvis.position.y = 1.08 - Math.abs(Math.sin(cycle)) * (isWalking ? 0.025 : 0.05);
+      pelvis.rotation.z = Math.sin(cycle) * (isWalking ? 0.03 : 0.055);
+      pelvis.rotation.y = -Math.cos(cycle) * (isWalking ? 0.04 : 0.07);
 
-    head.rotation.x = isWalking ? 0 : -0.04;
-    head.rotation.y = -targetTorsoY * 0.6;
+      targetTorsoY = Math.cos(cycle) * (isWalking ? 0.06 : 0.11);
+      targetTorsoX = isWalking ? 0.03 : (0.04 + 0.09 * Math.min(speed / 10, 1));
+      torso.rotation.z = -Math.sin(cycle) * (isWalking ? 0.02 : 0.035);
 
-    if (!blocking) {
-      leftShoulder.rotation.x = -Math.cos(cycle) * (isWalking ? 0.42 : 0.82) * strideAmp;
-      leftShoulder.rotation.y = THREE.MathUtils.lerp(leftShoulder.rotation.y, 0, dt * 10);
-      leftShoulder.rotation.z = -0.12 - Math.sin(cycle) * 0.03;
-      leftElbow.rotation.x = -0.28 - Math.max(0, -Math.cos(cycle)) * (isWalking ? 0.35 : 0.65) * strideAmp;
+      head.rotation.x = isWalking ? 0 : -0.04;
+      head.rotation.y = -targetTorsoY * 0.6;
 
-      if (effectiveHasDisc) {
-        // Athletic Hover-Palm forward poise while moving
-        rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, -0.46 + Math.cos(cycle) * 0.08, dt * 10);
-        rightShoulder.rotation.y = THREE.MathUtils.lerp(rightShoulder.rotation.y, -0.06, dt * 10);
-        rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, 0.36, dt * 10);
-        rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, -1.16 + Math.cos(cycle) * 0.06, dt * 10);
-        targetRightHandX = 0.05;
-      } else {
-        rightShoulder.rotation.x = Math.cos(cycle) * (isWalking ? 0.36 : 0.72) * strideAmp;
-        rightShoulder.rotation.y = THREE.MathUtils.lerp(rightShoulder.rotation.y, 0, dt * 10);
-        rightShoulder.rotation.z = 0.12 + Math.sin(cycle) * 0.03;
-        rightElbow.rotation.x = -0.28 - Math.max(0, Math.cos(cycle)) * (isWalking ? 0.25 : 0.50) * strideAmp;
+      if (!blocking) {
+        leftShoulder.rotation.x = -Math.cos(cycle) * (isWalking ? 0.42 : 0.82) * strideAmp;
+        leftShoulder.rotation.y = THREE.MathUtils.lerp(leftShoulder.rotation.y, 0, dt * 10);
+        leftShoulder.rotation.z = -0.12 - Math.sin(cycle) * 0.03;
+        leftElbow.rotation.x = -0.28 - Math.max(0, -Math.cos(cycle)) * (isWalking ? 0.35 : 0.65) * strideAmp;
+
+        if (effectiveHasDisc) {
+          // Athletic Hover-Palm forward poise while moving
+          rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, -0.46 + Math.cos(cycle) * 0.08, dt * 10);
+          rightShoulder.rotation.y = THREE.MathUtils.lerp(rightShoulder.rotation.y, -0.06, dt * 10);
+          rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, 0.36, dt * 10);
+          rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, -1.16 + Math.cos(cycle) * 0.06, dt * 10);
+          targetRightHandX = 0.05;
+        } else {
+          rightShoulder.rotation.x = Math.cos(cycle) * (isWalking ? 0.36 : 0.72) * strideAmp;
+          rightShoulder.rotation.y = THREE.MathUtils.lerp(rightShoulder.rotation.y, 0, dt * 10);
+          rightShoulder.rotation.z = 0.12 + Math.sin(cycle) * 0.03;
+          rightElbow.rotation.x = -0.28 - Math.max(0, Math.cos(cycle)) * (isWalking ? 0.25 : 0.50) * strideAmp;
+        }
+      }
+    } else if (grounded) {
+      // 2. Idle magnetic hover breathing stance
+      const idleCycle = time * 2.3;
+      const idleBreath = Math.sin(idleCycle);
+      const idleSlow = Math.sin(idleCycle * 0.5);
+
+      leftHip.rotation.x = THREE.MathUtils.lerp(leftHip.rotation.x, 0.06 + idleBreath * 0.008, dt * 6);
+      rightHip.rotation.x = THREE.MathUtils.lerp(rightHip.rotation.x, -0.05 - idleBreath * 0.008, dt * 6);
+      leftHip.rotation.y = THREE.MathUtils.lerp(leftHip.rotation.y, -0.04, dt * 6);
+      rightHip.rotation.y = THREE.MathUtils.lerp(rightHip.rotation.y, 0.04, dt * 6);
+      leftHip.rotation.z = THREE.MathUtils.lerp(leftHip.rotation.z, -0.04, dt * 6);
+      rightHip.rotation.z = THREE.MathUtils.lerp(rightHip.rotation.z, 0.04, dt * 6);
+
+      leftKnee.rotation.x = THREE.MathUtils.lerp(leftKnee.rotation.x, 0.08 - idleBreath * 0.006, dt * 6);
+      rightKnee.rotation.x = THREE.MathUtils.lerp(rightKnee.rotation.x, 0.06 + idleBreath * 0.006, dt * 6);
+
+      pelvis.position.y = THREE.MathUtils.lerp(pelvis.position.y, 1.09 + idleBreath * 0.025, dt * 8);
+      pelvis.rotation.z = THREE.MathUtils.lerp(pelvis.rotation.z, idleSlow * 0.015, dt * 4);
+      pelvis.rotation.y = THREE.MathUtils.lerp(pelvis.rotation.y, 0.04, dt * 4);
+
+      targetTorsoX = idleBreath * 0.022;
+      targetTorsoY = -0.04 + idleSlow * 0.015;
+      torso.rotation.z = THREE.MathUtils.lerp(torso.rotation.z, -idleSlow * 0.015, dt * 4);
+
+      head.rotation.x = THREE.MathUtils.lerp(head.rotation.x, -idleBreath * 0.015, dt * 6);
+      head.rotation.y = THREE.MathUtils.lerp(head.rotation.y, Math.sin(time * 0.4) * 0.03, dt * 4);
+
+      if (!blocking) {
+        leftShoulder.rotation.x = THREE.MathUtils.lerp(leftShoulder.rotation.x, 0.04 + idleBreath * 0.02, dt * 6);
+        leftShoulder.rotation.y = THREE.MathUtils.lerp(leftShoulder.rotation.y, 0, dt * 6);
+        leftShoulder.rotation.z = THREE.MathUtils.lerp(leftShoulder.rotation.z, -0.14, dt * 6);
+        leftElbow.rotation.x = THREE.MathUtils.lerp(leftElbow.rotation.x, -0.32 + idleBreath * 0.015, dt * 6);
+
+        if (effectiveHasDisc) {
+          // Hover-Palm Ready Stance: upturned open right palm presenting horizontal spinning disc
+          rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, -0.46 + idleBreath * 0.02, dt * 8);
+          rightShoulder.rotation.y = THREE.MathUtils.lerp(rightShoulder.rotation.y, -0.06, dt * 8);
+          rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, 0.36, dt * 8);
+          rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, -1.16 + idleBreath * 0.015, dt * 8);
+          targetRightHandX = 0.05;
+        } else {
+          rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, -0.02 + idleBreath * 0.02, dt * 6);
+          rightShoulder.rotation.y = THREE.MathUtils.lerp(rightShoulder.rotation.y, 0, dt * 6);
+          rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, 0.14, dt * 6);
+          rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, -0.28 + idleBreath * 0.015, dt * 6);
+        }
+      }
+    } else {
+      // 3. Airborne / Jump: hover-legs trail aerodynamically backwards
+      leftHip.rotation.x = THREE.MathUtils.lerp(leftHip.rotation.x, 0.28, dt * 8);
+      rightHip.rotation.x = THREE.MathUtils.lerp(rightHip.rotation.x, 0.22, dt * 8);
+      leftKnee.rotation.x = THREE.MathUtils.lerp(leftKnee.rotation.x, 0.35, dt * 8);
+      rightKnee.rotation.x = THREE.MathUtils.lerp(rightKnee.rotation.x, 0.45, dt * 8);
+
+      pelvis.position.y = THREE.MathUtils.lerp(pelvis.position.y, 1.09, dt * 8);
+      pelvis.rotation.set(0, 0, 0);
+      targetTorsoX = THREE.MathUtils.clamp(-vy * 0.015, -0.18, 0.18);
+      torso.rotation.z = THREE.MathUtils.lerp(torso.rotation.z, 0, dt * 8);
+
+      if (!blocking) {
+        leftShoulder.rotation.x = THREE.MathUtils.lerp(leftShoulder.rotation.x, -0.32, dt * 8);
+        leftShoulder.rotation.z = THREE.MathUtils.lerp(leftShoulder.rotation.z, -0.32, dt * 8);
+        leftElbow.rotation.x = THREE.MathUtils.lerp(leftElbow.rotation.x, -0.35, dt * 8);
+
+        if (effectiveHasDisc) {
+          rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, -0.46, dt * 8);
+          rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, 0.36, dt * 8);
+          rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, -1.16, dt * 8);
+          targetRightHandX = 0.05;
+        } else {
+          rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, -0.32, dt * 8);
+          rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, 0.32, dt * 8);
+          rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, -0.35, dt * 8);
+        }
       }
     }
-  } else if (grounded) {
-    // 2. Idle magnetic hover breathing stance
-    const idleCycle = time * 2.3;
-    const idleBreath = Math.sin(idleCycle);
-    const idleSlow = Math.sin(idleCycle * 0.5);
 
-    leftHip.rotation.x = THREE.MathUtils.lerp(leftHip.rotation.x, 0.06 + idleBreath * 0.008, dt * 6);
-    rightHip.rotation.x = THREE.MathUtils.lerp(rightHip.rotation.x, -0.05 - idleBreath * 0.008, dt * 6);
-    leftHip.rotation.y = THREE.MathUtils.lerp(leftHip.rotation.y, -0.04, dt * 6);
-    rightHip.rotation.y = THREE.MathUtils.lerp(rightHip.rotation.y, 0.04, dt * 6);
-    leftHip.rotation.z = THREE.MathUtils.lerp(leftHip.rotation.z, -0.04, dt * 6);
-    rightHip.rotation.z = THREE.MathUtils.lerp(rightHip.rotation.z, 0.04, dt * 6);
+    // 4. Telekinetic Throw Wind-Up, Open-Palm Release, Catch & Parry Brace Overrides
+    if (blocking) {
+      // Shield Defense Stance: open right palm projects disc forward as energy shield
+      leftShoulder.rotation.x = THREE.MathUtils.lerp(leftShoulder.rotation.x, -0.75, dt * 18);
+      rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, -0.88, dt * 18);
+      leftShoulder.rotation.y = THREE.MathUtils.lerp(leftShoulder.rotation.y, 0.32, dt * 18);
+      rightShoulder.rotation.y = THREE.MathUtils.lerp(rightShoulder.rotation.y, -0.36, dt * 18);
+      leftShoulder.rotation.z = THREE.MathUtils.lerp(leftShoulder.rotation.z, 0.18, dt * 18);
+      rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, -0.18, dt * 18);
 
-    leftKnee.rotation.x = THREE.MathUtils.lerp(leftKnee.rotation.x, 0.08 - idleBreath * 0.006, dt * 6);
-    rightKnee.rotation.x = THREE.MathUtils.lerp(rightKnee.rotation.x, 0.06 + idleBreath * 0.006, dt * 6);
-
-    pelvis.position.y = THREE.MathUtils.lerp(pelvis.position.y, 1.09 + idleBreath * 0.025, dt * 8);
-    pelvis.rotation.z = THREE.MathUtils.lerp(pelvis.rotation.z, idleSlow * 0.015, dt * 4);
-    pelvis.rotation.y = THREE.MathUtils.lerp(pelvis.rotation.y, 0.04, dt * 4);
-
-    targetTorsoX = idleBreath * 0.022;
-    targetTorsoY = -0.04 + idleSlow * 0.015;
-    torso.rotation.z = THREE.MathUtils.lerp(torso.rotation.z, -idleSlow * 0.015, dt * 4);
-
-    head.rotation.x = THREE.MathUtils.lerp(head.rotation.x, -idleBreath * 0.015, dt * 6);
-    head.rotation.y = THREE.MathUtils.lerp(head.rotation.y, Math.sin(time * 0.4) * 0.03, dt * 4);
-
-    if (!blocking) {
-      leftShoulder.rotation.x = THREE.MathUtils.lerp(leftShoulder.rotation.x, 0.04 + idleBreath * 0.02, dt * 6);
-      leftShoulder.rotation.y = THREE.MathUtils.lerp(leftShoulder.rotation.y, 0, dt * 6);
-      leftShoulder.rotation.z = THREE.MathUtils.lerp(leftShoulder.rotation.z, -0.14, dt * 6);
-      leftElbow.rotation.x = THREE.MathUtils.lerp(leftElbow.rotation.x, -0.32 + idleBreath * 0.015, dt * 6);
-
-      if (effectiveHasDisc) {
-        // Hover-Palm Ready Stance: upturned open right palm presenting horizontal spinning disc
-        rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, -0.46 + idleBreath * 0.02, dt * 8);
-        rightShoulder.rotation.y = THREE.MathUtils.lerp(rightShoulder.rotation.y, -0.06, dt * 8);
-        rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, 0.36, dt * 8);
-        rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, -1.16 + idleBreath * 0.015, dt * 8);
-        targetRightHandX = 0.05;
-      } else {
-        rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, -0.02 + idleBreath * 0.02, dt * 6);
-        rightShoulder.rotation.y = THREE.MathUtils.lerp(rightShoulder.rotation.y, 0, dt * 6);
-        rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, 0.14, dt * 6);
-        rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, -0.28 + idleBreath * 0.015, dt * 6);
-      }
+      leftElbow.rotation.x = THREE.MathUtils.lerp(leftElbow.rotation.x, -0.65, dt * 18);
+      rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, -0.62, dt * 18);
+      targetRightHandX = 0.0;
+    } else if (chargingThrow) {
+      // Coiled Telekinetic Wind-Up: draw open right palm back while torso coils
+      targetTorsoY = THREE.MathUtils.lerp(torso.rotation.y, -0.45 * (0.35 + charge * 0.65), dt * 12);
+      rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, 0.38 * (0.4 + charge * 0.6), dt * 14);
+      rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, 0.45 + charge * 0.15, dt * 14);
+      rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, -1.35, dt * 14);
+      targetRightHandX = 0.25;
+    } else if (animState.throwTimer > 0) {
+      // No-Contact Open-Palm Forward Thrust
+      const tNorm = animState.throwTimer / 0.28;
+      const thrust = Math.sin(tNorm * Math.PI * 0.7);
+      targetTorsoY = 0.32 * thrust;
+      rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, -1.18, dt * 24);
+      rightShoulder.rotation.y = THREE.MathUtils.lerp(rightShoulder.rotation.y, -0.12, dt * 24);
+      rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, 0.18, dt * 24);
+      rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, -0.22, dt * 24);
+      targetRightHandX = -0.35;
+    } else if (animState.catchTimer > 0) {
+      // Magnetic Catch Cushion Recoil
+      const cNorm = animState.catchTimer / 0.25;
+      rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, -0.78 + (1 - cNorm) * 0.35, dt * 20);
+      rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, 0.24, dt * 20);
+      rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, -0.72 - (1 - cNorm) * 0.32, dt * 20);
+      targetRightHandX = 0.15;
     }
-  } else {
-    // 3. Airborne / Jump: hover-legs trail aerodynamically backwards
-    leftHip.rotation.x = THREE.MathUtils.lerp(leftHip.rotation.x, 0.28, dt * 8);
-    rightHip.rotation.x = THREE.MathUtils.lerp(rightHip.rotation.x, 0.22, dt * 8);
-    leftKnee.rotation.x = THREE.MathUtils.lerp(leftKnee.rotation.x, 0.35, dt * 8);
-    rightKnee.rotation.x = THREE.MathUtils.lerp(rightKnee.rotation.x, 0.45, dt * 8);
 
-    pelvis.position.y = THREE.MathUtils.lerp(pelvis.position.y, 1.09, dt * 8);
-    pelvis.rotation.set(0, 0, 0);
-    targetTorsoX = THREE.MathUtils.clamp(-vy * 0.015, -0.18, 0.18);
-    torso.rotation.z = THREE.MathUtils.lerp(torso.rotation.z, 0, dt * 8);
-
-    if (!blocking) {
-      leftShoulder.rotation.x = THREE.MathUtils.lerp(leftShoulder.rotation.x, -0.32, dt * 8);
-      leftShoulder.rotation.z = THREE.MathUtils.lerp(leftShoulder.rotation.z, -0.32, dt * 8);
-      leftElbow.rotation.x = THREE.MathUtils.lerp(leftElbow.rotation.x, -0.35, dt * 8);
-
-      if (effectiveHasDisc) {
-        rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, -0.46, dt * 8);
-        rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, 0.36, dt * 8);
-        rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, -1.16, dt * 8);
-        targetRightHandX = 0.05;
-      } else {
-        rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, -0.32, dt * 8);
-        rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, 0.32, dt * 8);
-        rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, -0.35, dt * 8);
-      }
-    }
+    torso.rotation.x = THREE.MathUtils.lerp(torso.rotation.x, targetTorsoX, dt * 10);
+    torso.rotation.y = THREE.MathUtils.lerp(torso.rotation.y, targetTorsoY, dt * 10);
+    rightHand.rotation.x = THREE.MathUtils.lerp(rightHand.rotation.x, targetRightHandX, dt * 16);
+    rightHand.rotation.z = THREE.MathUtils.lerp(rightHand.rotation.z, targetRightHandZ, dt * 16);
+    leftHand.rotation.x = THREE.MathUtils.lerp(leftHand.rotation.x, 0, dt * 10);
   }
-
-  // 4. Telekinetic Throw Wind-Up, Open-Palm Release, Catch & Parry Brace Overrides
-  if (blocking) {
-    // Shield Defense Stance: open right palm projects disc forward as energy shield
-    leftShoulder.rotation.x = THREE.MathUtils.lerp(leftShoulder.rotation.x, -0.75, dt * 18);
-    rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, -0.88, dt * 18);
-    leftShoulder.rotation.y = THREE.MathUtils.lerp(leftShoulder.rotation.y, 0.32, dt * 18);
-    rightShoulder.rotation.y = THREE.MathUtils.lerp(rightShoulder.rotation.y, -0.36, dt * 18);
-    leftShoulder.rotation.z = THREE.MathUtils.lerp(leftShoulder.rotation.z, 0.18, dt * 18);
-    rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, -0.18, dt * 18);
-
-    leftElbow.rotation.x = THREE.MathUtils.lerp(leftElbow.rotation.x, -0.65, dt * 18);
-    rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, -0.62, dt * 18);
-    targetRightHandX = 0.0;
-  } else if (chargingThrow) {
-    // Coiled Telekinetic Wind-Up: draw open right palm back while torso coils
-    targetTorsoY = THREE.MathUtils.lerp(torso.rotation.y, -0.45 * (0.35 + charge * 0.65), dt * 12);
-    rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, 0.38 * (0.4 + charge * 0.6), dt * 14);
-    rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, 0.45 + charge * 0.15, dt * 14);
-    rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, -1.35, dt * 14);
-    targetRightHandX = 0.25;
-  } else if (animState.throwTimer > 0) {
-    // No-Contact Open-Palm Forward Thrust
-    const tNorm = animState.throwTimer / 0.28;
-    const thrust = Math.sin(tNorm * Math.PI * 0.7);
-    targetTorsoY = 0.32 * thrust;
-    rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, -1.18, dt * 24);
-    rightShoulder.rotation.y = THREE.MathUtils.lerp(rightShoulder.rotation.y, -0.12, dt * 24);
-    rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, 0.18, dt * 24);
-    rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, -0.22, dt * 24);
-    targetRightHandX = -0.35;
-  } else if (animState.catchTimer > 0) {
-    // Magnetic Catch Cushion Recoil
-    const cNorm = animState.catchTimer / 0.25;
-    rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, -0.78 + (1 - cNorm) * 0.35, dt * 20);
-    rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, 0.24, dt * 20);
-    rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, -0.72 - (1 - cNorm) * 0.32, dt * 20);
-    targetRightHandX = 0.15;
-  }
-
-  torso.rotation.x = THREE.MathUtils.lerp(torso.rotation.x, targetTorsoX, dt * 10);
-  torso.rotation.y = THREE.MathUtils.lerp(torso.rotation.y, targetTorsoY, dt * 10);
-  rightHand.rotation.x = THREE.MathUtils.lerp(rightHand.rotation.x, targetRightHandX, dt * 16);
-  rightHand.rotation.z = THREE.MathUtils.lerp(rightHand.rotation.z, targetRightHandZ, dt * 16);
-  leftHand.rotation.x = THREE.MathUtils.lerp(leftHand.rotation.x, 0, dt * 10);
 
   // 5. Hover-Palm Disc Position & Orientation on Right Hand
   if (disc) {
@@ -1158,7 +1362,7 @@ export function animateProgramKinematics(rig, dt, params = {}) {
   if (hurt > 0) {
     torso.rotation.z = Math.sin(time * 55) * 0.08;
     head.rotation.y = Math.sin(time * 45) * 0.06;
-  } else if (!(grounded && speed > 0.4)) {
+  } else if (!usingMixer && !(grounded && speed > 0.4)) {
     torso.rotation.z = THREE.MathUtils.lerp(torso.rotation.z, 0, dt * 12);
     head.rotation.y = THREE.MathUtils.lerp(head.rotation.y, 0, dt * 12);
   }

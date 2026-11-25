@@ -39,6 +39,7 @@ const TEST_DOMAINS = {
   ],
   graphics: [
     'graphics/humanoid_rig.test.js',
+    'graphics/construct_loader.test.js',
     'graphics/disc_geometry_factory.test.js',
     'graphics/arena_textures.test.js',
     'graphics/arena_asset_loader.test.js',

@@ -92,9 +92,9 @@ export class CinematicComposer {
    * @param {boolean} [options.enabled=true]
    * @param {string} [options.bloomQuality='full'] 'full' | 'half' | 'off'
    * @param {number} [options.renderScale=1.0]
-   * @param {number} [options.threshold=0.92]
-   * @param {number} [options.knee=0.35]
-   * @param {number} [options.strength=0.52]
+   * @param {number} [options.threshold=1.20]
+   * @param {number} [options.knee=0.20]
+   * @param {number} [options.strength=0.38]
    * @param {number} [options.radius=1.15]
    */
   constructor(renderer, options = {}) {
@@ -102,9 +102,9 @@ export class CinematicComposer {
     this.bloomQuality = options.bloomQuality || options.quality || 'full';
     this.enabled = options.enabled !== false && this.bloomQuality !== 'off';
     this.renderScale = typeof options.renderScale === 'number' ? options.renderScale : 1.0;
-    this.threshold = typeof options.threshold === 'number' ? options.threshold : 0.92;
-    this.knee = typeof options.knee === 'number' ? options.knee : 0.35;
-    this.strength = typeof options.strength === 'number' ? options.strength : 0.52;
+    this.threshold = typeof options.threshold === 'number' ? options.threshold : 1.20;
+    this.knee = typeof options.knee === 'number' ? options.knee : 0.20;
+    this.strength = typeof options.strength === 'number' ? options.strength : 0.38;
     this.radius = typeof options.radius === 'number' ? options.radius : 1.15;
 
     this.width = 1;

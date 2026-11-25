@@ -80,11 +80,10 @@ The universal implement of the Arc League athlete. Constructed from concentrated
 * **The Arc Shield (Parry):** When holding the disc in a defensive stance, incoming enemy projectiles can be deflected directly back toward the attacker with accelerated velocity.
 * **AI Counter-Catches:** Master-tier competitors and combat subroutines possess split-second reflexes to catch incoming deflected discs out of mid-air.
 
-### Athlete Rigs (Chassis)
-Athletes compete using customized digital humanoid avatars known as **Rigs**:
-* **Striker Class:** Lightweight, streamlined frames optimized for high sprint velocity and aerial hang-time.
-* **Bulwark Class:** Reinforced kinetic chassis with broader parry radii and resistance to impact knockback.
-* **Custom Kits & Shaders:** Outfitted in the **Outfitting Locker Room** with distinct team colors, iridescent shader skins, and trail particle effects.
+### Athlete Rigs (Magnetic Constructs)
+Athletes compete using customized digital humanoid avatars known as **Construct Rigs**—magnetically suspended, faceted obsidian/ceramic armor shards orbiting a central plasma core:
+* **Skill-Only Competitive Parity:** Every Athlete Rig adheres to strict Arc League regulation—all chassis silhouettes and cosmetic kits share identical velocity, hitbox, jump impulse, dash, and parry timings so outcomes remain 100% skill-driven.
+* **Custom Kits & Shaders:** Outfitted in the **Outfitting Locker Room** with distinct team colors, PBR armor finishes, iridescent shader skins, and trail particle effects.
 
 ---
 

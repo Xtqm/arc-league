@@ -7,10 +7,11 @@
 
 import * as THREE from '../../vendor/three.module.js';
 import { makeDisc, makeProgram, animateProgramKinematics } from '../graphics/materials.js';
+import { loadConstructAsset, canLoadExternalConstructs } from '../graphics/ConstructLoader.js';
 import { createProceduralEnvironment } from '../graphics/Environment.js';
 import { CinematicComposer } from '../graphics/PostProcessing.js';
 import { settingsManager } from '../core/settings.js';
-import { cosmeticMaterialEngine as defaultCosmeticEngine, disposeHierarchy } from './CosmeticMaterialEngine.js';
+import { cosmeticMaterialEngine as defaultCosmeticEngine, disposeHierarchy, setRigFirstPersonVisibility } from './CosmeticMaterialEngine.js';
 
 export class ArmoryPreviewScene {
   /**
@@ -126,6 +127,15 @@ export class ArmoryPreviewScene {
         window.addEventListener('pointermove', this._onPointerMove);
         window.addEventListener('pointerup', this._onPointerUp);
 
+        // Preload player construct .glb asynchronously and hot-swap staged chassis if loaded
+        if (canLoadExternalConstructs()) {
+          loadConstructAsset('player', { silent: true }).then((record) => {
+            if (record && !this.isDisposed && this.stagedType === 'chassis' && this.stagedMesh && !this.stagedMesh.userData?.isGLB) {
+              this.previewChassis(this.currentSkinId || 'chassis_default', this._lastActiveDiscSkinId || null);
+            }
+          });
+        }
+
         // Start render loop
         this._lastTime = performance.now();
         this._rafId = requestAnimationFrame(this._tick);
@@ -199,8 +209,10 @@ export class ArmoryPreviewScene {
    */
   previewChassis(chassisSkinIdOrConfig, activeDiscSkinId = null) {
     this.clearStaged();
+    this._lastActiveDiscSkinId = activeDiscSkinId;
 
     const rig = makeProgram(0x00f3ff, { archetype: 'player' });
+    setRigFirstPersonVisibility(rig, false);
     this.cosmetics.applyChassisSkin(rig, chassisSkinIdOrConfig);
 
     if (activeDiscSkinId && rig.userData?.backDisc) {

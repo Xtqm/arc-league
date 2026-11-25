@@ -6,6 +6,7 @@ import { resolveCircle } from '../physics/collision.js';
 import { burst, emitHoverDashStreak } from '../graphics/particles.js';
 import { playDeRezSound, SFX } from '../audio/sfx.js';
 import { animateProgramKinematics } from '../graphics/materials.js';
+import { setRigFirstPersonVisibility } from '../armory/CosmeticMaterialEngine.js';
 import { shake, showGameOver } from '../ui/UIManager.js';
 import { getTileAt, rebuildArenaTiles, pillars } from './Arena.js';
 import { spawnDisc, disposeDiscEntity } from './Disc.js';
@@ -255,26 +256,9 @@ export function updatePlayer(dt) {
     state.player.obj.position.y = state.player.y + (state.player.grounded ? Math.sin(state.time * 11) * .05 * Math.min(state.player.vel.length() / 8, 1) : 0);
     state.player.obj.rotation.x = THREE.MathUtils.clamp(-state.player.vy * 0.018, -.22, .22);
 
-    // First-person mesh culling (hide head and torso when blend < 0.2, keeping arms and disc visible)
+    // First-person mesh culling (hide head, visor, halo, and torso when blend < 0.2, keeping arms and disc visible)
     const blend = state.cameraPerspectiveBlend !== undefined ? state.cameraPerspectiveBlend : 1.0;
-    const isFirstPerson = blend < 0.2;
-    const uData = state.player.obj.userData;
-    if (uData && uData.torso) {
-      const torso = uData.torso;
-      const ls = uData.leftShoulder;
-      const rs = uData.rightShoulder;
-      if (uData.head) uData.head.visible = !isFirstPerson;
-      if (uData.neck) uData.neck.visible = !isFirstPerson;
-      if (uData.headHalo) uData.headHalo.visible = !isFirstPerson;
-      for (let i = 0; i < torso.children.length; i++) {
-        const child = torso.children[i];
-        if (child === ls || child === rs) {
-          child.visible = true;
-        } else {
-          child.visible = !isFirstPerson;
-        }
-      }
-    }
+    setRigFirstPersonVisibility(state.player.obj, blend < 0.2);
 
     animateProgramKinematics(state.player.obj, dt, {
       speed: state.player.vel.length(),

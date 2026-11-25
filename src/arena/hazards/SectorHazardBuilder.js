@@ -10,6 +10,8 @@
  */
 
 import * as THREE from '../../../vendor/three.module.js';
+import { wallMat, glowMat, tileMatIntact } from '../../graphics/materials.js';
+import { scene as defaultScene, rimLightCool, rimLightWarm, chasmUpLight } from '../../graphics/scene.js';
 
 export const SECTOR_THEMES = Object.freeze({
   grid_01: Object.freeze({
@@ -22,6 +24,10 @@ export const SECTOR_THEMES = Object.freeze({
     edgeColor: 0x187588,
     wallColor: 0x04141c,
     glowColor: 0x00e5ff,
+    seamEmissiveColor: 0x0b4f62,
+    rimCoolColor: 0x00d8ff,
+    rimWarmColor: 0xff7b1a,
+    chasmLightColor: 0x0b7fa0,
     roughness: 0.15,
     metalness: 0.85,
     description: 'Reflective slate floor with static ricochet pillars.'
@@ -36,6 +42,10 @@ export const SECTOR_THEMES = Object.freeze({
     edgeColor: 0xff8800,
     wallColor: 0x150b03,
     glowColor: 0xffaa00,
+    seamEmissiveColor: 0x995500,
+    rimCoolColor: 0x2299dd,
+    rimWarmColor: 0xffaa00,
+    chasmLightColor: 0x7a3d00,
     roughness: 0.3,
     metalness: 0.7,
     description: 'Amber lattice floor with vertical jump pads and elevated turret platforms.'
@@ -50,6 +60,10 @@ export const SECTOR_THEMES = Object.freeze({
     edgeColor: 0x9d4edd,
     wallColor: 0x0a0118,
     glowColor: 0x3a0ca3,
+    seamEmissiveColor: 0x551a8b,
+    rimCoolColor: 0x7b2cbf,
+    rimWarmColor: 0x3a66ff,
+    chasmLightColor: 0x3a0ca3,
     roughness: 0.2,
     metalness: 0.8,
     description: 'Deep cobalt/violet theme with oscillating forcefields and timed laser gates.'
@@ -64,6 +78,10 @@ export const SECTOR_THEMES = Object.freeze({
     edgeColor: 0xffd700,
     wallColor: 0x120005,
     glowColor: 0xff0055,
+    seamEmissiveColor: 0x88002b,
+    rimCoolColor: 0xff0055,
+    rimWarmColor: 0xffd700,
+    chasmLightColor: 0x7a0024,
     roughness: 0.18,
     metalness: 0.9,
     description: 'Crimson and gold theme with lethal floor de-rez void zones.'
@@ -110,7 +128,8 @@ export class SectorHazardBuilder {
   }
 
   /**
-   * Applies sector theme styling to arena floor tiles and perimeter walls.
+   * Applies sector theme styling to arena floor tiles, procedural seam maps,
+   * `.glb` `Foundry_Conduit` materials, perimeter walls, and rim/chasm lights.
    * @param {string} gridId
    * @param {Map<string, object>} tiles
    * @param {Array<object>} walls
@@ -119,6 +138,33 @@ export class SectorHazardBuilder {
     const theme = this.getTheme(gridId);
     this.activeGridId = theme.id;
 
+    // Tint shared procedural seam emissive & .glb Foundry materials
+    if (tileMatIntact.emissive && typeof tileMatIntact.emissive.setHex === 'function') {
+      tileMatIntact.emissive.setHex(theme.seamEmissiveColor);
+    }
+    if (wallMat.color && typeof wallMat.color.setHex === 'function') {
+      wallMat.color.setHex(theme.wallColor);
+    }
+    if (glowMat.color && typeof glowMat.color.setHex === 'function') {
+      glowMat.color.setHex(theme.glowColor);
+    }
+
+    // Tint dual-temperature stadium rim lights and chasm up-light
+    if (rimLightCool && rimLightCool.color) {
+      rimLightCool.color.setHex(theme.rimCoolColor);
+    }
+    if (rimLightWarm && rimLightWarm.color) {
+      rimLightWarm.color.setHex(theme.rimWarmColor);
+    }
+    if (chasmUpLight && chasmUpLight.color) {
+      chasmUpLight.color.setHex(theme.chasmLightColor);
+    }
+    const backdrop = (this.scene && this.scene.userData && this.scene.userData.arenaBackdrop)
+      || (defaultScene && defaultScene.userData && defaultScene.userData.arenaBackdrop);
+    if (backdrop && typeof backdrop.setChasmColor === 'function') {
+      backdrop.setChasmColor(theme.chasmLightColor, theme.glowColor);
+    }
+
     if (tiles && typeof tiles.values === 'function') {
       for (const tile of tiles.values()) {
         if (tile && tile.slabMesh && tile.edgeMesh) {
@@ -126,6 +172,9 @@ export class SectorHazardBuilder {
             tile.slabMesh.material.color.setHex(theme.floorColor);
             tile.slabMesh.material.roughness = theme.roughness;
             tile.slabMesh.material.metalness = theme.metalness;
+            if (tile.slabMesh.material.emissive && typeof tile.slabMesh.material.emissive.setHex === 'function') {
+              tile.slabMesh.material.emissive.setHex(theme.seamEmissiveColor);
+            }
           }
           if (tile.edgeMesh.material) {
             tile.edgeMesh.material.color.setHex(theme.edgeColor);
@@ -143,7 +192,34 @@ export class SectorHazardBuilder {
         if (w.glow && w.glow.material) {
           w.glow.material.color.setHex(theme.glowColor);
         }
+        if (w.hydratedGroup && typeof w.hydratedGroup.traverse === 'function') {
+          w.hydratedGroup.traverse((child) => {
+            if (!child.isMesh || !child.material) return;
+            if (child.userData.foundrySlot === 'Foundry_Conduit' && child.material.color) {
+              child.material.color.setHex(theme.glowColor);
+              if (child.material.emissive) child.material.emissive.setHex(theme.glowColor);
+            }
+          });
+        }
       }
+    }
+  }
+
+  /**
+   * Restores default baseline lighting and shared material tints outside campaign sectors.
+   */
+  resetSectorTheme() {
+    this.activeGridId = 'grid_01';
+    if (tileMatIntact.emissive) tileMatIntact.emissive.setHex(0x0b4f62);
+    if (wallMat.color) wallMat.color.setHex(0x04141c);
+    if (glowMat.color) glowMat.color.setHex(0x4ff2ff);
+    if (rimLightCool && rimLightCool.color) rimLightCool.color.setHex(0x00d8ff);
+    if (rimLightWarm && rimLightWarm.color) rimLightWarm.color.setHex(0xff7b1a);
+    if (chasmUpLight && chasmUpLight.color) chasmUpLight.color.setHex(0x0b7fa0);
+    const backdrop = (this.scene && this.scene.userData && this.scene.userData.arenaBackdrop)
+      || (defaultScene && defaultScene.userData && defaultScene.userData.arenaBackdrop);
+    if (backdrop && typeof backdrop.setChasmColor === 'function') {
+      backdrop.setChasmColor(0x052433, 0x1e88a8);
     }
   }
 

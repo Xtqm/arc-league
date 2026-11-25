@@ -7,8 +7,13 @@
  */
 
 import assert from 'assert';
+import fs from 'fs';
+import path from 'path';
 import * as THREE from '../../vendor/three.module.js';
 import { config } from '../../src/core/config.js';
+import { state } from '../../src/core/state.js';
+import { GLTFLoader } from '../../vendor/GLTFLoader.js';
+import { clearArenaAssetCache } from '../../src/graphics/ArenaAssetLoader.js';
 import {
   tiles,
   tileGroup,
@@ -28,7 +33,10 @@ import {
   applySectorArena,
   teardownSectorArena,
   tileMatIntact,
-  tileEdgeMatIntact
+  tileEdgeMatIntact,
+  pillars,
+  walls,
+  hydrateArenaModels
 } from '../../src/entities/Arena.js';
 
 console.log('--- Running Hybrid Arena Floor Instancing Test Suite ---');
@@ -222,6 +230,82 @@ assert.ok(activeFloorCalls < 35, `Floor draw calls under combat load (${activeFl
 
 rebuildArenaTiles();
 console.log('✓ Group 8: Floor grid draw calls decrease from ~1,200 to <35 (2 intact, 10 during 4-tile barrage).');
+
+// =========================================================================
+// Group 9: Physicalized Vectorfall Tilt, Plunge Tumble & Tilt Reset
+// =========================================================================
+console.log('\n[Group 9] Testing Physicalized Vectorfall Tilt, Plunge & Release Reset...');
+
+const vfTile = tiles.get('7_7');
+assert.ok(vfTile, 'Sample tile 7_7 must exist');
+state.time = 0.25;
+triggerTileWarning(vfTile, config.CYAN);
+state.time += 0.35;
+updateTiles(0.35);
+
+assert.ok(
+  Math.abs(vfTile.mesh.rotation.x) > 1e-4 || Math.abs(vfTile.mesh.rotation.z) > 1e-4,
+  'Warning tile must exhibit destabilizing pitch/roll tilt'
+);
+
+// Verify direct releaseDelegate resets tilt cleanly back to (0, 0, 0)
+const activeDelegate = vfTile.delegate;
+assert.ok(activeDelegate, 'Vectorfall tile must have an active delegate');
+releaseDelegate(vfTile);
+assert.strictEqual(activeDelegate.group.rotation.x, 0, 'releaseDelegate must reset delegate rotation.x to 0');
+assert.strictEqual(activeDelegate.group.rotation.y, 0, 'releaseDelegate must reset delegate rotation.y to 0');
+assert.strictEqual(activeDelegate.group.rotation.z, 0, 'releaseDelegate must reset delegate rotation.z to 0');
+assert.strictEqual(vfTile._dummyMesh.rotation.x, 0, 'releaseDelegate must reset dummy rotation.x to 0');
+assert.strictEqual(vfTile._dummyMesh.rotation.z, 0, 'releaseDelegate must reset dummy rotation.z to 0');
+
+// Verify plunge tumble during TILE_FALLEN and rebuild reset
+triggerTileWarning(vfTile, config.CYAN);
+vfTile.timer = 0;
+updateTiles(0.016);
+assert.strictEqual(vfTile.state, config.TILE_FALLEN);
+const rotBeforeFall = vfTile.mesh.rotation.x;
+updateTiles(0.2);
+assert.notStrictEqual(vfTile.mesh.rotation.x, rotBeforeFall, 'Falling tile must tumble during chasm plunge');
+assert.ok(vfTile.mesh.position.y < vfTile.origY, 'Falling tile must plunge downward');
+
+rebuildArenaTiles();
+assert.strictEqual(vfTile.state, config.TILE_INTACT);
+assert.strictEqual(vfTile.mesh.rotation.x, 0, 'rebuildArenaTiles must reset tile rotation');
+
+console.log('✓ Group 9: Physicalized Vectorfall tilt, plunge tumble & releaseDelegate reset verified.');
+
+// =========================================================================
+// Group 10: Async .glb Foundry Hydration & Collision Parity
+// =========================================================================
+console.log('\n[Group 10] Testing Async .glb Hydration & Collision Bounds Parity...');
+
+clearArenaAssetCache();
+const gltfLoader = new GLTFLoader();
+const localFsLoader = {
+  async loadAsync(url) {
+    const buf = fs.readFileSync(path.resolve(process.cwd(), url));
+    const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+    return await new Promise((resolve, reject) => gltfLoader.parse(ab, '', resolve, reject));
+  }
+};
+
+const hydration = await hydrateArenaModels({ loader: localFsLoader });
+assert.strictEqual(hydration.tileHydrated, true, 'arcfield_tile.glb must hydrate instancedSlabs');
+assert.strictEqual(hydration.pylonsHydrated, true, 'deflector_pylon.glb must hydrate pillars');
+assert.strictEqual(hydration.wallsHydrated, true, 'wall_buttress.glb must hydrate perimeter walls');
+assert.strictEqual(instancedSlabs.count, 576, 'Hydration must preserve TOTAL_TILES = 576');
+assert.strictEqual(instancedEdges.isLineSegments, true, 'Hydration must preserve instancedEdges line segments');
+assert.strictEqual(pillars.length, 8, 'Hydration must preserve all 8 pillars');
+for (const p of pillars) {
+  assert.strictEqual(p.r, 2.1, 'Pillar collision radius r=2.1 must remain unchanged after hydration');
+  assert.ok(p.hydratedGroup && p.fallbackGroup.visible === false, 'Pillar must swap to hydrated .glb group');
+}
+for (const w of walls) {
+  assert.ok(w.hydratedGroup && w.fallbackGroup.visible === false, 'Wall must swap to hydrated .glb buttress bays');
+}
+clearArenaAssetCache();
+
+console.log('✓ Group 10: Async .glb hydration & collision parity verified.');
 
 console.log('\n======================================================');
 console.log('ALL HYBRID ARENA FLOOR INSTANCING TESTS PASSED (100%)');

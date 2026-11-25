@@ -14,6 +14,8 @@ import { StarEvaluator } from '../../src/campaign/StarEvaluator.js';
 import { CampaignManager, CampaignEvents } from '../../src/campaign/CampaignManager.js';
 import { SFX } from '../../src/audio/sfx.js';
 import { SECTOR_THEMES, SectorHazardBuilder } from '../../src/arena/hazards/SectorHazardBuilder.js';
+import { glowMat, tileMatIntact } from '../../src/graphics/materials.js';
+import { rimLightCool, rimLightWarm, chasmUpLight } from '../../src/graphics/scene.js';
 import { ArbiterBossController, ARBITER_CONFIGS } from '../../src/ai/ArbiterBossController.js';
 import { CampaignHUD } from '../../src/ui/campaign/CampaignHUD.js';
 import { TrialDebriefModal } from '../../src/ui/campaign/TrialDebriefModal.js';
@@ -174,11 +176,20 @@ assert.strictEqual(builder.getTheme('arena_solar_sail').id, 'grid_02', 'getTheme
 assert.strictEqual(builder.getTheme('arena_core_pinnacle').id, 'grid_04', 'getTheme by mapId returns grid_04');
 assert.strictEqual(builder.getTheme('unknown').id, 'grid_01', 'getTheme defaults to grid_01');
 
-// Verify applySectorTheme
+// Verify applySectorTheme tints seam maps, Foundry_Conduit (glowMat), and rim/chasm lights
 const mockTiles = createMockTiles();
 const mockWalls = createMockWalls();
 builder.applySectorTheme('grid_02', mockTiles, mockWalls);
 assert.strictEqual(builder.activeGridId, 'grid_02', 'Active grid updated to grid_02');
+assert.strictEqual(tileMatIntact.emissive.getHex(), SECTOR_THEMES.grid_02.seamEmissiveColor, 'Seam emissive tinted for grid_02');
+assert.strictEqual(glowMat.color.getHex(), SECTOR_THEMES.grid_02.glowColor, 'Foundry_Conduit glowMat tinted for grid_02');
+assert.strictEqual(rimLightWarm.color.getHex(), SECTOR_THEMES.grid_02.rimWarmColor, 'Warm rim light tinted for grid_02');
+assert.strictEqual(chasmUpLight.color.getHex(), SECTOR_THEMES.grid_02.chasmLightColor, 'Chasm up-light tinted for grid_02');
+
+builder.applySectorTheme('grid_04', mockTiles, mockWalls);
+assert.strictEqual(tileMatIntact.emissive.getHex(), SECTOR_THEMES.grid_04.seamEmissiveColor, 'Seam emissive tinted for grid_04');
+assert.strictEqual(rimLightCool.color.getHex(), SECTOR_THEMES.grid_04.rimCoolColor, 'Cool rim light tinted for grid_04');
+builder.resetSectorTheme();
 
 console.log('✓ Sector visual themes, color palettes, and dual ID resolution verified');
 

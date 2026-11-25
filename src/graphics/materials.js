@@ -7,11 +7,39 @@ import {
   createFaceGeometry,
   createHubGeometry
 } from './DiscGeometryFactory.js';
+import { getArenaTextures } from './ArenaTextures.js';
 
-// Shared environment materials
-export const wallMat = new THREE.MeshStandardMaterial({ color: 0x04141c, roughness: .4, metalness: .9 });
+const arenaTextures = getArenaTextures();
+
+// Shared environment materials (augmented with procedural PBR maps when 2D canvas is available)
+export const wallMat = new THREE.MeshStandardMaterial({
+  color: 0x04141c,
+  roughness: 0.4,
+  metalness: 0.9,
+  normalMap: arenaTextures ? arenaTextures.normalMap : null,
+  normalScale: new THREE.Vector2(0.65, 0.65),
+  roughnessMap: arenaTextures ? arenaTextures.roughnessMap : null
+});
+export const trimMat = new THREE.MeshStandardMaterial({
+  color: 0x263544,
+  roughness: 0.26,
+  metalness: 0.9,
+  normalMap: arenaTextures ? arenaTextures.normalMap : null,
+  normalScale: new THREE.Vector2(0.45, 0.45),
+  roughnessMap: arenaTextures ? arenaTextures.roughnessMap : null
+});
 export const glowMat = new THREE.MeshBasicMaterial({ color: config.CYAN });
-export const tileMatIntact = new THREE.MeshStandardMaterial({ color: 0x07202c, roughness: .28, metalness: .8 });
+export const tileMatIntact = new THREE.MeshStandardMaterial({
+  color: 0x07202c,
+  roughness: 0.28,
+  metalness: 0.8,
+  normalMap: arenaTextures ? arenaTextures.normalMap : null,
+  normalScale: new THREE.Vector2(0.85, 0.85),
+  roughnessMap: arenaTextures ? arenaTextures.roughnessMap : null,
+  emissive: new THREE.Color(0x0b4f62),
+  emissiveMap: arenaTextures ? arenaTextures.emissiveMap : null,
+  emissiveIntensity: arenaTextures ? 0.65 : 0.0
+});
 export const tileEdgeMatIntact = new THREE.LineBasicMaterial({ color: 0x187588, transparent: true, opacity: .75, depthWrite: false });
 
 /**

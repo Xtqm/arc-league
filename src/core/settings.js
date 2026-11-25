@@ -10,6 +10,7 @@ export const GRAPHICS_PRESETS = Object.freeze({
     bloom: true,
     shadows: 2048,
     particles: true,
+    chasmMist: true,
     particleBudget: 1.0,
     fpsCap: 0
   }),
@@ -20,6 +21,7 @@ export const GRAPHICS_PRESETS = Object.freeze({
     bloom: true,
     shadows: 1024,
     particles: true,
+    chasmMist: true,
     particleBudget: 1.0,
     fpsCap: 0
   }),
@@ -30,6 +32,7 @@ export const GRAPHICS_PRESETS = Object.freeze({
     bloom: true,
     shadows: 512,
     particles: true,
+    chasmMist: true,
     particleBudget: 0.75,
     fpsCap: 60
   }),
@@ -40,6 +43,7 @@ export const GRAPHICS_PRESETS = Object.freeze({
     bloom: true,
     shadows: 0,
     particles: true,
+    chasmMist: true,
     particleBudget: 0.50,
     fpsCap: 60
   }),
@@ -50,6 +54,7 @@ export const GRAPHICS_PRESETS = Object.freeze({
     bloom: false,
     shadows: 0,
     particles: true,
+    chasmMist: false,
     particleBudget: 0.25,
     fpsCap: 0
   })
@@ -67,6 +72,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   graphicsPreset: 'high',    // 'ultra' | 'high' | 'medium' | 'low' | 'competitive' | 'custom'
   shadows: 1024,             // 2048 | 1024 | 512 | 0
   particles: true,
+  chasmMist: true,
   particleBudget: 1.0,       // 0.25 - 1.00
   touchSensitivity: 1.0,     // 0.5 - 2.0
   touchInertia: 'smooth',    // 'smooth' | 'light' | 'off'
@@ -150,6 +156,10 @@ export class SettingsManager {
       this.settings.graphicsPreset = 'custom';
     } else if (key === 'particles') {
       normalized = Boolean(value);
+      this.settings.chasmMist = normalized && this.settings.graphicsPreset !== 'competitive';
+      this.settings.graphicsPreset = 'custom';
+    } else if (key === 'chasmMist') {
+      normalized = Boolean(value);
       this.settings.graphicsPreset = 'custom';
     } else if (key === 'mouseSensitivity') {
       const n = Number(value);
@@ -189,6 +199,7 @@ export class SettingsManager {
     this.settings.bloom = preset.bloom;
     this.settings.shadows = preset.shadows;
     this.settings.particles = preset.particles;
+    this.settings.chasmMist = preset.chasmMist !== undefined ? preset.chasmMist : (key !== 'competitive');
     this.settings.particleBudget = preset.particleBudget;
     if (preset.fpsCap !== undefined) {
       this.settings.fpsCap = preset.fpsCap;

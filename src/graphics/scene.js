@@ -4,6 +4,8 @@ import { config } from '../core/config.js';
 import { settingsManager } from '../core/settings.js';
 import { makeProgram } from './materials.js';
 import { createProceduralEnvironment } from './Environment.js';
+import { ArenaBackdrop } from './ArenaBackdrop.js';
+import { canLoadExternalModels } from './ArenaAssetLoader.js';
 import { CinematicComposer } from './PostProcessing.js';
 import { cosmeticMaterialEngine } from '../armory/CosmeticMaterialEngine.js';
 
@@ -72,7 +74,16 @@ export function setShadowQuality(value) {
   }
 }
 
+let _lastBackdropTick = 0;
 export function renderScene() {
+  const now = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+    ? performance.now()
+    : Date.now();
+  const dt = _lastBackdropTick > 0 ? Math.min(0.05, Math.max(0, (now - _lastBackdropTick) * 0.001)) : 0.016;
+  _lastBackdropTick = now;
+  if (arenaBackdrop) {
+    arenaBackdrop.update(dt);
+  }
   if (composer) {
     composer.render(scene, camera);
   } else if (renderer) {
@@ -92,6 +103,10 @@ settingsManager.onChange((keyName, value, all) => {
     onResize();
   } else if (keyName === 'shadows') {
     setShadowQuality(value);
+  } else if (keyName === 'graphicsPreset' || keyName === 'particles' || keyName === 'particleBudget' || keyName === 'chasmMist') {
+    if (arenaBackdrop) {
+      arenaBackdrop.applyQualitySettings(all || settingsManager.settings);
+    }
   } else if (keyName === '*' && all) {
     const q = all.bloomQuality || (all.bloom === false ? 'off' : 'full');
     setBloomEnabled(all.bloom !== false && q !== 'off');
@@ -101,13 +116,16 @@ settingsManager.onChange((keyName, value, all) => {
     if (all.shadows !== undefined) {
       setShadowQuality(all.shadows);
     }
+    if (arenaBackdrop) {
+      arenaBackdrop.applyQualitySettings(all);
+    }
     onResize();
   }
 });
 
 export const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x01060a);
-scene.fog = new THREE.Fog(0x02090f, 55, 170);
+scene.fog = new THREE.Fog(0x02090f, 65, 220);
 
 if (typeof window !== 'undefined') {
   window.__tronScene = scene;
@@ -121,7 +139,9 @@ export const camera = new THREE.PerspectiveCamera(
 );
 
 // Lights
-scene.add(new THREE.HemisphereLight(0x3f9ab5, 0x061820, 0.95));
+export const hemiLight = new THREE.HemisphereLight(0x3f9ab5, 0x061820, 0.95);
+scene.add(hemiLight);
+
 export const key = new THREE.DirectionalLight(0x9ff0ff, 0.8);
 key.position.set(30, 60, 20);
 key.castShadow = true;
@@ -132,6 +152,31 @@ key.shadow.camera.right = d;
 key.shadow.camera.top = d;
 key.shadow.camera.bottom = -d;
 scene.add(key);
+
+// Dual-temperature stadium directional rim lights (non-shadow-casting)
+export const rimLightCool = new THREE.DirectionalLight(0x00d8ff, 0.72);
+rimLightCool.name = 'stadiumRimCool';
+rimLightCool.position.set(-48, 22, -36);
+rimLightCool.castShadow = false;
+scene.add(rimLightCool);
+
+export const rimLightWarm = new THREE.DirectionalLight(0xff7b1a, 0.62);
+rimLightWarm.name = 'stadiumRimWarm';
+rimLightWarm.position.set(48, 20, 36);
+rimLightWarm.castShadow = false;
+scene.add(rimLightWarm);
+
+// Subtle Null Void chasm up-lighting illuminating tile undersides and perimeter buttress bases
+export const chasmUpLight = new THREE.DirectionalLight(0x0b7fa0, 0.42);
+chasmUpLight.name = 'chasmUpLight';
+chasmUpLight.position.set(0, -24, 0);
+chasmUpLight.castShadow = false;
+scene.add(chasmUpLight);
+
+// 360-degree Magnetic Colosseum backdrop, Null Void chasm floor & scrolling mist
+export const arenaBackdrop = new ArenaBackdrop({ scene });
+arenaBackdrop.applyQualitySettings(settingsManager.settings);
+scene.userData.arenaBackdrop = arenaBackdrop;
 
 // Floor plane & decorative grid/rings
 export const floor = new THREE.Mesh(
@@ -328,6 +373,12 @@ export function initGraphics() {
     composer.setQuality(settingsManager.get('bloomQuality', 'full'));
   }
   setShadowQuality(settingsManager.get('shadows', 1024));
+  if (arenaBackdrop) {
+    arenaBackdrop.applyQualitySettings(settingsManager.settings);
+    if (canLoadExternalModels()) {
+      arenaBackdrop.hydrate({ silent: true });
+    }
+  }
   if (!state.player.obj) {
     state.player.obj = makeProgram(config.CYAN, { archetype: 'player' });
     scene.add(state.player.obj);

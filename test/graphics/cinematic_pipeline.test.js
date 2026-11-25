@@ -6,7 +6,7 @@
 
 import assert from 'assert';
 import * as THREE from '../../vendor/three.module.js';
-import { createProceduralEnvironment } from '../../src/graphics/Environment.js';
+import { createProceduralEnvironment, buildProceduralEnvironmentScene } from '../../src/graphics/Environment.js';
 import { CinematicComposer } from '../../src/graphics/PostProcessing.js';
 import { RibbonTrail } from '../../src/graphics/RibbonTrail.js';
 import {
@@ -23,7 +23,7 @@ import {
   clearAllEffects
 } from '../../src/graphics/particles.js';
 import { settingsManager, GRAPHICS_PRESETS } from '../../src/core/settings.js';
-import { scene, setBloomEnabled, setShadowQuality, composer, camera, key, onResize } from '../../src/graphics/scene.js';
+import { scene, setBloomEnabled, setShadowQuality, composer, camera, key, rimLightCool, rimLightWarm, chasmUpLight, onResize } from '../../src/graphics/scene.js';
 
 console.log('--- Running Cinematic Rendering Pipeline Test Suite ---');
 
@@ -40,7 +40,20 @@ assert.strictEqual(
   'Renderer with null WebGL context must return null cleanly'
 );
 
-console.log('✓ Group 1: Procedural environment headless guards verified.');
+const { envScene, panels, geometries, materials } = buildProceduralEnvironmentScene();
+assert.ok(envScene instanceof THREE.Scene, 'Procedural environment builder must create a THREE.Scene');
+const cyanPanel = panels.find(p => p.userData.panelRole === 'rim_cyan');
+const amberPanel = panels.find(p => p.userData.panelRole === 'rim_amber');
+assert.ok(cyanPanel && amberPanel, 'Environment must contain opposing cyan and amber rim strips');
+assert.ok(cyanPanel.position.x * amberPanel.position.x < 0, 'Cyan and amber rim panels must sit on opposite horizon sides');
+assert.ok(rimLightCool instanceof THREE.DirectionalLight && rimLightCool.castShadow === false, 'Cool stadium rim light must be non-shadow-casting');
+assert.ok(rimLightWarm instanceof THREE.DirectionalLight && rimLightWarm.castShadow === false, 'Warm stadium rim light must be non-shadow-casting');
+assert.ok(chasmUpLight instanceof THREE.DirectionalLight && chasmUpLight.position.y < 0 && chasmUpLight.castShadow === false, 'Chasm up-light must illuminate from below without shadows');
+assert.ok(scene.children.includes(rimLightCool) && scene.children.includes(rimLightWarm) && scene.children.includes(chasmUpLight), 'Scene must attach stadium rim and chasm lights');
+for (const g of geometries) g.dispose();
+for (const m of materials) m.dispose();
+
+console.log('✓ Group 1: Procedural environment headless guards, dual-temperature rim strips & chasm up-lighting verified.');
 
 // =========================================================================
 // Group 2: CinematicComposer Fallback, State Toggles & Resize

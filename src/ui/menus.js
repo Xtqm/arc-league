@@ -9,6 +9,7 @@ import { armoryModal } from './modals/ArmoryModal.js';
 import { achievementsModal } from './modals/AchievementsModal.js';
 import { settingsModal } from './modals/SettingsModal.js';
 import { directivesModal } from './modals/DirectivesModal.js';
+import { swarmModeModal } from './modals/SwarmModeModal.js';
 import { spawnStagingDisc, despawnStagingDisc, spawnDiorama, despawnDiorama, refreshDioramaCosmetics, resetMatchCamera } from '../graphics/ambientLobby.js';
 import { updateSteamRichPresence, syncGameStateRichPresence } from '../core/steamTelemetry.js';
 import { storageManager } from '../core/storage/StorageManager.js';
@@ -34,7 +35,7 @@ directivesModal.setOnClose(() => {
   }
 });
 
-export { armoryModal, achievementsModal, settingsModal, directivesModal };
+export { armoryModal, achievementsModal, settingsModal, directivesModal, swarmModeModal };
 
 export {
   ARENA_MAP_METADATA,
@@ -139,6 +140,7 @@ export function startMode(mode) {
   achievementsModal.hide();
   directivesModal.hide();
   settingsModal.hide();
+  swarmModeModal.hide({ skipCloseCallback: true, skipFocusRestore: true });
   state.authModalOpen = false;
   state.armoryModalOpen = false;
   state.achievementsModalOpen = false;
@@ -208,7 +210,6 @@ export function isHardcoreUnlocked(storage = storageManager) {
 }
 
 export function getMainMenuHtml() {
-  const isUnlocked = isHardcoreUnlocked();
   return `<div class="card tactical-rail" id="mainMenu" tabindex="-1">
   <div class="rail-header">
     <div class="rail-brand">
@@ -221,34 +222,34 @@ export function getMainMenuHtml() {
     <div id="identityHeader" class="identity-header rail-identity"></div>
   </div>
   <div class="mode-directives mode-select" id="mainMenuButtons">
-    <button id="campaignBtn" class="mode-btn campaign-btn">LEAGUE CIRCUIT</button>
-    <div id="survivalModeContainer" class="survival-mode-container">
-      <button id="swarmBtn" class="mode-btn swarm-btn">${state.isHardcoreSurvival ? 'ENTER ARCFIELD (HARDCORE)' : 'ENTER ARCFIELD (SURVIVAL)'}</button>
-      <div id="survivalVariantToggle" class="survival-variant-toggle" style="display:${isUnlocked ? 'flex' : 'none'};">
-        <button id="btnSurvivalStandard" class="btn variant-btn ${!state.isHardcoreSurvival ? 'hot active' : ''}" data-variant="standard">STANDARD</button>
-        <button id="btnSurvivalHardcore" class="btn variant-btn ${state.isHardcoreSurvival ? 'hot active' : ''}" data-variant="hardcore">HARDCORE [LVL 5+]</button>
-      </div>
-    </div>
-    <button id="practiceBtn" class="mode-btn duel-btn" style="width:100%;">PRACTICE (SOLO AI)</button>
-    <button id="quickMatchBtn" class="mode-btn multi-btn quick-match-primary" style="width:100%;letter-spacing:2px;">[ QUICK MATCH // PLAY NOW ]</button>
+    <button id="campaignBtn" class="mode-btn campaign-btn">FEDERATION TOUR</button>
+    <button id="swarmBtn" class="mode-btn swarm-btn">SWARM PROTOCOL</button>
+    <button id="apexTrialsBtn" class="mode-btn apex-btn" style="width:100%;">APEX TRIALS</button>
+    <button id="practiceBtn" class="mode-btn duel-btn" style="width:100%;">AI PRACTICE</button>
+    <button id="quickMatchBtn" class="mode-btn multi-btn quick-match-primary" style="width:100%;letter-spacing:2px;">ARC LEAGUE RANKED</button>
     <div class="friendly-duels-row" style="display:flex;gap:8px;width:100%;">
       <button id="hostMatchBtn" class="mode-btn multi-btn" style="flex:1;">HOST FRIENDLY MATCH</button>
       <button id="joinOnlineBtn" class="mode-btn multi-btn" style="flex:1;">JOIN FRIENDLY MATCH</button>
     </div>
   </div>
+  <div id="railProtocolStatus" class="rail-status-toast" style="display:none;" aria-live="polite"></div>
 
   <div class="utility-dock" id="utilityDock">
-    <button id="armoryBtn" class="dock-btn armory-btn" title="Outfitting &amp; Cosmetics">
+    <button id="armoryBtn" class="dock-btn armory-btn" title="Athlete Loadout &amp; Cosmetics">
       <span class="dock-icon">🛡</span>
-      <span class="dock-label">OUTFITTING</span>
+      <span class="dock-label">ATHLETE LOADOUT</span>
     </button>
-    <button id="achievementsBtn" class="dock-btn achievements-btn" title="Trophy Matrix">
+    <button id="contractsBtn" class="dock-btn contracts-btn" title="Federation Contracts">
+      <span class="dock-icon">📋</span>
+      <span class="dock-label">CONTRACTS</span>
+    </button>
+    <button id="achievementsBtn" class="dock-btn achievements-btn" title="Achievements">
       <span class="dock-icon">🏆</span>
-      <span class="dock-label">TROPHIES</span>
+      <span class="dock-label">ACHIEVEMENTS</span>
     </button>
-    <button id="directivesBtn" class="dock-btn directives-btn" title="Directives &amp; Controls [?]">
+    <button id="directivesBtn" class="dock-btn directives-btn" title="Controls [?]">
       <span class="dock-icon">?</span>
-      <span class="dock-label">DIRECTIVES</span>
+      <span class="dock-label">CONTROLS</span>
     </button>
     <button id="settingsBtn" class="dock-btn settings-btn" title="System Settings">
       <span class="dock-icon">⚙</span>
@@ -309,6 +310,7 @@ export function showModeSelectMenu(options = {}) {
   achievementsModal.hide();
   directivesModal.hide();
   settingsModal.hide();
+  swarmModeModal.hide({ skipCloseCallback: true, skipFocusRestore: true });
   state.authModalOpen = false;
   state.armoryModalOpen = false;
   state.achievementsModalOpen = false;
@@ -460,12 +462,58 @@ export function bindMainMenuEvents() {
     settingsModal.show();
   };
 
+  const showProtocolStandingBy = (label) => {
+    const statusEl = typeof document !== 'undefined' ? document.getElementById('railProtocolStatus') : null;
+    if (!statusEl) return;
+    statusEl.textContent = `${label} // PROTOCOL STANDING BY`;
+    statusEl.style.display = 'block';
+    clearTimeout(showProtocolStandingBy._timer);
+    showProtocolStandingBy._timer = setTimeout(() => {
+      statusEl.style.display = 'none';
+    }, 2400);
+  };
+
+  const openApexTrials = (e) => {
+    e.stopPropagation();
+    if (e.cancelable) e.preventDefault();
+    if (typeof window !== 'undefined' && typeof window.__tronOpenApexTrials === 'function') {
+      window.__tronOpenApexTrials();
+    } else {
+      showProtocolStandingBy('APEX TRIALS');
+    }
+  };
+
+  const openContracts = (e) => {
+    e.stopPropagation();
+    if (e.cancelable) e.preventDefault();
+    if (typeof window !== 'undefined' && typeof window.__tronOpenContracts === 'function') {
+      window.__tronOpenContracts();
+    } else {
+      showProtocolStandingBy('CONTRACTS');
+    }
+  };
+
+  const openSwarmModal = (e) => {
+    e.stopPropagation();
+    if (e.cancelable) e.preventDefault();
+    swarmModeModal.setOnLaunch(({ hardcore }) => {
+      if (state.isTouchDevice) {
+        if (!isFullScreen()) toggleFullScreen();
+        else requestFullScreen();
+      }
+      startSoloSwarm({ hardcore });
+    });
+    swarmModeModal.show();
+  };
+
   bind('campaignBtn', openCampaign);
+  bind('apexTrialsBtn', openApexTrials);
   bind('armoryBtn', openArmory);
+  bind('contractsBtn', openContracts);
   bind('achievementsBtn', openAchievements);
   bind('directivesBtn', openDirectives);
   bind('settingsBtn', openSettings);
-  bind('swarmBtn', startSwarm);
+  bind('swarmBtn', openSwarmModal);
   bind('hostMatchBtn', openHostModal);
   bind('joinOnlineBtn', openJoinModal);
   bind('duelBtn', startDuelAi);
@@ -479,31 +527,6 @@ export function bindMainMenuEvents() {
     startSoloDuel();
   });
   bind('joinRoomBtn', openJoinModal);
-
-  const btnStandard = document.getElementById('btnSurvivalStandard');
-  const btnHardcore = document.getElementById('btnSurvivalHardcore');
-  if (btnStandard) {
-    btnStandard.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (e.cancelable) e.preventDefault();
-      state.isHardcoreSurvival = false;
-      btnStandard.classList.add('hot', 'active');
-      if (btnHardcore) btnHardcore.classList.remove('hot', 'active');
-      const swarmBtn = document.getElementById('swarmBtn');
-      if (swarmBtn) swarmBtn.textContent = 'ENTER ARCFIELD (SURVIVAL)';
-    });
-  }
-  if (btnHardcore) {
-    btnHardcore.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (e.cancelable) e.preventDefault();
-      state.isHardcoreSurvival = true;
-      btnHardcore.classList.add('hot', 'active');
-      if (btnStandard) btnStandard.classList.remove('hot', 'active');
-      const swarmBtn = document.getElementById('swarmBtn');
-      if (swarmBtn) swarmBtn.textContent = 'ENTER ARCFIELD (HARDCORE)';
-    });
-  }
 
   // Match entry and modal bindings
   const hm = document.getElementById('hostModal');

@@ -36,7 +36,7 @@ async function runDecoupledMatchEntryTests() {
     console.log('Menu Buttons:', menuButtons);
     assert.strictEqual(menuButtons.overlayVisible, true, 'Overlay must be visible initially');
     assert.strictEqual(menuButtons.hasQuickMatch, true, '#quickMatchBtn must exist on main menu');
-    assert.ok(menuButtons.quickMatchText.includes('QUICK MATCH'), 'Quick Match button must have QUICK MATCH label');
+    assert.ok(menuButtons.quickMatchText.includes('ARC LEAGUE RANKED'), 'Quick Match button must have ARC LEAGUE RANKED label');
     assert.strictEqual(menuButtons.hasPractice, true, '#practiceBtn must exist on main menu');
     assert.ok(menuButtons.practiceText.includes('PRACTICE'), 'Practice button must have PRACTICE label');
     assert.strictEqual(menuButtons.hasHost, true, '#hostMatchBtn must exist on main menu');

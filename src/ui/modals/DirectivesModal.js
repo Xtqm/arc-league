@@ -93,10 +93,10 @@ export class DirectivesModal {
         <!-- Header -->
         <div class="directives-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(79,242,255,0.3); padding-bottom:12px; margin-bottom:16px;">
           <div>
-            <div style="font-size:18px; letter-spacing:4px; font-weight:bold; color:#fff; text-transform:uppercase;">DIRECTIVES &amp; CONTROLS</div>
+            <div style="font-size:18px; letter-spacing:4px; font-weight:bold; color:#fff; text-transform:uppercase;">CONTROLS</div>
             <div style="font-size:10px; letter-spacing:2px; color:rgba(79,242,255,0.6); margin-top:2px;">TACTICAL INPUT SYSTEM // ARC LEAGUE SPEC</div>
           </div>
-          <button id="closeDirectivesX" class="btn" style="padding:4px 10px; font-size:14px; min-width:32px; border-color:rgba(79,242,255,0.4); cursor:pointer;" aria-label="Close Directives">✕</button>
+          <button id="closeDirectivesX" class="btn" style="padding:4px 10px; font-size:14px; min-width:32px; border-color:rgba(79,242,255,0.4); cursor:pointer;" aria-label="Close Controls">✕</button>
         </div>
 
         <!-- Scheme Switcher Tabs -->
@@ -142,7 +142,7 @@ export class DirectivesModal {
               <span style="color:#bff4fb;">Pause Simulation // Release cursor and access pause menu</span>
 
               <span style="background:rgba(79,242,255,0.15); border:1px solid var(--cyan); color:#fff; padding:3px 8px; border-radius:4px; font-weight:bold; letter-spacing:1px; text-align:center;">?</span>
-              <span style="color:#bff4fb;">Directives // Toggle this tactical keybinding matrix</span>
+              <span style="color:#bff4fb;">Controls // Toggle this tactical keybinding matrix</span>
             </div>
           </div>
 

@@ -139,11 +139,13 @@ async function runFullscreenTests() {
     window.__dbg.setTouchDevice(true);
   });
 
-  // Action A: [ ENTER SWARM (WAVES) ]
-  console.log('Testing [ ENTER SWARM (WAVES) ] start button...');
+  // Action A: [ SWARM PROTOCOL ] -> [ DEPLOY STANDARD ]
+  console.log('Testing [ SWARM PROTOCOL ] -> [ DEPLOY STANDARD ] start button...');
   await page.evaluate(() => {
     const swarmBtn = document.getElementById('swarmBtn');
     swarmBtn.click();
+    const deployStandardBtn = document.getElementById('btnLaunchSwarmStandard');
+    if (deployStandardBtn) deployStandardBtn.click();
   });
   const swarmCount = await page.evaluate(() => window.__fullscreenCallCount);
   console.log(`Fullscreen calls after Swarm button click: ${swarmCount}`);

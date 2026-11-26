@@ -3360,18 +3360,18 @@
   .mode-directives {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     flex: 1;
-    margin: 8px 0;
+    margin: 6px 0;
   }
   .mode-directives .mode-btn {
     position: relative;
     overflow: hidden;
     width: 100%;
     min-height: 44px;
-    padding: 10px 14px;
-    font-size: 13px;
-    letter-spacing: 2px;
+    padding: 8px 12px;
+    font-size: 12.5px;
+    letter-spacing: 1.8px;
     text-transform: uppercase;
     font-weight: 600;
     cursor: pointer;
@@ -3424,6 +3424,29 @@
   }
   .mode-directives .duel-btn {
     border-color: rgba(79, 242, 255, 0.65);
+  }
+  .mode-directives .apex-btn {
+    border-color: rgba(255, 204, 77, 0.68);
+    color: #ffe699;
+  }
+  .mode-directives .apex-btn::before {
+    background: linear-gradient(90deg, transparent, rgba(255, 204, 77, 0.45), transparent);
+  }
+  .mode-directives .apex-btn:hover {
+    border-color: #ffcc4d;
+    box-shadow: 0 0 16px rgba(255, 204, 77, 0.35);
+  }
+  .rail-status-toast {
+    margin: 2px 0 6px;
+    padding: 6px 10px;
+    font-size: 10px;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: #ffe699;
+    background: rgba(255, 204, 77, 0.1);
+    border: 1px solid rgba(255, 204, 77, 0.45);
+    border-radius: 3px;
+    text-align: center;
   }
   .mode-directives .quick-match-primary {
     border-color: #00ffff !important;
@@ -3491,9 +3514,9 @@
   /* Secondary Utility Dock */
   .utility-dock {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 6px;
-    padding-top: 12px;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 5px;
+    padding-top: 10px;
     border-top: 1px solid rgba(79, 242, 255, 0.25);
     margin-top: auto;
   }
@@ -3524,10 +3547,12 @@
     line-height: 1;
   }
   .utility-dock .dock-label {
-    font-size: 8px;
-    letter-spacing: 1px;
+    font-size: 7px;
+    letter-spacing: 0.4px;
+    line-height: 1.15;
     font-weight: 600;
-    white-space: nowrap;
+    white-space: normal;
+    text-align: center;
     text-transform: uppercase;
   }
 
@@ -3542,25 +3567,27 @@
       max-width: 480px;
       max-height: 90vh;
       margin: 12px auto;
-      padding: 16px;
+      padding: 14px;
       clip-path: polygon(0 10px, 10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
     }
     .rail-logo {
       max-height: 38px;
     }
     .mode-directives .mode-btn {
-      padding: 9px 12px;
+      padding: 8px 10px;
       font-size: 12px;
     }
     .utility-dock {
+      grid-template-columns: repeat(5, 1fr);
       gap: 4px;
     }
     .utility-dock .dock-btn {
       min-height: 44px;
-      padding: 6px 2px;
+      padding: 5px 2px;
     }
     .utility-dock .dock-label {
-      font-size: 7.5px;
+      font-size: 6.5px;
+      letter-spacing: 0.3px;
     }
   }
 
@@ -3775,8 +3802,8 @@
     <!-- Terminal Hub Navigation Tabs -->
     <div class="terminal-hub-nav" id="terminalHubNav">
       <button class="hub-nav-tab active" id="tabHubIdent" type="button">IDENT MATRIX</button>
-      <button class="hub-nav-tab" id="tabHubLoadout" type="button">OUTFITTING</button>
-      <button class="hub-nav-tab" id="tabHubDirectives" type="button">TROPHY MATRIX</button>
+      <button class="hub-nav-tab" id="tabHubLoadout" type="button">[ ATHLETE LOADOUT ]</button>
+      <button class="hub-nav-tab" id="tabHubDirectives" type="button">[ ACHIEVEMENTS ]</button>
       <button class="hub-nav-tab" id="tabHubConfig" type="button">SYSTEM CONFIG</button>
     </div>
 
@@ -3818,8 +3845,13 @@
         </div>
         <div class="stat-divider"></div>
         <div class="stat-col">
-          <div class="stat-col-label">BITS</div>
-          <div class="stat-col-val yellow-val" id="dossierBits">0 BITS</div>
+          <div class="stat-col-label">ARC CREDITS</div>
+          <div class="stat-col-val yellow-val" id="dossierBits">0 AC</div>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-col">
+          <div class="stat-col-label">SPARKS</div>
+          <div class="stat-col-val" id="dossierSparks" style="color:#bd00ff;">0 SPARKS</div>
         </div>
         <div class="stat-divider"></div>
         <div class="stat-col">
@@ -3971,34 +4003,34 @@
     </div>
 
     <div class="mode-directives mode-select" id="mainMenuButtons">
-      <button id="campaignBtn" class="mode-btn campaign-btn">LEAGUE CIRCUIT</button>
-      <div id="survivalModeContainer" class="survival-mode-container">
-        <button id="swarmBtn" class="mode-btn swarm-btn">ENTER ARCFIELD (SURVIVAL)</button>
-        <div id="survivalVariantToggle" class="survival-variant-toggle" style="display:none;">
-          <button id="btnSurvivalStandard" class="btn variant-btn hot active" data-variant="standard">STANDARD</button>
-          <button id="btnSurvivalHardcore" class="btn variant-btn" data-variant="hardcore">HARDCORE [LVL 5+]</button>
-        </div>
-      </div>
-      <button id="practiceBtn" class="mode-btn duel-btn" style="width:100%;">PRACTICE (SOLO AI)</button>
-      <button id="quickMatchBtn" class="mode-btn multi-btn quick-match-primary" style="width:100%;letter-spacing:2px;">[ QUICK MATCH // PLAY NOW ]</button>
+      <button id="campaignBtn" class="mode-btn campaign-btn">FEDERATION TOUR</button>
+      <button id="swarmBtn" class="mode-btn swarm-btn">SWARM PROTOCOL</button>
+      <button id="apexTrialsBtn" class="mode-btn apex-btn" style="width:100%;">APEX TRIALS</button>
+      <button id="practiceBtn" class="mode-btn duel-btn" style="width:100%;">AI PRACTICE</button>
+      <button id="quickMatchBtn" class="mode-btn multi-btn quick-match-primary" style="width:100%;letter-spacing:2px;">ARC LEAGUE RANKED</button>
       <div class="friendly-duels-row" style="display:flex;gap:8px;width:100%;">
         <button id="hostMatchBtn" class="mode-btn multi-btn" style="flex:1;">HOST FRIENDLY MATCH</button>
         <button id="joinOnlineBtn" class="mode-btn multi-btn" style="flex:1;">JOIN FRIENDLY MATCH</button>
       </div>
     </div>
+    <div id="railProtocolStatus" class="rail-status-toast" style="display:none;" aria-live="polite"></div>
 
     <div class="utility-dock" id="utilityDock">
-      <button id="armoryBtn" class="dock-btn armory-btn" title="Outfitting &amp; Cosmetics">
+      <button id="armoryBtn" class="dock-btn armory-btn" title="Athlete Loadout &amp; Cosmetics">
         <span class="dock-icon">🛡</span>
-        <span class="dock-label">OUTFITTING</span>
+        <span class="dock-label">ATHLETE LOADOUT</span>
       </button>
-      <button id="achievementsBtn" class="dock-btn achievements-btn" title="Trophy Matrix">
+      <button id="contractsBtn" class="dock-btn contracts-btn" title="Federation Contracts">
+        <span class="dock-icon">📋</span>
+        <span class="dock-label">CONTRACTS</span>
+      </button>
+      <button id="achievementsBtn" class="dock-btn achievements-btn" title="Achievements">
         <span class="dock-icon">🏆</span>
-        <span class="dock-label">TROPHIES</span>
+        <span class="dock-label">ACHIEVEMENTS</span>
       </button>
-      <button id="directivesBtn" class="dock-btn directives-btn" title="Directives &amp; Controls [?]">
+      <button id="directivesBtn" class="dock-btn directives-btn" title="Controls [?]">
         <span class="dock-icon">?</span>
-        <span class="dock-label">DIRECTIVES</span>
+        <span class="dock-label">CONTROLS</span>
       </button>
       <button id="settingsBtn" class="dock-btn settings-btn" title="System Settings">
         <span class="dock-icon">⚙</span>

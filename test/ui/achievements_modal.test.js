@@ -230,7 +230,7 @@ console.log('\n[Group 2] Testing Trophy Matrix Markup Generation...');
 const markup = modal.render();
 
 // Header & Summary
-assert.ok(markup.includes('TROPHY MATRIX // ACHIEVEMENTS'), 'Must contain modal title');
+assert.ok(markup.includes('ACHIEVEMENTS'), 'Must contain modal title');
 assert.ok(markup.includes('OVERALL SYNCHRONIZATION: 2 / 6 PROTOCOLS'), 'Must render overall synchronized count');
 assert.ok(markup.includes('33% COMPLETED'), 'Must render percentage complete');
 

@@ -160,7 +160,7 @@ export function setTerminalHubTab(tabName) {
     if (statusBanner) statusBanner.style.display = 'none';
     if (consoleMsg) consoleMsg.style.display = 'none';
 
-    if (headerTitle) headerTitle.textContent = 'OUTFITTING & LOADOUT';
+    if (headerTitle) headerTitle.textContent = 'ATHLETE LOADOUT';
     if (headerSub) headerSub.textContent = 'CUSTOMIZE KINETIC DISC & ATHLETE RIG';
 
     if (hubLoadoutView) {
@@ -184,8 +184,8 @@ export function setTerminalHubTab(tabName) {
     if (statusBanner) statusBanner.style.display = 'none';
     if (consoleMsg) consoleMsg.style.display = 'none';
 
-    if (headerTitle) headerTitle.textContent = 'TROPHY MATRIX & DIRECTIVES';
-    if (headerSub) headerSub.textContent = 'TROPHY PROGRESSION & REWARD MATRIX';
+    if (headerTitle) headerTitle.textContent = 'ACHIEVEMENTS';
+    if (headerSub) headerSub.textContent = 'ACHIEVEMENT PROGRESSION & FRACTURE REWARDS';
 
     if (hubDirectivesView) {
       hubDirectivesView.style.display = 'block';
@@ -560,17 +560,21 @@ export function populateDossierData() {
   const callsignInput = document.getElementById('dossierCallsignInput');
   const levelEl = document.getElementById('dossierLevel');
   const bitsEl = document.getElementById('dossierBits');
+  const sparksEl = document.getElementById('dossierSparks');
   const waveEl = document.getElementById('dossierHighestWave');
   const scoreEl = document.getElementById('dossierTotalScore');
   const matchesEl = document.getElementById('dossierMatches');
   const authTypeEl = document.getElementById('dossierAuthType');
+
+  const liveSparks = typeof economyManager?.getSparks === 'function' ? economyManager.getSparks() : 0;
 
   const handle = (user?.handle || 'PROGRAM').toUpperCase();
   if (callsignDisplay) callsignDisplay.textContent = handle;
   if (callsignInput) callsignInput.value = user?.handle || '';
 
   if (levelEl) levelEl.textContent = `LVL ${levelStr}`;
-  if (bitsEl) bitsEl.textContent = `${liveBits.toLocaleString()} BITS`;
+  if (bitsEl) bitsEl.textContent = `${liveBits.toLocaleString()} AC`;
+  if (sparksEl) sparksEl.textContent = `${liveSparks.toLocaleString()} SPARKS`;
 
   if (waveEl) waveEl.textContent = `WAVE ${String(highestWave).padStart(2, '0')}`;
   if (scoreEl) scoreEl.textContent = `${totalScore.toLocaleString()} PTS`;
@@ -658,8 +662,8 @@ export function initAuthTerminal() {
 
   // Subscribe to live economy and storage events for real-time synchronization
   if (economyManager && typeof economyManager.on === 'function') {
-    economyManager.on(EconomyEvents.BITS_EARNED, (data) => {
-      const newBits = data?.balance ?? economyManager.getBits();
+    const syncCreditsAndDossier = (data) => {
+      const newBits = data?.balance ?? (typeof economyManager.getCredits === 'function' ? economyManager.getCredits() : economyManager.getBits());
       if (authManager.saveState) {
         authManager.saveState.bits = newBits;
         try { saveSaveState(authManager.saveState); } catch (_) {}
@@ -667,18 +671,18 @@ export function initAuthTerminal() {
       if (isAuthTerminalOpen()) {
         populateDossierData();
       }
-    });
+    };
 
-    economyManager.on(EconomyEvents.BITS_SPENT, () => {
-      const newBits = economyManager.getBits();
-      if (authManager.saveState) {
-        authManager.saveState.bits = newBits;
-        try { saveSaveState(authManager.saveState); } catch (_) {}
-      }
-      if (isAuthTerminalOpen()) {
-        populateDossierData();
-      }
-    });
+    for (const evt of [
+      EconomyEvents.CREDITS_EARNED,
+      EconomyEvents.CREDITS_SPENT,
+      EconomyEvents.BITS_EARNED,
+      EconomyEvents.BITS_SPENT,
+      EconomyEvents.SPARKS_EARNED,
+      EconomyEvents.SPARKS_SPENT
+    ]) {
+      if (evt) economyManager.on(evt, syncCreditsAndDossier);
+    }
   }
 
   if (storageManager && typeof storageManager.on === 'function') {

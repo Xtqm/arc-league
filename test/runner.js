@@ -83,6 +83,7 @@ const TEST_DOMAINS = {
   ui: [
     'ui/tactical_rail_menu.test.js',
     'ui/directives_modal.test.js',
+    'ui/swarm_mode_modal.test.js',
     'ui/update_notification.test.js',
     'ui/achievements_modal.test.js',
     'ui/achievement_toast.test.js',

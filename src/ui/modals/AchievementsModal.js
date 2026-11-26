@@ -151,10 +151,10 @@ export class AchievementsModal {
         ">
           <div>
             <div style="font-size: 20px; font-weight: bold; letter-spacing: 2px; color: #00f3ff; text-shadow: 0 0 10px rgba(0, 243, 255, 0.6);">
-              TROPHY MATRIX // ACHIEVEMENTS
+              ACHIEVEMENTS
             </div>
             <div style="font-size: 11px; color: #88bbcc; letter-spacing: 1px; margin-top: 3px;">
-              SYSTEM SUBSYSTEM MILESTONES &amp; PERFORMANCE RECOGNITION
+              FRACTURE MILESTONES &amp; PERFORMANCE RECOGNITION
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: 12px;">

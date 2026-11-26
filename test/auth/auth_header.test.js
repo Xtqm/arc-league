@@ -197,7 +197,7 @@ populateDossierData();
 assert.strictEqual(mockElements.dossierCallsignDisplay.textContent, 'GRID_RUNNER', 'Callsign display must show uppercase handle');
 assert.strictEqual(mockElements.dossierCallsignInput.value, 'GRID_RUNNER', 'Callsign input must prefill with current handle');
 assert.strictEqual(mockElements.dossierLevel.textContent, 'LVL 12', 'Level should be computed: 3500/500 + 5 = 12');
-assert.strictEqual(mockElements.dossierBits.textContent, '2,450 BITS', 'Bits must be formatted with commas and BITS suffix');
+assert.strictEqual(mockElements.dossierBits.textContent, '2,450 AC', 'Credits must be formatted with commas and AC suffix');
 assert.strictEqual(mockElements.dossierHighestWave.textContent, 'WAVE 05', 'Highest wave must be padded to 2 digits');
 assert.strictEqual(mockElements.dossierTotalScore.textContent, '3,500 PTS', 'Total score must be formatted with PTS suffix');
 assert.strictEqual(mockElements.dossierMatches.textContent, '14', 'Matches played must be populated');
@@ -221,7 +221,7 @@ console.log('✓ showAuthTerminal() automatically routes guest users to Auth Wiz
 setTerminalHubTab('loadout');
 assert.ok(mockElements.tabHubLoadout.classList.contains('active'), 'tabHubLoadout must have active class');
 assert.strictEqual(mockElements.tabHubIdent.classList.contains('active'), false, 'tabHubIdent must not be active');
-assert.strictEqual(mockElements.terminalHeaderTitle.textContent, 'OUTFITTING & LOADOUT', 'Header title must update to OUTFITTING & LOADOUT');
+assert.strictEqual(mockElements.terminalHeaderTitle.textContent, 'ATHLETE LOADOUT', 'Header title must update to ATHLETE LOADOUT');
 assert.notStrictEqual(mockElements.hubLoadoutView.style.display, 'none', 'hubLoadoutView must be displayed');
 assert.strictEqual(mockElements.dossierView.style.display, 'none', 'dossierView must be hidden');
 console.log('✓ setTerminalHubTab("loadout") activates Loadout view and updates header titles');
@@ -230,7 +230,7 @@ console.log('✓ setTerminalHubTab("loadout") activates Loadout view and updates
 setTerminalHubTab('directives');
 assert.ok(mockElements.tabHubDirectives.classList.contains('active'), 'tabHubDirectives must have active class');
 assert.strictEqual(mockElements.tabHubLoadout.classList.contains('active'), false, 'tabHubLoadout must not be active');
-assert.strictEqual(mockElements.terminalHeaderTitle.textContent, 'TROPHY MATRIX & DIRECTIVES', 'Header title must update to TROPHY MATRIX & DIRECTIVES');
+assert.strictEqual(mockElements.terminalHeaderTitle.textContent, 'ACHIEVEMENTS', 'Header title must update to ACHIEVEMENTS');
 assert.notStrictEqual(mockElements.hubDirectivesView.style.display, 'none', 'hubDirectivesView must be displayed');
 assert.strictEqual(mockElements.hubLoadoutView.style.display, 'none', 'hubLoadoutView must be hidden');
 console.log('✓ setTerminalHubTab("directives") activates Directives view and updates header titles');
@@ -263,20 +263,20 @@ authManager._saveState = {
   stats: { totalScore: 1000, highestWave: 2, matchesPlayed: 5 }
 };
 populateDossierData();
-assert.strictEqual(mockElements.dossierBits.textContent, '500 BITS', 'dossierBits must reflect live economy balance');
+assert.strictEqual(mockElements.dossierBits.textContent, '500 AC', 'dossierBits must reflect live economy balance');
 assert.strictEqual(authManager._saveState.bits, 500, 'authManager.saveState.bits must be harmonized with economyManager');
 console.log('✓ populateDossierData() harmonizes live Bits from EconomyManager into saveState and DOM');
 
 // Test reactive Bits award synchronization
 economyManager.awardBits(250, 'test_reward');
 assert.strictEqual(authManager._saveState.bits, 750, 'awardBits must synchronously update saveState.bits');
-assert.strictEqual(mockElements.dossierBits.textContent, '750 BITS', 'awardBits must synchronously update dossierBits readout');
+assert.strictEqual(mockElements.dossierBits.textContent, '750 AC', 'awardBits must synchronously update dossierBits readout');
 console.log('✓ economyManager.awardBits reactively updates Program Dossier Bits readout');
 
 // Test reactive Bits spend synchronization
 economyManager.spendBits(150, 'test_cat', 'test_item');
 assert.strictEqual(authManager._saveState.bits, 600, 'spendBits must synchronously update saveState.bits');
-assert.strictEqual(mockElements.dossierBits.textContent, '600 BITS', 'spendBits must synchronously update dossierBits readout');
+assert.strictEqual(mockElements.dossierBits.textContent, '600 AC', 'spendBits must synchronously update dossierBits readout');
 console.log('✓ economyManager.spendBits reactively updates Program Dossier Bits readout');
 
 // 7. Notification Pip Display and Dismissal on Identity Header and Hub Directives Tab

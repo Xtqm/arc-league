@@ -14,7 +14,7 @@ import {
   armoryManager as defaultArmoryManager
 } from '../../armory/ArmoryManager.js';
 import { ArmoryPreviewScene } from '../../armory/ArmoryPreviewScene.js';
-import { economyManager as defaultEconomyManager } from '../../core/economy/EconomyManager.js';
+import { economyManager as defaultEconomyManager, EconomyEvents } from '../../core/economy/EconomyManager.js';
 import { storageManager as defaultStorageManager } from '../../core/storage/StorageManager.js';
 import { SFX } from '../../audio/sfx.js';
 import { state } from '../../core/state.js';
@@ -45,9 +45,33 @@ export class ArmoryModal {
     this.selectedItemId = null;
     this.previewScene = null;
     this._onBackToMenu = null;
+    this._economyBound = false;
 
     if (typeof window !== 'undefined') {
       window.__tronCloseArmory = () => this.hide();
+    }
+
+    this._bindEconomyEvents();
+  }
+
+  _bindEconomyEvents() {
+    if (this._economyBound || !this.economy || typeof this.economy.on !== 'function') return;
+    this._economyBound = true;
+    const onBalanceChange = () => {
+      if (this.isOpen()) {
+        this._refreshBitsCounter(true);
+      }
+    };
+    const events = [
+      EconomyEvents.CREDITS_EARNED,
+      EconomyEvents.CREDITS_SPENT,
+      EconomyEvents.BITS_EARNED,
+      EconomyEvents.BITS_SPENT,
+      EconomyEvents.SPARKS_EARNED,
+      EconomyEvents.SPARKS_SPENT
+    ];
+    for (const evt of events) {
+      if (evt) this.economy.on(evt, onBalanceChange);
     }
   }
 
@@ -217,7 +241,7 @@ export class ArmoryModal {
         <!-- Top Navigation Bar -->
         <div class="armory-top-nav">
           <div class="armory-title-section">
-            <h1>ARMORY</h1>
+            <h1>ATHLETE LOADOUT</h1>
             <div class="armory-nav-tabs" id="armoryNavTabs">
               ${CATEGORY_TABS.map((tab) => `
                 <button class="armory-tab-btn ${tab.id === this.activeCategory ? 'active' : ''}" 

@@ -333,7 +333,7 @@ async function runTerminalIntegrationTests() {
       const bitsEl = document.getElementById('dossierBits');
       return bitsEl ? bitsEl.textContent.trim() : '';
     });
-    assert.ok(dossierBitsText.endsWith('BITS'), 'dossierBits must display live Bits balance with BITS label');
+    assert.ok(dossierBitsText.endsWith('AC'), 'dossierBits must display live Arc Credits balance with AC label');
     console.log(`✓ Tab [ IDENT MATRIX ] restores Program Dossier view with synchronized telemetry (${dossierBitsText})`);
 
     console.log('\n--- 7. Testing Escape Key Isolation and Strict [X] Button Dismissal ---');

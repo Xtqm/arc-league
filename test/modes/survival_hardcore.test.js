@@ -52,23 +52,14 @@ storageManager.set('stats.highestWave', 9);
 assert.strictEqual(isHardcoreUnlocked(storageManager), false, 'Hardcore mode must be locked when max wave < 10');
 
 let menuHtml = getMainMenuHtml();
-assert(menuHtml.includes('display:none'), 'Variant selector must be hidden in main menu when locked');
+assert(menuHtml.includes('SWARM PROTOCOL'), 'Main menu must render SWARM PROTOCOL button');
+assert(!menuHtml.includes('survivalVariantToggle'), 'Inline survivalVariantToggle must be removed from main menu');
 
 // Wave >= 10: Unlocked
 storageManager.set('stats.swarmMaxWave', 10);
 assert.strictEqual(isHardcoreUnlocked(storageManager), true, 'Hardcore mode must be unlocked when stats.swarmMaxWave >= 10');
 
-menuHtml = getMainMenuHtml();
-assert(menuHtml.includes('display:flex'), 'Variant selector must be displayed in main menu when unlocked');
-assert(menuHtml.includes('btnSurvivalHardcore'), 'Hardcore selector button must exist when unlocked');
-
-// Test tactical rail menu variant selector
-menuHtml = getMainMenuHtml();
-assert.ok(menuHtml.includes('id="survivalVariantToggle"'), 'Tactical rail menu must contain survivalVariantToggle');
-assert.ok(menuHtml.includes('id="btnSurvivalStandard"'), 'Tactical rail menu must contain btnSurvivalStandard');
-assert.ok(menuHtml.includes('id="btnSurvivalHardcore"'), 'Tactical rail menu must contain btnSurvivalHardcore');
-
-console.log('✓ Hardcore unlock prerequisite (Wave 10) and UI variant selector verified');
+console.log('✓ Hardcore unlock prerequisite (Wave 10) and SWARM PROTOCOL menu entry verified');
 
 // =========================================================================
 // [Group 2] Survival Hardcore Mode Instantiation & Level 5 Baseline

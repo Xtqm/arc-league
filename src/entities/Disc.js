@@ -564,6 +564,9 @@ export function updateDiscs(dt) {
           }
 
           const isDead = applyDamageToTarget(f, dmg, D);
+          if (state.gameMode === 'apex_trial' && state.trialRunStats && D.owner === 'player') {
+            state.trialRunStats.damageDealt += dmg;
+          }
           f.hurt = .25;
           state.score += 25;
 
@@ -581,6 +584,9 @@ export function updateDiscs(dt) {
           D.pos.addScaledVector(toTarget, 0.4);
 
           if (isDead) {
+            if (state.gameMode === 'apex_trial' && state.trialRunStats && D.owner === 'player' && (D.bounces || 0) > 0) {
+              state.trialRunStats.ricochetFractures += 1;
+            }
             if (Math.abs(D.initialCurve || 0) > 0.05 || Math.abs(D.curve || 0) > 0.05) {
               duelEconomyBridge.rewardCurveElimination(Math.abs(D.initialCurve || D.curve || 0));
             }
@@ -623,6 +629,9 @@ export function updateDiscs(dt) {
           playGamepadHaptics({ duration: 160, weakMagnitude: 0.6, strongMagnitude: 0.85 });
           state.score += 50;
           duelEconomyBridge.rewardParry();
+          if (state.gameMode === 'apex_trial' && state.trialRunStats) {
+            state.trialRunStats.parries += 1;
+          }
           if ((state.gameMode === 'calibration' || (state.gameMode === 'campaign' && state.campaignLevelId === 'level_01_01')) && typeof window !== 'undefined' && window.__tronCalibrationMode) {
             window.__tronCalibrationMode.onDiscDeflected();
           }

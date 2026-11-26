@@ -195,7 +195,8 @@ export function electNewCommander() {
 
 export function spawnWave() {
   const n = Math.min(2 + Math.floor(state.wave * 0.8), 8);
-  const hasCommander = state.wave >= 4 || !!state.isHardcoreSurvival;
+  const isApexTrial = state.gameMode === 'apex_trial';
+  const hasCommander = state.wave >= 4 || !!state.isHardcoreSurvival || (isApexTrial && Boolean(state.activeTrialMutators?.bossEveryWave));
 
   for (let i = 0; i < n; i++) {
     const isCommander = hasCommander && (i === 0);
@@ -479,8 +480,11 @@ export function killFoe(f) {
     return;
   }
 
-  if (state.gameMode === 'swarm') {
+  if (state.gameMode === 'swarm' || state.gameMode === 'apex_trial') {
     state.score += 100 + state.wave * 10;
+    if (state.gameMode === 'apex_trial' && state.trialRunStats) {
+      state.trialRunStats.fractures += 1;
+    }
 
     if (f && f.isCommander) {
       if (state.wave >= 4 && state.wave <= 7) {
@@ -522,9 +526,13 @@ export function killFoe(f) {
 
     if (state.foes.length === 0) {
       const completedWave = state.wave;
-      swarmEconomyBridge.processWaveCompletion(completedWave, {
-        isHardcore: Boolean(state.isHardcoreSurvival)
-      });
+      if (state.gameMode === 'swarm') {
+        swarmEconomyBridge.processWaveCompletion(completedWave, {
+          isHardcore: Boolean(state.isHardcoreSurvival)
+        });
+      } else if (state.gameMode === 'apex_trial' && state.trialRunStats) {
+        state.trialRunStats.wavesCleared += 1;
+      }
       state.wave++;
       syncGameStateRichPresence();
       message('CYCLE ' + state.wave);
@@ -1189,7 +1197,10 @@ export function updateFoes(dt) {
     }
     if (want.lengthSq() > 0) want.normalize();
 
-    const moveSpeed = (8.2 + state.wave * .25) * (f.disarrayTimer > 0 ? 0.5 : 1.0);
+    const botSpeedMult = (state.gameMode === 'apex_trial' && state.activeTrialMutators?.botSpeedMult)
+      ? Number(state.activeTrialMutators.botSpeedMult)
+      : 1.0;
+    const moveSpeed = (8.2 + state.wave * .25) * (f.disarrayTimer > 0 ? 0.5 : 1.0) * botSpeedMult;
     const inVoid = !isSTileSolid && f.y < 0;
     const lerpRate = inVoid ? 0 : (1 - Math.pow(.002, dt));
     f.vel.lerp(want.multiplyScalar(moveSpeed), lerpRate);
@@ -1264,7 +1275,10 @@ export function updateFoes(dt) {
           dir.z += (Math.random() - .5) * (1 - f.skill) * .45;
           dir.normalize();
           const origin = f.pos.clone().setY(1.7 + (f.y || 0)).addScaledVector(dir, 1.2);
-          const launchSpd = (26 + state.wave) * (1.0 + charge * 0.35);
+          const discMult = (state.gameMode === 'apex_trial' && state.activeTrialMutators?.discSpeedMult)
+            ? Number(state.activeTrialMutators.discSpeedMult)
+            : 1.0;
+          const launchSpd = (26 + state.wave) * (1.0 + charge * 0.35) * discMult;
           spawnDisc(origin, dir.multiplyScalar(launchSpd), f, config.ORANGE, 0, charge);
         }
       }

@@ -401,4 +401,48 @@ const restoredContractsState = rowToSaveState(rowWithContracts);
 assert.deepStrictEqual(restoredContractsState.contracts, resolvedContractsFull.contracts);
 console.log('✓ Date-aware Daily & monotonic Career contracts sync and row serialization verified');
 
+// Test 11: Apex Trials & Titles Monotonic Sync
+const localApexState = {
+  userId: 'user_apex_sync',
+  lastActiveAt: 1000,
+  titles: ['APEX PRIME // S1'],
+  equippedTitle: 'APEX PRIME // S1',
+  apexTrials: {
+    cycles: {
+      cycle_01: { freeTicketUsed: true, attempts: 3, bestAR: 5400, claimed: false },
+      cycle_02: { freeTicketUsed: false, attempts: 0, bestAR: 0, claimed: false }
+    }
+  }
+};
+
+const cloudApexState = {
+  userId: 'user_apex_sync',
+  lastActiveAt: 2000,
+  titles: ['APEX PRIME // S2'],
+  equippedTitle: 'APEX PRIME // S2',
+  apexTrials: {
+    cycles: {
+      cycle_01: { freeTicketUsed: false, attempts: 2, bestAR: 4900, claimed: true },
+      cycle_02: { freeTicketUsed: true, attempts: 1, bestAR: 3100, claimed: false }
+    }
+  }
+};
+
+const resolvedApex = CloudSyncResolver.resolve(localApexState, cloudApexState);
+assert.deepStrictEqual(resolvedApex.titles.sort(), ['APEX PRIME // S1', 'APEX PRIME // S2']);
+assert.strictEqual(resolvedApex.equippedTitle, 'APEX PRIME // S2');
+assert.strictEqual(resolvedApex.apexTrials.cycles.cycle_01.freeTicketUsed, true);
+assert.strictEqual(resolvedApex.apexTrials.cycles.cycle_01.attempts, 3);
+assert.strictEqual(resolvedApex.apexTrials.cycles.cycle_01.bestAR, 5400);
+assert.strictEqual(resolvedApex.apexTrials.cycles.cycle_01.claimed, true);
+assert.strictEqual(resolvedApex.apexTrials.cycles.cycle_02.freeTicketUsed, true);
+assert.strictEqual(resolvedApex.apexTrials.cycles.cycle_02.bestAR, 3100);
+
+const rowWithApex = saveStateToRow(resolvedApex);
+const restoredApexState = rowToSaveState(rowWithApex);
+assert.deepStrictEqual(restoredApexState.titles, resolvedApex.titles);
+assert.strictEqual(restoredApexState.equippedTitle, resolvedApex.equippedTitle);
+assert.deepStrictEqual(restoredApexState.apexTrials, resolvedApex.apexTrials);
+console.log('✓ Apex Trials & Titles monotonic cloud sync and row serialization verified');
+
 console.log('--- CloudSyncResolver Test Suite PASSED ---\n');

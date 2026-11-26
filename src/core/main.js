@@ -218,7 +218,7 @@ export function update(dt) {
       } else {
         if (state.gameMode === 'duel_ai' || state.gameMode === 'duel') {
           spawnDuelBoss(state.tier || state.duelTier || 1);
-        } else if (state.gameMode === 'swarm') {
+        } else if (state.gameMode === 'swarm' || state.gameMode === 'apex_trial') {
           spawnWave();
         } else if (state.gameMode === 'calibration' || (state.gameMode === 'campaign' && state.campaignLevelId === 'level_01_01')) {
           // Calibration mode manages its own drones
@@ -249,6 +249,17 @@ export function update(dt) {
   updateAmbientLobby(dt);
   if (state.gameMode === 'swarm' && state.isHardcoreSurvival) {
     dynamicDirector.update(dt);
+  }
+  if (state.gameMode === 'apex_trial' && state.activeTrialMutators && (state.activeTrialMutators.hazardIntervalMult || 1) < 1 && state.running && state.countdownTimer <= 0) {
+    const interval = Math.max(0.8, 3.0 * Number(state.activeTrialMutators.hazardIntervalMult));
+    state.trialHazardTimer = (state.trialHazardTimer || 0) + dt;
+    if (state.trialHazardTimer >= interval && tiles.length > 0) {
+      state.trialHazardTimer = 0;
+      const randomTile = tiles[Math.floor(Math.random() * tiles.length)];
+      if (randomTile && !randomTile.fallen) {
+        triggerTileWarning(randomTile);
+      }
+    }
   }
 
   // Rematch / Wave spawn timer

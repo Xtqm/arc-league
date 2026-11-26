@@ -11,7 +11,9 @@ import { contractsModal } from './modals/ContractsModal.js';
 import { settingsModal } from './modals/SettingsModal.js';
 import { directivesModal } from './modals/DirectivesModal.js';
 import { swarmModeModal } from './modals/SwarmModeModal.js';
+import { apexTrialsModal } from './modals/ApexTrialsModal.js';
 import { contractManager, ContractEvents } from '../contracts/ContractManager.js';
+import { apexTrialManager } from '../events/ApexTrialManager.js';
 import { spawnStagingDisc, despawnStagingDisc, spawnDiorama, despawnDiorama, refreshDioramaCosmetics, resetMatchCamera } from '../graphics/ambientLobby.js';
 import { updateSteamRichPresence, syncGameStateRichPresence } from '../core/steamTelemetry.js';
 import { storageManager } from '../core/storage/StorageManager.js';
@@ -31,6 +33,8 @@ trialDebriefModal.setOnReturnToGrid((gridId) => levelSelectView.show(gridId));
 armoryModal.setOnBackToMenu(() => showModeSelectMenu());
 achievementsModal.setOnBackToMenu(() => showModeSelectMenu());
 contractsModal.setOnBackToMenu(() => showModeSelectMenu());
+apexTrialsModal.setOnBackToMenu(() => showModeSelectMenu());
+apexTrialsModal.setOnLaunchTrial(() => startMode('apex_trial'));
 directivesModal.setOnClose(() => {
   if (typeof document !== 'undefined') {
     const rail = document.getElementById('mainMenu') || document.getElementById('directivesBtn');
@@ -38,7 +42,7 @@ directivesModal.setOnClose(() => {
   }
 });
 
-export { armoryModal, achievementsModal, contractsModal, settingsModal, directivesModal, swarmModeModal };
+export { armoryModal, achievementsModal, contractsModal, apexTrialsModal, settingsModal, directivesModal, swarmModeModal };
 
 export {
   ARENA_MAP_METADATA,
@@ -65,6 +69,17 @@ function teardownSectorArena() {
 export function teardownActiveMatch() {
   if ((state.gameMode === 'duel' || state.gameMode === 'duel_ai') && !state.aiPracticeSettled && (state.running || state.sessionTiersCleared > 0)) {
     duelEconomyBridge.settleAIPracticeFromState(state, 'exit');
+  }
+  if (state.gameMode === 'apex_trial') {
+    if (typeof window !== 'undefined' && typeof window.__tronSettleApexTrialRun === 'function' && state.trialRunStats && !state.trialRunStats.settled) {
+      const hasProgress = (state.trialRunStats.fractures || 0) > 0 || (state.trialRunStats.wavesCleared || 0) > 0;
+      if (hasProgress) {
+        window.__tronSettleApexTrialRun(false);
+      }
+    }
+    state.activeTrialMutators = null;
+    state.activeTrialCycleId = null;
+    state.trialHazardTimer = 0;
   }
 
   if (Array.isArray(state.discs)) {
@@ -124,7 +139,7 @@ export function startMode(mode) {
     state.sessionTiersCleared = 0;
     state.aiPracticeSettled = false;
   }
-  if (state.gameMode === 'swarm') {
+  if (state.gameMode === 'swarm' || state.gameMode === 'apex_trial') {
     teardownSectorArena();
   } else if (state.gameMode === 'duel_ai' && state.activeGridId) {
     applySectorArena(state.activeGridId);
@@ -142,6 +157,7 @@ export function startMode(mode) {
   armoryModal.hide();
   achievementsModal.hide();
   contractsModal.hide({ skipMenuCallback: true });
+  apexTrialsModal.hide({ skipMenuCallback: true });
   directivesModal.hide();
   settingsModal.hide();
   swarmModeModal.hide({ skipCloseCallback: true, skipFocusRestore: true });
@@ -149,6 +165,7 @@ export function startMode(mode) {
   state.armoryModalOpen = false;
   state.achievementsModalOpen = false;
   state.contractsModalOpen = false;
+  state.apexTrialsModalOpen = false;
   if (typeof window !== 'undefined' && window.__tronResetGame) {
     window.__tronResetGame();
   }
@@ -314,6 +331,7 @@ export function showModeSelectMenu(options = {}) {
   armoryModal.hide();
   achievementsModal.hide();
   contractsModal.hide({ skipMenuCallback: true });
+  apexTrialsModal.hide({ skipMenuCallback: true });
   directivesModal.hide();
   settingsModal.hide();
   swarmModeModal.hide({ skipCloseCallback: true, skipFocusRestore: true });
@@ -321,6 +339,7 @@ export function showModeSelectMenu(options = {}) {
   state.armoryModalOpen = false;
   state.achievementsModalOpen = false;
   state.contractsModalOpen = false;
+  state.apexTrialsModalOpen = false;
   clearArenaNameplates();
   clearSeriesIntermission();
   updateHUD();
@@ -334,6 +353,7 @@ export function showModeSelectMenu(options = {}) {
   bindMainMenuEvents();
   ensureContractsPipSubscription();
   updateContractsPip();
+  updateApexTrialsPip();
 }
 
 export function startSoloSwarm(options = {}) {
@@ -485,11 +505,7 @@ export function bindMainMenuEvents() {
   const openApexTrials = (e) => {
     e.stopPropagation();
     if (e.cancelable) e.preventDefault();
-    if (typeof window !== 'undefined' && typeof window.__tronOpenApexTrials === 'function') {
-      window.__tronOpenApexTrials();
-    } else {
-      showProtocolStandingBy('APEX TRIALS');
-    }
+    apexTrialsModal.show();
   };
 
   const openContracts = (e) => {
@@ -712,11 +728,45 @@ function ensureContractsPipSubscription() {
   }
 }
 
+export function updateApexTrialsPip(manager = apexTrialManager) {
+  if (typeof document === 'undefined') return false;
+  const btn = document.getElementById('apexTrialsBtn');
+  if (!btn) return false;
+
+  const isActive = Boolean(manager && typeof manager.isTrialActive === 'function' && manager.isTrialActive());
+  const hasClaimable = Boolean(manager && typeof manager.getClaimableCycles === 'function' && manager.getClaimableCycles().length > 0);
+  const showPip = isActive || hasClaimable;
+
+  let pip = typeof btn.querySelector === 'function' ? btn.querySelector('.neon-pip-dot') : null;
+  if (showPip) {
+    if (!pip && typeof document.createElement === 'function') {
+      pip = document.createElement('span');
+      pip.className = 'neon-pip-dot';
+      pip.textContent = '●';
+      pip.title = hasClaimable ? 'Apex Trial Rewards Ready' : 'Active Apex Trial Live';
+      if (typeof btn.appendChild === 'function') {
+        btn.appendChild(pip);
+      }
+    }
+    return true;
+  }
+
+  if (pip) {
+    if (typeof pip.remove === 'function') {
+      pip.remove();
+    } else if (pip.parentNode && typeof pip.parentNode.removeChild === 'function') {
+      pip.parentNode.removeChild(pip);
+    }
+  }
+  return false;
+}
+
 export function bindMenuButtons() {
   bindMainMenuEvents();
   bindPauseAndModalEvents();
   ensureContractsPipSubscription();
   updateContractsPip();
+  updateApexTrialsPip();
 }
 
 if (typeof window !== 'undefined') {

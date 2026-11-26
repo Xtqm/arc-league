@@ -350,8 +350,8 @@ export function updateDiscs(dt) {
         const fCenter = tmp.copy(f.pos).setY(1.5 + (f.y || 0));
         const dist = D.pos.distanceTo(fCenter);
 
-        // AI Threat Detection, Parry Defense & Catch Window (disabled for remote human opponents in 1v1)
-        if (dist <= 2.2 && state.gameMode !== 'duel_multi') {
+        // AI Threat Detection, Parry Defense & Catch Window (disabled for remote human opponents in 1v1 / 2v2)
+        if (dist <= 2.2 && state.gameMode !== 'duel_multi' && state.gameMode !== 'duos_multi') {
           const toFoe = fCenter.clone().sub(D.pos);
           const movingToward = D.vel.dot(toFoe) > 0;
           const rotY = (f.obj && f.obj.rotation) ? f.obj.rotation.y : 0;
@@ -494,7 +494,7 @@ export function updateDiscs(dt) {
           if (!D.hitFoes) D.hitFoes = new Set();
           D.hitFoes.add(f);
 
-          if (state.gameMode === 'duel_multi') {
+          if (state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi') {
             const toTarget = D.pos.clone().sub(fCenter).setY(0);
             if (toTarget.lengthSq() > 1e-4) toTarget.normalize();
             else toTarget.set(0, 0, 1);

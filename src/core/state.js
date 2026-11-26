@@ -58,6 +58,7 @@ export const state = {
   multiplayerRoundId: 0,
   multiplayerMatchFinished: false,
   multiplayerPayoutProcessed: false,
+  isSpectating: false,
   seriesBestOf: 3,
   selectedSeriesBestOf: 3,
   seriesRound: 1,

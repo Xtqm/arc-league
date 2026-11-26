@@ -253,7 +253,7 @@ assert(debriefHtml.includes('TRIAL CLEARED'), 'Debrief must display victory titl
 assert(debriefHtml.includes('NEXT TRIAL'), 'Debrief must render NEXT TRIAL button on victory');
 assert(debriefHtml.includes('RETRY TRIAL'), 'Debrief must render RETRY TRIAL button');
 assert(debriefHtml.includes('RETURN TO GRID'), 'Debrief must render RETURN TO GRID button');
-assert(debriefHtml.includes('+100 BITS'), 'Debrief must display base Bit rewards');
+assert(debriefHtml.includes('+100 AC'), 'Debrief must display base AC rewards');
 
 console.log('✓ Trial victory correctly computes 3 stars, awards payouts, and renders debrief');
 
@@ -273,7 +273,7 @@ assert.strictEqual(testManager.getActiveTrial(), null, 'Active trial cleared aft
 
 // Test Debrief Modal rendering with defeat outcome
 const defeatHtml = debriefModal.render(failResult);
-assert(defeatHtml.includes('DE-ALLOCATED // SIMULATION FAILED'), 'Debrief must display defeat title');
+assert(defeatHtml.includes('FRACTURED // SIMULATION FAILED'), 'Debrief must display defeat title');
 assert(!defeatHtml.includes('NEXT TRIAL'), 'Debrief must NOT render NEXT TRIAL button on defeat');
 assert(defeatHtml.includes('RETRY TRIAL'), 'Debrief must render RETRY TRIAL button on defeat');
 assert(defeatHtml.includes('RETURN TO GRID'), 'Debrief must render RETURN TO GRID button on defeat');

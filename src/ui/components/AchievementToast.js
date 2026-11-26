@@ -129,8 +129,13 @@ export class AchievementToast {
 
     // Reward pills
     let rewardHtml = '';
-    if (achievement.reward?.bits > 0) {
-      rewardHtml += `<span style="background:rgba(255,170,0,0.18); border:1px solid #ffaa00; color:#ffaa00; padding:2px 7px; border-radius:3px; font-size:11px; font-weight:bold; letter-spacing:0.5px;">+${achievement.reward.bits} BITS</span>`;
+    const rewardCredits = achievement.reward?.credits ?? achievement.reward?.bits ?? 0;
+    const rewardSparks = achievement.reward?.sparks ?? 0;
+    if (rewardCredits > 0) {
+      rewardHtml += `<span style="background:rgba(255,170,0,0.18); border:1px solid #ffaa00; color:#ffaa00; padding:2px 7px; border-radius:3px; font-size:11px; font-weight:bold; letter-spacing:0.5px;">+${rewardCredits} AC</span>`;
+    }
+    if (rewardSparks > 0) {
+      rewardHtml += `<span style="background:rgba(189,0,255,0.18); border:1px solid #bd00ff; color:#d896ff; padding:2px 7px; border-radius:3px; font-size:11px; font-weight:bold; letter-spacing:0.5px;">+${rewardSparks} SPARK${rewardSparks === 1 ? '' : 'S'}</span>`;
     }
     if (achievement.reward?.cosmetic) {
       const cosmeticName = achievement.reward.cosmetic.displayName || achievement.reward.cosmetic.itemId;

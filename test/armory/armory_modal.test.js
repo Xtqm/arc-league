@@ -52,11 +52,28 @@ function createMockServices() {
   };
 
   const mockEconomy = {
+    getCredits: () => mem['economy.bits'] || 0,
     getBalance: () => mem['economy.bits'] || 0,
+    getSparks: () => mem['economy.sparks'] || 0,
     canAfford: (cost) => (mem['economy.bits'] || 0) >= cost,
+    canAffordSparks: (cost) => (mem['economy.sparks'] || 0) >= cost,
+    spendCredits: (cost) => {
+      if ((mem['economy.bits'] || 0) >= cost) {
+        mem['economy.bits'] -= cost;
+        return true;
+      }
+      return false;
+    },
     spendBits: (cost) => {
       if ((mem['economy.bits'] || 0) >= cost) {
         mem['economy.bits'] -= cost;
+        return true;
+      }
+      return false;
+    },
+    spendSparks: (cost) => {
+      if ((mem['economy.sparks'] || 0) >= cost) {
+        mem['economy.sparks'] -= cost;
         return true;
       }
       return false;
@@ -132,8 +149,9 @@ const initialMarkup = modal.render();
 assert(initialMarkup.includes('KINETIC DISCS'), 'Must include KINETIC DISCS tab');
 assert(initialMarkup.includes('ATHLETE RIGS'), 'Must include ATHLETE RIGS tab');
 assert(initialMarkup.includes('STADIUM ARENAS'), 'Must include STADIUM ARENAS tab');
-assert(initialMarkup.includes('CR 1,000'), 'Must render initial balance CR 1,000');
-console.log('✓ Top navigation bar tabs and live Arc Credits balance counter rendered.');
+assert(initialMarkup.includes('1,000 AC'), 'Must render initial balance 1,000 AC');
+assert(initialMarkup.includes('0 SPARKS'), 'Must render initial balance 0 SPARKS');
+console.log('✓ Top navigation bar tabs and live Arc Credits & Sparks balance counters rendered.');
 
 // =========================================================================
 // [Group 3] Split-Pane Layout, Catalog Grid & Lore Dossier
@@ -146,7 +164,8 @@ const discGridMarkup = modal.renderItemsGrid();
 assert(discGridMarkup.includes('Arc Standard'), 'Grid must list Arc Standard');
 assert(discGridMarkup.includes('Neon Amber'), 'Grid must list Neon Amber');
 assert(discGridMarkup.includes('EQUIPPED'), 'Active equipped disc must have EQUIPPED badge');
-assert(discGridMarkup.includes('400 CREDITS'), 'Unowned purchasable disc must display cost');
+assert(discGridMarkup.includes('1200 AC'), 'Unowned purchasable disc must display AC cost');
+assert(discGridMarkup.includes('75 SPARKS'), 'Sparks disc must display SPARKS cost');
 
 const dossierMarkup = modal.renderItemDossier();
 assert(dossierMarkup.includes('Arc Standard'), 'Dossier must show selected item title');
@@ -173,21 +192,30 @@ actionBarHtml = modal.renderActionBar();
 assert(actionBarHtml.includes('[ EQUIP TO LOADOUT ]'), 'Owned unequipped item must show [ EQUIP TO LOADOUT ]');
 assert(actionBarHtml.includes('btn-equip'), 'Must use btn-equip action class');
 
-// State 3: Unowned Credit Purchasable (Affordable) -> [ ACQUIRE // 600 CREDITS ]
-modal.selectedItemId = 'disc_retro_green'; // cost: 600, player has 1000
+// State 3: Unowned Credit Purchasable (Affordable) -> [ ACQUIRE // 2000 AC ]
+mem['economy.bits'] = 2500;
+modal.selectedItemId = 'disc_retro_green'; // cost: 2000, player has 2500
 assert.strictEqual(armory.canPurchase('disc_retro_green'), true);
 actionBarHtml = modal.renderActionBar();
-assert(actionBarHtml.includes('[ ACQUIRE // 600 CREDITS ]'), 'Affordable item must show [ ACQUIRE // 600 CREDITS ]');
+assert(actionBarHtml.includes('[ ACQUIRE // 2000 AC ]'), 'Affordable item must show [ ACQUIRE // 2000 AC ]');
 assert(!actionBarHtml.includes('disabled'), 'Affordable item button must NOT be disabled');
 
 // State 4: Unowned Credit Purchasable (Insufficient Credits) -> Disabled with warning
-mem['economy.bits'] = 100; // balance now 100 < 600
+mem['economy.bits'] = 100; // balance now 100 < 2000
 modal.selectedItemId = 'disc_retro_green';
 assert.strictEqual(armory.canPurchase('disc_retro_green'), false);
 actionBarHtml = modal.renderActionBar();
-assert(actionBarHtml.includes('[ ACQUIRE // 600 CREDITS ]'), 'Must show price on button');
+assert(actionBarHtml.includes('[ ACQUIRE // 2000 AC ]'), 'Must show price on button');
 assert(actionBarHtml.includes('disabled'), 'Insufficient credits button must be disabled');
-assert(actionBarHtml.includes('INSUFFICIENT CREDITS // COMPETE IN THE ARCFIELD'), 'Must show amber warning message');
+assert(actionBarHtml.includes('INSUFFICIENT AC // COMPETE IN THE ARCFIELD'), 'Must show amber warning message');
+
+// State 4b: Unowned Sparks Purchasable (Insufficient Sparks) -> Disabled with Sparks warning
+mem['economy.sparks'] = 10;
+modal.selectedItemId = 'disc_hex_dark_matter'; // cost: 75 Sparks
+actionBarHtml = modal.renderActionBar();
+assert(actionBarHtml.includes('[ ACQUIRE // 75 SPARKS ]'), 'Must show Sparks price on button');
+assert(actionBarHtml.includes('disabled'), 'Insufficient Sparks button must be disabled');
+assert(actionBarHtml.includes('INSUFFICIENT SPARKS'), 'Must show Sparks warning message');
 
 // State 5: Milestone Locked -> [ LOCKED // REQUIRES: ... ]
 modal.selectedItemId = 'disc_corrupted_void'; // achievementId: corrupted_void_mastery
@@ -201,9 +229,9 @@ console.log('✓ Contextual action bar properly evaluated all 5 state variations
 // =========================================================================
 console.log('\n[Group 5] Testing Atomic Fabrication Purchase & Fanfare...');
 
-// Restore balance to 1000
-mem['economy.bits'] = 1000;
-modal.selectedItemId = 'disc_retro_green'; // cost: 600
+// Restore balance to 2500
+mem['economy.bits'] = 2500;
+modal.selectedItemId = 'disc_retro_green'; // cost: 2000
 
 let audioFabricateTriggered = false;
 const origFabricate = SFX.fabricate;
@@ -212,7 +240,7 @@ SFX.fabricate = () => { audioFabricateTriggered = true; };
 modal.handleFabricate('disc_retro_green');
 
 assert.strictEqual(audioFabricateTriggered, true, 'Fabricate audio sound must be triggered');
-assert.strictEqual(mem['economy.bits'], 400, 'Bits must be deducted atomically: 1000 - 600 = 400');
+assert.strictEqual(mem['economy.bits'], 500, 'AC must be deducted atomically: 2500 - 2000 = 500');
 assert.strictEqual(armory.isUnlocked(ARMORY_CATEGORIES.DISC_SKINS, 'disc_retro_green'), true, 'Item must be granted to inventory');
 
 // Verify that after purchase, action bar transitions to [ EQUIP TO LOADOUT ]

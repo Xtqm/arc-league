@@ -209,6 +209,7 @@ export class StorageManager {
       base.stats.wins = legacy.stats.wins ?? 0;
       base.stats.highestWave = legacy.stats.highestWave ?? legacy.stats.swarmHighestWave ?? 1;
       base.stats.swarmHighestWave = legacy.stats.swarmHighestWave ?? legacy.stats.highestWave ?? 1;
+      base.stats.hardcoreSwarmHighestWave = legacy.stats.hardcoreSwarmHighestWave ?? 0;
       base.stats.highestScore = legacy.stats.totalScore ?? 0;
       base.stats.totalDerezzes = legacy.stats.totalDeallocations ?? legacy.stats.totalDerezzes ?? 0;
       base.stats.totalDeallocations = legacy.stats.totalDeallocations ?? legacy.stats.totalDerezzes ?? 0;
@@ -376,6 +377,9 @@ export class StorageManager {
       }
       if (typeof parsed.stats.highestWave !== 'number') {
         parsed.stats.highestWave = parsed.stats.swarmHighestWave;
+      }
+      if (typeof parsed.stats.hardcoreSwarmHighestWave !== 'number') {
+        parsed.stats.hardcoreSwarmHighestWave = 0;
       }
       if (typeof parsed.stats.totalDerezzes !== 'number') {
         parsed.stats.totalDerezzes = typeof parsed.stats.totalDeallocations === 'number' ? parsed.stats.totalDeallocations : 0;
@@ -838,6 +842,10 @@ export class StorageManager {
       swarmHighestWave: Math.max(
         Number(existStats.swarmHighestWave || existStats.highestWave || 1),
         Number(rawStats.swarmHighestWave || rawStats.highestWave || 1)
+      ),
+      hardcoreSwarmHighestWave: Math.max(
+        Number(existStats.hardcoreSwarmHighestWave || 0),
+        Number(rawStats.hardcoreSwarmHighestWave || 0)
       ),
       highestScore: Math.max(Number(existStats.highestScore || 0), Number(rawStats.highestScore || 0)),
       totalPlaytimeSec: Math.max(Number(existStats.totalPlaytimeSec || 0), Number(rawStats.totalPlaytimeSec || 0)),

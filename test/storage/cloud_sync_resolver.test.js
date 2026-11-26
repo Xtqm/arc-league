@@ -35,6 +35,7 @@ assert.deepStrictEqual(defaultState.campaign, {
 assert.strictEqual(defaultState.loadout.activeDisc, 'disc_identity_default');
 assert.strictEqual(defaultState.loadout.activeArenaSkin, 'grid_default');
 assert.deepStrictEqual(defaultState.achievements, []);
+assert.strictEqual(defaultState.stats.hardcoreSwarmHighestWave, 0);
 console.log('✓ Normalization produces valid default save state schema with structured campaign, inventory, and loadout');
 
 // Test 2: Monotonic Numerical Max (Bits & Level)
@@ -136,7 +137,7 @@ const localFull = {
     audioTheme: 'synthwave_82'
   },
   achievements: ['ACH_FIRST_WIN'],
-  stats: { matchesPlayed: 12, wins: 8, highestWave: 6, totalScore: 9200, totalDerezzes: 15, parriesExecuted: 4 },
+  stats: { matchesPlayed: 12, wins: 8, highestWave: 6, hardcoreSwarmHighestWave: 14, totalScore: 9200, totalDerezzes: 15, parriesExecuted: 4 },
   settings: { sens: 0.003, invertY: true },
   lastActiveAt: 1000
 };
@@ -170,7 +171,7 @@ const cloudFull = {
     audioTheme: 'synthwave_82'
   },
   achievements: ['ACH_FIRST_WIN', 'ACH_WAVE_5'],
-  stats: { matchesPlayed: 20, wins: 6, highestWave: 7, totalScore: 8500, totalDerezzes: 22, parriesExecuted: 7 },
+  stats: { matchesPlayed: 20, wins: 6, highestWave: 7, hardcoreSwarmHighestWave: 9, totalScore: 8500, totalDerezzes: 22, parriesExecuted: 7 },
   settings: { sens: 0.0022, invertY: false },
   lastActiveAt: 2000
 };
@@ -190,6 +191,7 @@ assert.strictEqual(resolvedFull.loadout.activeDisc, 'disc_plasma', 'Newer cloud 
 assert.strictEqual(resolvedFull.stats.matchesPlayed, 20);
 assert.strictEqual(resolvedFull.stats.wins, 8);
 assert.strictEqual(resolvedFull.stats.highestWave, 7);
+assert.strictEqual(resolvedFull.stats.hardcoreSwarmHighestWave, 14);
 assert.strictEqual(resolvedFull.stats.totalScore, 9200);
 assert.strictEqual(resolvedFull.stats.totalDerezzes, 22);
 assert.strictEqual(resolvedFull.stats.parriesExecuted, 7);

@@ -310,20 +310,26 @@ export class ArmoryManager {
       return false;
     }
 
-    // Free items or achievement rewards cannot be bought with Bits
-    if (item.unlockType !== UNLOCK_TYPES.BITS) {
-      return false;
-    }
-
+    // Free items or achievement rewards cannot be purchased
     if (typeof item.cost !== 'number' || item.cost <= 0) {
       return false;
     }
 
-    return this.economy.canAfford(item.cost);
+    if (item.unlockType === UNLOCK_TYPES.SPARKS) {
+      return typeof this.economy.canAffordSparks === 'function'
+        ? this.economy.canAffordSparks(item.cost)
+        : false;
+    }
+
+    if (item.unlockType === UNLOCK_TYPES.BITS || item.unlockType === UNLOCK_TYPES.CREDITS) {
+      return this.economy.canAfford(item.cost);
+    }
+
+    return false;
   }
 
   /**
-   * Executes atomic purchase of an item using Bits.
+   * Executes atomic purchase of an item using Arc Credits or Sparks.
    * Deducts currency via EconomyManager, records ownership in StorageManager,
    * flushes persistence, and broadcasts ARMORY_ITEM_UNLOCKED event.
    * @param {string} itemId
@@ -340,7 +346,16 @@ export class ArmoryManager {
     }
 
     // 1. Atomic currency spend through EconomyManager
-    const spendSuccess = this.economy.spendBits(item.cost, item.category, item.id);
+    let spendSuccess = false;
+    if (item.unlockType === UNLOCK_TYPES.SPARKS) {
+      spendSuccess = typeof this.economy.spendSparks === 'function'
+        ? this.economy.spendSparks(item.cost, item.category, item.id)
+        : false;
+    } else if (typeof this.economy.spendCredits === 'function') {
+      spendSuccess = this.economy.spendCredits(item.cost, item.category, item.id);
+    } else {
+      spendSuccess = this.economy.spendBits(item.cost, item.category, item.id);
+    }
     if (!spendSuccess) {
       return false;
     }

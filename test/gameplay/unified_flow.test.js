@@ -290,17 +290,28 @@ async function runUnifiedFlowTests() {
     return ov && ov.style.display === 'flex' && !!document.getElementById('rematchTierBtn');
   }, { timeout: 5000, polling: 100 });
 
-  const defeatModal = await page.evaluate(() => ({
-    title: document.getElementById('overlay')?.querySelector('h1')?.textContent?.trim(),
-    rematchText: document.getElementById('rematchTierBtn')?.textContent?.trim(),
-    restartText: document.getElementById('recompileBtn')?.textContent?.trim(),
-    menuText: document.getElementById('returnMenuBtn')?.textContent?.trim()
-  }));
+  const defeatModal = await page.evaluate(async () => {
+    const { duelEconomyBridge } = await import('/src/modes/DuelEconomyBridge.js');
+    return {
+      title: document.getElementById('overlay')?.querySelector('h1')?.textContent?.trim(),
+      rematchText: document.getElementById('rematchTierBtn')?.textContent?.trim(),
+      restartText: document.getElementById('recompileBtn')?.textContent?.trim(),
+      menuText: document.getElementById('returnMenuBtn')?.textContent?.trim(),
+      creditsAfterDefeat: duelEconomyBridge.economy.getCredits(),
+      xpAfterDefeat: duelEconomyBridge.economy.getXP(),
+      sessionTiersCleared: window.__dbg.state.sessionTiersCleared,
+      aiPracticeSettled: window.__dbg.state.aiPracticeSettled
+    };
+  });
   if (
     defeatModal.title !== 'DUEL ELIMINATED' ||
     defeatModal.rematchText !== 'REMATCH TIER 2' ||
     defeatModal.restartText !== 'RESTART TIER 1' ||
-    defeatModal.menuText !== 'MODE SELECT'
+    defeatModal.menuText !== 'MODE SELECT' ||
+    defeatModal.creditsAfterDefeat !== 25 ||
+    defeatModal.xpAfterDefeat !== 80 ||
+    defeatModal.sessionTiersCleared !== 0 ||
+    defeatModal.aiPracticeSettled !== true
   ) {
     throw new Error(`Test 5C FAILED (defeat modal): ${JSON.stringify(defeatModal)}`);
   }

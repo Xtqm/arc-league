@@ -28,8 +28,8 @@ export const SECTOR_THEMES = Object.freeze({
     rimCoolColor: 0x00d8ff,
     rimWarmColor: 0xff7b1a,
     chasmLightColor: 0x0b7fa0,
-    roughness: 0.15,
-    metalness: 0.85,
+    roughness: 0.42,
+    metalness: 0.38,
     description: 'Reflective slate floor with static ricochet pillars.'
   }),
   grid_02: Object.freeze({
@@ -46,8 +46,8 @@ export const SECTOR_THEMES = Object.freeze({
     rimCoolColor: 0x2299dd,
     rimWarmColor: 0xffaa00,
     chasmLightColor: 0x7a3d00,
-    roughness: 0.3,
-    metalness: 0.7,
+    roughness: 0.46,
+    metalness: 0.35,
     description: 'Amber lattice floor with vertical jump pads and elevated turret platforms.'
   }),
   grid_03: Object.freeze({
@@ -64,8 +64,8 @@ export const SECTOR_THEMES = Object.freeze({
     rimCoolColor: 0x7b2cbf,
     rimWarmColor: 0x3a66ff,
     chasmLightColor: 0x3a0ca3,
-    roughness: 0.2,
-    metalness: 0.8,
+    roughness: 0.44,
+    metalness: 0.38,
     description: 'Deep cobalt/violet theme with oscillating forcefields and timed laser gates.'
   }),
   grid_04: Object.freeze({
@@ -82,8 +82,8 @@ export const SECTOR_THEMES = Object.freeze({
     rimCoolColor: 0xff0055,
     rimWarmColor: 0xffd700,
     chasmLightColor: 0x7a0024,
-    roughness: 0.18,
-    metalness: 0.9,
+    roughness: 0.42,
+    metalness: 0.42,
     description: 'Crimson and gold theme with lethal floor de-rez void zones.'
   })
 });

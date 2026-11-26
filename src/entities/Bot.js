@@ -415,7 +415,7 @@ export function killFoe(f) {
   }
 
   if (state.gameMode === 'duel' || state.gameMode === 'duel_ai') {
-    duelEconomyBridge.processMatchOutcome('victory', 'ai');
+    state.sessionTiersCleared = (state.sessionTiersCleared || 0) + 1;
     state.tier = (state.tier || state.duelTier || 1) + 1;
     state.duelTier = state.tier;
     message('TIER ' + state.tier + ' REACHED');
@@ -522,7 +522,9 @@ export function killFoe(f) {
 
     if (state.foes.length === 0) {
       const completedWave = state.wave;
-      swarmEconomyBridge.processWaveCompletion(completedWave);
+      swarmEconomyBridge.processWaveCompletion(completedWave, {
+        isHardcore: Boolean(state.isHardcoreSurvival)
+      });
       state.wave++;
       syncGameStateRichPresence();
       message('CYCLE ' + state.wave);

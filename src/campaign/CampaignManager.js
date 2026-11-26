@@ -5,7 +5,7 @@
  * differentiated first-time vs repeat economy payouts, and persistent storage synchronization.
  */
 
-import { campaignRegistry as defaultCampaignRegistry } from './CampaignRegistry.js';
+import { campaignRegistry as defaultCampaignRegistry, ARBITER_SPARK_REWARDS } from './CampaignRegistry.js';
 import { starEvaluator as defaultStarEvaluator } from './StarEvaluator.js';
 import { storageManager as defaultStorageManager, StorageEvents } from '../core/storage/StorageManager.js';
 import { economyManager as defaultEconomyManager } from '../core/economy/EconomyManager.js';
@@ -297,14 +297,26 @@ export class CampaignManager {
       ? levelConfig.payouts.firstClearXp
       : levelConfig.payouts.repeatClearXp;
 
+    const sparkBonus = levelConfig.payouts?.firstThreeStarSparks || ARBITER_SPARK_REWARDS[levelId] || 0;
+    const sparksAwarded = (sparkBonus > 0 && newStars === 3 && previousStars < 3 && !existingRecord?.sparksClaimed)
+      ? sparkBonus
+      : 0;
+
     // Dispatch payouts via EconomyManager
     const bitSource = firstTimeClear ? `campaign_first_clear_${levelId}` : `campaign_repeat_clear_${levelId}`;
     const xpSource = firstTimeClear ? `campaign_first_clear_${levelId}` : `campaign_repeat_clear_${levelId}`;
 
-    if (bitsAwarded > 0) {
-      this.economy.awardBits(bitsAwarded, bitSource);
+    if (bitsAwarded > 0 && this.economy) {
+      if (typeof this.economy.awardCredits === 'function') {
+        this.economy.awardCredits(bitsAwarded, bitSource);
+      } else if (typeof this.economy.awardBits === 'function') {
+        this.economy.awardBits(bitsAwarded, bitSource);
+      }
     }
-    if (xpAwarded > 0) {
+    if (sparksAwarded > 0 && this.economy && typeof this.economy.awardSparks === 'function') {
+      this.economy.awardSparks(sparksAwarded, `campaign_arbiter_3star_${levelId}`);
+    }
+    if (xpAwarded > 0 && this.economy && typeof this.economy.awardXP === 'function') {
       this.economy.awardXP(xpAwarded, xpSource);
     }
 
@@ -323,6 +335,7 @@ export class CampaignManager {
       bestTime,
       bestIntegrity,
       completed: true,
+      sparksClaimed: Boolean(existingRecord?.sparksClaimed || sparksAwarded > 0),
       clears: (existingRecord?.clears || 0) + 1,
       lastClearedAt: Date.now()
     };
@@ -396,7 +409,9 @@ export class CampaignManager {
       effectiveStars,
       firstTimeClear,
       rewards: {
+        credits: bitsAwarded,
         bits: bitsAwarded,
+        sparks: sparksAwarded,
         xp: xpAwarded
       },
       evaluation,

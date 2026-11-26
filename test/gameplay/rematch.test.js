@@ -482,15 +482,15 @@ async function runQuickMatchWebRTCRematchTest() {
       };
     });
     const r1XpEntries = r1Econ.vicLogs.filter(e => e.type === 'XP_GAINED');
-    const r1BitEntries = r1Econ.vicLogs.filter(e => e.type === 'BITS_EARNED');
+    const r1BitEntries = r1Econ.vicLogs.filter(e => e.type === 'BITS_EARNED' || e.type === 'CREDITS_EARNED');
     if (
       r1XpEntries.length !== 1 ||
       r1BitEntries.length !== 1 ||
       r1XpEntries[0].amount !== 300 ||
-      r1BitEntries[0].amount !== 100 ||
-      r1BitEntries[0].balanceAfter - startBits !== 100
+      r1BitEntries[0].amount !== 120 ||
+      r1BitEntries[0].balanceAfter - startBits !== 120
     ) {
-      throw new Error(`Expected single Series 1 victory payout (+100 Bits + 300 XP), got ${JSON.stringify(r1Econ)}`);
+      throw new Error(`Expected single Series 1 victory payout (+120 AC + 300 XP), got ${JSON.stringify(r1Econ)}`);
     }
     console.log('>>> QUICK MATCH SERIES 1 (2 - 1) PASSED: WebRTC clinch & single Bits/XP payout verified!');
 
@@ -585,21 +585,26 @@ async function runQuickMatchWebRTCRematchTest() {
       };
     });
     const r2XpEntries = r2Econ.vicLogs.filter(e => e.type === 'XP_GAINED');
-    const r2BitEntries = r2Econ.vicLogs.filter(e => e.type === 'BITS_EARNED');
+    const r2BitEntries = r2Econ.vicLogs.filter(e => e.type === 'BITS_EARNED' || e.type === 'CREDITS_EARNED');
     if (
       r2XpEntries.length !== 2 ||
       r2BitEntries.length !== 2 ||
       r2XpEntries.some(e => e.amount !== 300) ||
-      r2BitEntries.some(e => e.amount !== 100)
+      r2BitEntries.some(e => e.amount !== 120)
     ) {
-      throw new Error(`Expected exact Round 2 payout (2x victory payouts of +100 Bits / +300 XP), got ${JSON.stringify(r2Econ)}`);
+      throw new Error(`Expected exact Round 2 payout (2x victory payouts of +120 AC / +300 XP), got ${JSON.stringify(r2Econ)}`);
     }
     const guestDefLogs = await guestPage.evaluate(async () => {
       const { duelEconomyBridge } = await import('/src/modes/DuelEconomyBridge.js');
       return duelEconomyBridge.economy.getAuditLog().filter(e => e.source === 'duel_multiplayer_defeat');
     });
-    if (guestDefLogs.length !== 2 || guestDefLogs.some(e => e.type !== 'XP_GAINED' || e.amount !== 75)) {
-      throw new Error(`Expected 2x defeat participation payouts (+75 XP) on Guest, got ${JSON.stringify(guestDefLogs)}`);
+    const guestDefXp = guestDefLogs.filter(e => e.type === 'XP_GAINED');
+    const guestDefAc = guestDefLogs.filter(e => e.type === 'BITS_EARNED' || e.type === 'CREDITS_EARNED');
+    if (
+      guestDefXp.length !== 2 || guestDefXp.some(e => e.amount !== 80) ||
+      guestDefAc.length !== 2 || guestDefAc.some(e => e.amount !== 15)
+    ) {
+      throw new Error(`Expected 2x defeat participation payouts (+15 AC / +80 XP) on Guest, got ${JSON.stringify(guestDefLogs)}`);
     }
     console.log('>>> QUICK MATCH ROUND 2 PAYOUT PASSED: Single payout per win across Round 1 and Round 2!');
 

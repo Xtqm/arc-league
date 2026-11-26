@@ -171,13 +171,24 @@ assert.strictEqual(levelUpEvents[0].oldLevel, 2);
 assert.strictEqual(levelUpEvents[0].newLevel, 5);
 
 // Check milestone rewards for levels 3, 4, 5:
-// Level 3: 50 Bits
-// Level 4: 50 Bits
-// Level 5: 250 Bits (milestone table)
-// Total milestone rewards: 350 Bits.
-// Previous balance was 50 Bits -> New balance must be 50 + 350 = 400 Bits.
-assert.strictEqual(levelUpEvents[0].rewards.bits, 350);
-assert.strictEqual(progEconomy.getBits(), 400);
+// Level 3: 50 AC
+// Level 4: 50 AC
+// Level 5: 150 AC (milestone table)
+// Total milestone rewards: 250 AC.
+// Previous balance was 50 AC -> New balance must be 50 + 250 = 300 AC.
+assert.strictEqual(levelUpEvents[0].rewards.credits, 250);
+assert.strictEqual(levelUpEvents[0].rewards.bits, 250);
+assert.strictEqual(levelUpEvents[0].rewards.sparks, 0);
+assert.strictEqual(progEconomy.getCredits(), 300);
+
+// Check unlisted level fallback (Level 6 -> 25 AC) and landmark Sparks (Level 10 -> 350 AC + 1 Spark)
+const lvl6Reward = progEconomy._calculateMilestoneRewards(5, 6);
+assert.strictEqual(lvl6Reward.credits, 25);
+assert.strictEqual(lvl6Reward.sparks, 0);
+
+const lvl10Reward = progEconomy._calculateMilestoneRewards(9, 10);
+assert.strictEqual(lvl10Reward.credits, 350);
+assert.strictEqual(lvl10Reward.sparks, 1);
 
 console.log('✓ Multi-level advancement rollover and milestone rewards verified');
 
@@ -263,13 +274,18 @@ debugEconomy.setupDebugSuite(mockWindow);
 
 assert.ok(mockWindow.gameDebug);
 assert.strictEqual(typeof mockWindow.gameDebug.addBits, 'function');
+assert.strictEqual(typeof mockWindow.gameDebug.addSparks, 'function');
 assert.strictEqual(typeof mockWindow.gameDebug.setXP, 'function');
 assert.strictEqual(typeof mockWindow.gameDebug.setLevel, 'function');
 assert.strictEqual(typeof mockWindow.gameDebug.resetEconomy, 'function');
 
-// Debug addBits
+// Debug addBits & addSparks
 mockWindow.gameDebug.addBits(999);
 assert.strictEqual(debugEconomy.getBits(), 999);
+assert.strictEqual(mockWindow.gameDebug.addSparks(12), true);
+assert.strictEqual(debugEconomy.getSparks(), 12);
+assert.strictEqual(mockWindow.gameDebug.addSparks(1.5), false);
+assert.strictEqual(debugEconomy.getSparks(), 12);
 
 // Debug setXP
 mockWindow.gameDebug.setXP(175);
@@ -283,18 +299,98 @@ assert.strictEqual(debugEconomy.getXP(), 0);
 // Debug resetEconomy
 mockWindow.gameDebug.resetEconomy();
 assert.strictEqual(debugEconomy.getBits(), 0);
+assert.strictEqual(debugEconomy.getSparks(), 0);
 assert.strictEqual(debugEconomy.getLevel(), 1);
 assert.strictEqual(debugEconomy.getXP(), 0);
 assert.strictEqual(debugEconomy.getAuditLog().length, 0);
 
 console.log('✓ Developer debug suite methods and immediate persistence verified');
 
-// Test Group 6: Re-exports & Default Singleton
-console.log('\n[Group 6] Testing Re-exports and Default Singleton...');
+// Test Group 6: Atomic Sparks Currency Operations & Events
+console.log('\n[Group 6] Testing Atomic Sparks Currency Operations & Events...');
+
+const sparksStorage = new StorageManager({
+  storageKey: 'tron_test_economy_sparks',
+  debounceMs: 10
+});
+sparksStorage.load();
+
+const sparksEconomy = new EconomyManager({
+  storage: sparksStorage
+});
+
+let sparksEarnedPayload = null;
+let sparksSpentPayload = null;
+sparksEconomy.on(EconomyEvents.SPARKS_EARNED, (p) => { sparksEarnedPayload = p; });
+sparksEconomy.on(EconomyEvents.SPARKS_SPENT, (p) => { sparksSpentPayload = p; });
+
+// Initial state & strict canAffordSparks validation
+assert.strictEqual(sparksEconomy.getSparks(), 0);
+assert.strictEqual(sparksEconomy.canAffordSparks(0), true);
+assert.strictEqual(sparksEconomy.canAffordSparks(1), false);
+assert.strictEqual(sparksEconomy.canAffordSparks(-1), false);
+assert.strictEqual(sparksEconomy.canAffordSparks(1.5), false);
+assert.strictEqual(sparksEconomy.canAffordSparks(NaN), false);
+assert.strictEqual(sparksEconomy.canAffordSparks('5'), false);
+assert.strictEqual(sparksEconomy.canAffordSparks(null), false);
+
+// Award Sparks (valid)
+assert.strictEqual(sparksEconomy.awardSparks(10, 'hardcore_w5'), true);
+assert.strictEqual(sparksEconomy.getSparks(), 10);
+assert.strictEqual(sparksEconomy.canAffordSparks(10), true);
+assert.strictEqual(sparksEconomy.canAffordSparks(11), false);
+assert.ok(sparksEarnedPayload);
+assert.strictEqual(sparksEarnedPayload.amount, 10);
+assert.strictEqual(sparksEarnedPayload.source, 'hardcore_w5');
+assert.strictEqual(sparksEarnedPayload.balance, 10);
+
+// Award Sparks (invalid: fractional, zero, negative, NaN, non-numeric)
+assert.strictEqual(sparksEconomy.awardSparks(2.5, 'bad'), false);
+assert.strictEqual(sparksEconomy.awardSparks(0, 'bad'), false);
+assert.strictEqual(sparksEconomy.awardSparks(-3, 'bad'), false);
+assert.strictEqual(sparksEconomy.awardSparks(NaN, 'bad'), false);
+assert.strictEqual(sparksEconomy.awardSparks('5', 'bad'), false);
+assert.strictEqual(sparksEconomy.awardSparks(null, 'bad'), false);
+assert.strictEqual(sparksEconomy.getSparks(), 10);
+
+// Spend Sparks (valid)
+assert.strictEqual(sparksEconomy.spendSparks(4, 'armory', 'disc_hex_dark_matter'), true);
+assert.strictEqual(sparksEconomy.getSparks(), 6);
+assert.ok(sparksSpentPayload);
+assert.strictEqual(sparksSpentPayload.cost, 4);
+assert.strictEqual(sparksSpentPayload.category, 'armory');
+assert.strictEqual(sparksSpentPayload.itemId, 'disc_hex_dark_matter');
+assert.strictEqual(sparksSpentPayload.balance, 6);
+
+// Spend Sparks (insufficient & invalid inputs)
+assert.strictEqual(sparksEconomy.spendSparks(7, 'armory', 'too_expensive'), false);
+assert.strictEqual(sparksEconomy.spendSparks(1.5, 'armory', 'fractional'), false);
+assert.strictEqual(sparksEconomy.spendSparks(0, 'armory', 'zero'), false);
+assert.strictEqual(sparksEconomy.spendSparks(-2, 'armory', 'negative'), false);
+assert.strictEqual(sparksEconomy.spendSparks(NaN, 'armory', 'nan'), false);
+assert.strictEqual(sparksEconomy.spendSparks('2', 'armory', 'string'), false);
+assert.strictEqual(sparksEconomy.spendSparks(null, 'armory', 'null'), false);
+assert.strictEqual(sparksEconomy.getSparks(), 6);
+
+// Audit log entries for Sparks
+const sparksLog = sparksEconomy.getAuditLog();
+assert.strictEqual(sparksLog.length, 2);
+assert.strictEqual(sparksLog[0].type, EconomyEvents.SPARKS_EARNED);
+assert.strictEqual(sparksLog[1].type, EconomyEvents.SPARKS_SPENT);
+assert.strictEqual(sparksLog[1].amount, -4);
+
+console.log('✓ Atomic Sparks currency operations and events verified');
+
+// Test Group 7: Re-exports & Default Singleton
+console.log('\n[Group 7] Testing Re-exports and Default Singleton...');
 
 assert.ok(economyManager instanceof EconomyManager);
 assert.strictEqual(typeof economyManager.awardBits, 'function');
 assert.strictEqual(typeof economyManager.spendBits, 'function');
+assert.strictEqual(typeof economyManager.getSparks, 'function');
+assert.strictEqual(typeof economyManager.canAffordSparks, 'function');
+assert.strictEqual(typeof economyManager.awardSparks, 'function');
+assert.strictEqual(typeof economyManager.spendSparks, 'function');
 assert.strictEqual(typeof economyManager.awardXP, 'function');
 
 console.log('✓ Authoritative singleton and module exports verified');

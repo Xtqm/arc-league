@@ -32,14 +32,14 @@ export const trimMat = new THREE.MeshStandardMaterial({
 export const glowMat = new THREE.MeshBasicMaterial({ color: config.CYAN });
 export const tileMatIntact = new THREE.MeshStandardMaterial({
   color: 0x07202c,
-  roughness: 0.38,
-  metalness: 0.8,
+  roughness: 0.42,
+  metalness: 0.38,
   normalMap: arenaTextures ? arenaTextures.normalMap : null,
-  normalScale: new THREE.Vector2(0.85, 0.85),
+  normalScale: new THREE.Vector2(0.32, 0.32),
   roughnessMap: arenaTextures ? arenaTextures.roughnessMap : null,
   emissive: new THREE.Color(0x0b4f62),
   emissiveMap: arenaTextures ? arenaTextures.emissiveMap : null,
-  emissiveIntensity: arenaTextures ? 0.30 : 0.0
+  emissiveIntensity: arenaTextures ? 0.24 : 0.0
 });
 export const tileEdgeMatIntact = new THREE.LineBasicMaterial({ color: 0x187588, transparent: true, opacity: .75, depthWrite: false });
 

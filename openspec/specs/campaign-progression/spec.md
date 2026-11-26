@@ -110,23 +110,27 @@ The system SHALL update player star totals monotonically, awarding only delta st
 - **THEN** the level record updates to 3 stars and total campaign stars increase by the difference of 2 stars.
 
 ### Requirement: Differentiated Economy Payouts for First-Time vs Repeat Clears
-The system SHALL award distinct currency and XP payouts depending on whether a clear is a first-time completion or a repeat clear, distinguishing regular trials from Arbiter encounters.
+The system SHALL award distinct Arc Credits, XP, and Sparks payouts depending on whether a clear is a first-time completion or a repeat clear, distinguishing regular trials from Sector Arbiter encounters and granting progressive Sparks on first-time 3-star Arbiter clears.
 
 #### Scenario: First-time clear payout for standard trial
 - **WHEN** a player completes a standard trial for the first time
-- **THEN** the system credits first-time clear rewards (100 to 250 Bits and base XP) via the economy engine.
+- **THEN** the system credits first-time clear rewards (100 to 250 Arc Credits and base XP) via the economy engine.
 
 #### Scenario: First-time clear payout for Arbiter boss
 - **WHEN** a player completes an Arbiter boss level for the first time
-- **THEN** the system credits premium boss rewards (500 Bits and elite XP) via the economy engine.
+- **THEN** the system credits premium boss rewards (500 Arc Credits and elite XP) via the economy engine.
+
+#### Scenario: Progressive Sparks bonus on first-time 3-star Arbiter clear
+- **WHEN** a player earns a 3-star rating on a Sector Arbiter boss for the first time in Sectors 1 through 4 (`level_01_06`, `level_02_07`, `level_03_07`, or `level_04_08`)
+- **THEN** the system awards 1 Spark for Sector 1, 2 Sparks for Sector 2, 3 Sparks for Sector 3, or 4 Sparks for Sector 4 (10 Sparks total across all 4 Sectors), granted once per Arbiter.
 
 #### Scenario: Repeat clear payout for standard trial
 - **WHEN** a player completes a previously cleared standard trial
-- **THEN** the system credits repeat clear rewards (25 to 50 Bits and reduced XP) via the economy engine.
+- **THEN** the system credits repeat clear rewards (20 to 75 Arc Credits and reduced XP) via the economy engine.
 
 #### Scenario: Repeat clear payout for Arbiter boss
 - **WHEN** a player completes a previously cleared Arbiter boss level
-- **THEN** the system credits repeat boss rewards (100 Bits and repeat boss XP) via the economy engine.
+- **THEN** the system credits repeat boss rewards (75 Arc Credits and repeat boss XP) via the economy engine without re-granting first-time 3-star Sparks.
 
 ### Requirement: Campaign State Persistence
 The system SHALL persist completed levels, highest star counts, best trial metrics, unlocked Grids, and cumulative stars to the underlying storage engine.
@@ -197,10 +201,10 @@ The system SHALL render a tactical pre-launch mission brief prior to combat deta
 - **THEN** the system returns to the Level Node Matrix without modifying trial or player state.
 
 ### Requirement: Live In-Combat Objective Header and Floating Accrual Indicators
-The system SHALL display an in-combat mission objective header tracking remaining hostiles, live integrity status, and mastery criteria, and SHALL render kinetic floating Bit indicators on confirmed eliminations.
+The system SHALL display an in-combat mission objective header tracking remaining hostiles, live integrity status, and mastery criteria, and SHALL route confirmed maneuver XP accruals to the top-left tactical XP log without spawning center-screen `+Bits` popups.
 
 #### Scenario: Tracking remaining hostile sub-routines
-- **WHEN** hostile units are present or de-rezzed in combat
+- **WHEN** hostile units are present or fractured in combat
 - **THEN** the header displays the count of remaining active hostiles, updating immediately as bots are eliminated.
 
 #### Scenario: Visualizing live Program Integrity percentage
@@ -212,11 +216,11 @@ The system SHALL display an in-combat mission objective header tracking remainin
 - **THEN** the header updates the elapsed combat time and displays confirmed curve or ricochet hits against the Star 3 threshold.
 
 #### Scenario: Spawning kinetic floating Bit indicators
-- **WHEN** an enemy is de-rezzed via a confirmed curve throw, ricochet bounce, or shield parry
-- **THEN** the system spawns an animated floating `+Bits` accrual indicator that ascends and fades out over the combat view.
+- **WHEN** an enemy is fractured via a confirmed curve throw, ricochet bounce, or shield parry during a trial
+- **THEN** the system pushes the XP accrual entry to the top-left tactical XP log (`#tl`) without spawning floating currency text over the central combat viewport.
 
 ### Requirement: Post-Trial Victory and Debrief Modal
-The system SHALL provide a post-trial debrief modal presenting trial outcome, sequential animated star ignition with audio chimes, itemized Bit and XP reward breakdowns, and direct trial navigation controls.
+The system SHALL provide a post-trial debrief modal presenting trial outcome, sequential animated star ignition with audio chimes, itemized Arc Credits, Sparks, and XP reward breakdowns, and direct trial navigation controls.
 
 #### Scenario: Presenting debrief outcome and metrics
 - **WHEN** a trial completes successfully
@@ -228,7 +232,7 @@ The system SHALL provide a post-trial debrief modal presenting trial outcome, se
 
 #### Scenario: Itemizing Bit and XP payouts
 - **WHEN** trial rewards are presented
-- **THEN** the system itemizes the payout breakdown into Base Clear, Integrity Bonus, and Mastery Bonus, displaying total Bits and XP awarded and total campaign stars.
+- **THEN** the system itemizes the payout breakdown into Base Clear, Integrity Bonus, and Mastery Bonus, displaying total Arc Credits, Sparks (when earned), and XP awarded without legacy `BITS` wording.
 
 #### Scenario: Advancing via Next Trial control
 - **WHEN** the player activates the "NEXT TRIAL" control
@@ -301,4 +305,3 @@ The system SHALL style the Campaign Sectors main menu button with signature gold
 #### Scenario: Styling campaign action controls in modals
 - **WHEN** campaign action buttons bearing `.campaign-btn` are rendered inside campaign modals (such as Launch Trial and Next Trial)
 - **THEN** they inherit the cohesive gold neon styling and interactive hover states.
-

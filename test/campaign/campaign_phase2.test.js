@@ -211,7 +211,7 @@ const briefHtml = hud.renderMissionBrief(lvl1);
 assert(briefHtml.includes('Boot Diagnostic'), 'Brief displays trial name');
 assert(briefHtml.includes('Outlands Boot-Sector'), 'Brief displays sector name');
 assert(briefHtml.includes('THREE-STAR OBJECTIVE CLEARANCE CRITERIA'), 'Brief outlines 3-star criteria');
-assert(briefHtml.includes('STAR 1: DE-REZ OBJECTIVE'), 'Outlines Star 1');
+assert(briefHtml.includes('STAR 1: FRACTURE OBJECTIVE'), 'Outlines Star 1');
 assert(briefHtml.includes('STAR 2: INTEGRITY THRESHOLD'), 'Outlines Star 2');
 assert(briefHtml.includes('at least <b>75%</b> Program Integrity'), 'Outlines Star 2 condition');
 assert(briefHtml.includes('STAR 3: MASTERY BENCHMARK'), 'Outlines Star 3');

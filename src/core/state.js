@@ -9,6 +9,8 @@ export const state = {
   isHardcoreSurvival: false,
   tier: 1,
   duelTier: 1,
+  sessionTiersCleared: 0,
+  aiPracticeSettled: false,
   countdownTimer: 0,
   lastCountdownSec: 0,
   fightDisplayTimer: 0,

@@ -21,15 +21,23 @@ The system SHALL maintain a structured catalog registry indexing cosmetic items 
 - **THEN** the system returns the corresponding catalog item definition or null if not found.
 
 ### Requirement: Shader and Visual Parameter Specification
-The system SHALL define structured visual rendering parameters for all cosmetic items, including primary color, secondary emissive color, trail opacity, and wireframe toggle, enforcing sanitized 6-digit hexadecimal format (`#rrggbb`).
+The system SHALL define structured visual rendering parameters for all cosmetic items, including primary color, secondary emissive color, trail opacity, and wireframe toggle, enforcing sanitized 6-digit hexadecimal format (`#rrggbb`), and SHALL define rebalanced Arc Credits costs totaling 62,200 AC alongside Sparks-exclusive prestige unlocks.
 
 #### Scenario: Retrieving visual parameters for rendering
 - **WHEN** a graphics pipeline reads an item's visual properties
 - **THEN** the item definition provides normalized primaryHex, secondaryEmissiveHex, trailOpacity, and wireframeToggle.
 
 #### Scenario: Free baseline cosmetics configuration
-- **WHEN** default baseline items (`disc_default`, `chassis_default`, `arena_grid_01`) are queried
-- **THEN** the system provides default cyan and blue Arc League athletic grid aesthetics with unlockType set to free.
+- **WHEN** default baseline items (`disc_default`, `chassis_default`, `arena_grid_01`, `disc_standard`) are queried
+- **THEN** the system provides default cyan and blue Arc League athletic grid aesthetics with unlockType set to free and cost 0.
+
+#### Scenario: Rebalanced Arc Credits catalog pricing
+- **WHEN** purchasable Arc Credits items are queried from the catalog
+- **THEN** Kinetic Discs (`disc_neon_amber`: 1200, `disc_retro_green`: 2000, `disc_plasma_violet`: 3500, `disc_delta_triad`: 5500, `disc_quantum_quad`: 8000), Athlete Rigs (`chassis_infiltrator`: 2500, `chassis_iso_guardian`: 5000, `chassis_black_guard`: 9500), and Stadium Arenas (`arena_zero_g_nexus`: 10000, `arena_derez_chasm`: 15000) reflect a total purchasable catalog cost of 62,200 AC.
+
+#### Scenario: Sparks-exclusive prestige catalog configuration
+- **WHEN** `disc_hex_dark_matter` and `disc_shuriken_void` are queried from the catalog
+- **THEN** `disc_hex_dark_matter` has `unlockType` set to `sparks` with cost 75 (replacing legacy 0 cost) and `disc_shuriken_void` has `unlockType` set to `sparks` with cost 100 and `achievementId` set to null.
 
 ### Requirement: Unlock Condition and Ownership Verification
 The system SHALL verify item ownership and unlock criteria based on stored inventory, default entitlements, and achievement requirements.
@@ -47,14 +55,14 @@ The system SHALL verify item ownership and unlock criteria based on stored inven
 - **THEN** the system returns false.
 
 ### Requirement: Purchase Feasibility and Affordability Validation
-The system SHALL validate purchase eligibility before executing a transaction, checking existing ownership, Bit balance affordability, and achievement gating.
+The system SHALL validate purchase eligibility before executing a transaction, checking existing ownership, Arc Credits or Sparks balance affordability according to `unlockType`, and achievement gating.
 
 #### Scenario: Checking affordability for affordable locked item
-- **WHEN** a player with sufficient Bits queries purchase feasibility for an unowned Bits-priced item
+- **WHEN** a player with sufficient Arc Credits queries purchase feasibility for an unowned credits-priced item
 - **THEN** the system reports purchase eligibility as true.
 
 #### Scenario: Checking affordability with insufficient Bits
-- **WHEN** a player with fewer Bits than the item cost queries purchase feasibility
+- **WHEN** a player with fewer Arc Credits than the item cost queries purchase feasibility
 - **THEN** the system reports purchase eligibility as false.
 
 #### Scenario: Checking purchase eligibility for already owned item
@@ -66,14 +74,14 @@ The system SHALL validate purchase eligibility before executing a transaction, c
 - **THEN** the system rejects purchase eligibility.
 
 ### Requirement: Atomic Currency Spending and Inventory Grant
-The system SHALL execute atomic Bits deduction via the economy engine and immediately append the granted item identifier to persistent inventory storage upon a valid purchase.
+The system SHALL execute atomic Arc Credits or Sparks deduction via the economy engine and immediately append the granted item identifier to persistent inventory storage upon a valid purchase.
 
 #### Scenario: Successfully purchasing a Bits-priced item
-- **WHEN** an eligible purchase is requested for a valid locked item
-- **THEN** the system deducts the item cost via EconomyManager, appends the item identifier to the relevant inventory category in StorageManager, persists the state, and returns true.
+- **WHEN** an eligible purchase is requested for a valid locked Arc Credits item
+- **THEN** the system deducts the item cost in Arc Credits via EconomyManager, appends the item identifier to the relevant inventory category in StorageManager, persists the state, and returns true.
 
 #### Scenario: Rejecting purchase when currency deduction fails
-- **WHEN** a purchase is attempted with insufficient Bits or invalid parameters
+- **WHEN** a purchase is attempted with insufficient currency or invalid parameters
 - **THEN** the system leaves inventory unchanged, aborts the transaction, and returns false.
 
 #### Scenario: Emitting item unlock event
@@ -163,7 +171,7 @@ The system SHALL provide an isolated Three.js preview scene and camera rig capab
 - **THEN** the system halts the animation loop, removes all objects from the preview sub-scene, disposes materials and geometries, and releases WebGL canvas resources.
 
 ### Requirement: Diegetic Main Menu Armory Navigation and Live Balance Counter
-The system SHALL provide an Armory entrypoint within the main menu interface that displays the Armory modal, featuring category navigation tabs (`KINETIC DISCS`, `ATHLETE RIGS`, `STADIUM ARENAS`), modal dismiss controls, and a reactive live Arc Credits balance counter.
+The system SHALL provide an Armory entrypoint within the main menu interface that displays the Armory modal, featuring category navigation tabs (`KINETIC DISCS`, `ATHLETE RIGS`, `STADIUM ARENAS`), modal dismiss controls, and reactive live Arc Credits and Sparks balance counters.
 
 #### Scenario: Initial page load rendering of Armory navigation button
 - **WHEN** the main menu renders upon initial application load
@@ -175,7 +183,7 @@ The system SHALL provide an Armory entrypoint within the main menu interface tha
 
 #### Scenario: Displaying and updating live Bit balance counter
 - **WHEN** the Armory modal is opened or when currency changes occur via purchase or earning
-- **THEN** the balance display renders the current Arc Credits total formatted as `CR {balance}` and immediately updates upon any economy balance change.
+- **THEN** the balance display renders the current Arc Credits total formatted as `{balance} AC` without legacy `BITS` wording and immediately updates upon any economy balance change.
 
 #### Scenario: Switching catalog category tabs
 - **WHEN** the player clicks a category tab (`KINETIC DISCS`, `ATHLETE RIGS`, or `STADIUM ARENAS`)
@@ -205,15 +213,15 @@ The system SHALL present a split-pane layout inside the Armory modal containing 
 - **THEN** the system stops the turntable render loop, disposes all staged geometries and materials in the preview scene, hides the modal overlay, and restores the main menu view.
 
 ### Requirement: Contextual State-Driven Action Bar
-The system SHALL render dynamic, state-sensitive action controls for the inspected item based on ownership, affordability, milestone locks, and loadout status.
+The system SHALL render dynamic, state-sensitive action controls for the inspected item based on ownership, affordability, milestone locks, and loadout status using Arc Credits (`AC`) terminology.
 
 #### Scenario: Inspecting an unowned Bit-purchasable item with sufficient Bits
-- **WHEN** the inspected item is unowned, costs Arc Credits, and the player has enough Credits to afford it
-- **THEN** the action bar displays an enabled `[ ACQUIRE // {cost} CREDITS ]` button.
+- **WHEN** the inspected item is unowned, costs Arc Credits, and the player has enough Arc Credits to afford it
+- **THEN** the action bar displays an enabled `[ ACQUIRE // {cost} AC ]` button.
 
 #### Scenario: Inspecting an unowned Bit-purchasable item with insufficient Bits
-- **WHEN** the inspected item is unowned, costs Arc Credits, but the player has fewer Credits than the required cost
-- **THEN** the action bar displays a disabled `[ ACQUIRE // {cost} CREDITS ]` button accompanied by an amber warning message indicating insufficient Credits.
+- **WHEN** the inspected item is unowned, costs Arc Credits, but the player has fewer Arc Credits than the required cost
+- **THEN** the action bar displays a disabled `[ ACQUIRE // {cost} AC ]` button accompanied by an amber warning message indicating insufficient Arc Credits.
 
 #### Scenario: Inspecting an achievement-gated milestone item
 - **WHEN** the inspected item requires an unearned achievement
@@ -231,8 +239,8 @@ The system SHALL render dynamic, state-sensitive action controls for the inspect
 The system SHALL synthesize procedural audio sound effects and trigger neon visual fanfare animations upon fabricating or equipping an Armory cosmetic item.
 
 #### Scenario: Executing a cosmetic fabrication purchase
-- **WHEN** the player clicks the `[ FABRICATE // {cost} BITS ]` button for an eligible item
-- **THEN** the system deducts Bits, grants the item to inventory, synthesizes a digital fabrication laser-sweep sound effect, triggers a pulsing neon border animation across the preview bay, and transforms the action button into `[ EQUIP TO LOADOUT ]`.
+- **WHEN** the player clicks the `[ ACQUIRE // {cost} AC ]` button for an eligible item
+- **THEN** the system deducts Arc Credits, grants the item to inventory, synthesizes a digital fabrication laser-sweep sound effect, triggers a pulsing neon border animation across the preview bay, and transforms the action button into `[ EQUIP TO LOADOUT ]`.
 
 #### Scenario: Equipping an unlocked cosmetic item
 - **WHEN** the player clicks `[ EQUIP TO LOADOUT ]` for an unlocked item

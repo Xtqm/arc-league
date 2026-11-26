@@ -139,12 +139,14 @@ export function setRigFirstPersonVisibility(rig, isFirstPerson) {
   }
 
   // Catch any GLB-placed visor or halo meshes parented outside standard head/torso slots
-  rig.traverse((child) => {
-    const part = child.userData?.part;
-    if (part === 'chassis_visor' || (part === 'chassis_halo' && !child.isPointLight)) {
-      child.visible = visibleInThirdPerson;
-    }
-  });
+  if (typeof rig.traverse === 'function') {
+    rig.traverse((child) => {
+      const part = child.userData?.part;
+      if (part === 'chassis_visor' || (part === 'chassis_halo' && !child.isPointLight)) {
+        child.visible = visibleInThirdPerson;
+      }
+    });
+  }
 }
 
 export class CosmeticMaterialEngine {

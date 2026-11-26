@@ -12,6 +12,7 @@ import { directivesModal } from './modals/DirectivesModal.js';
 import { spawnStagingDisc, despawnStagingDisc, spawnDiorama, despawnDiorama, refreshDioramaCosmetics, resetMatchCamera } from '../graphics/ambientLobby.js';
 import { updateSteamRichPresence, syncGameStateRichPresence } from '../core/steamTelemetry.js';
 import { storageManager } from '../core/storage/StorageManager.js';
+import { duelEconomyBridge } from '../modes/DuelEconomyBridge.js';
 import { scene } from '../graphics/scene.js';
 import { disposeDiscEntity } from '../entities/Disc.js';
 import { disposeHierarchy } from '../armory/CosmeticMaterialEngine.js';
@@ -58,6 +59,10 @@ function teardownSectorArena() {
 }
 
 export function teardownActiveMatch() {
+  if ((state.gameMode === 'duel' || state.gameMode === 'duel_ai') && !state.aiPracticeSettled && (state.running || state.sessionTiersCleared > 0)) {
+    duelEconomyBridge.settleAIPracticeFromState(state, 'exit');
+  }
+
   if (Array.isArray(state.discs)) {
     for (const d of state.discs) {
       try {
@@ -111,6 +116,10 @@ export function startMode(mode) {
   despawnDiorama();
   setCombatHUDVisibility(true);
   state.gameMode = (mode === 'duel' || mode === 'duel_ai') ? 'duel_ai' : mode;
+  if (state.gameMode === 'duel_ai') {
+    state.sessionTiersCleared = 0;
+    state.aiPracticeSettled = false;
+  }
   if (state.gameMode === 'swarm') {
     teardownSectorArena();
   } else if (state.gameMode === 'duel_ai' && state.activeGridId) {

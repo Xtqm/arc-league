@@ -117,7 +117,8 @@ const TEST_DOMAINS = {
     'gameplay/variable_curving_e2e.test.js',
     'gameplay/unified_flow.test.js',
     'gameplay/decoupled_match_entry.test.js',
-    'gameplay/bot_combat_e2e_simulation.test.js'
+    'gameplay/bot_combat_e2e_simulation.test.js',
+    'gameplay/tactical_xp_hud.test.js'
   ]
 };
 

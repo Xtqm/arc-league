@@ -12,6 +12,8 @@ export const EconomyEvents = Object.freeze({
   CREDITS_SPENT: 'CREDITS_SPENT',
   BITS_EARNED: 'BITS_EARNED',
   BITS_SPENT: 'BITS_SPENT',
+  SPARKS_EARNED: 'SPARKS_EARNED',
+  SPARKS_SPENT: 'SPARKS_SPENT',
   XP_GAINED: 'XP_GAINED',
   LEVEL_UP: 'LEVEL_UP'
 });
@@ -24,16 +26,16 @@ export const DEFAULT_XP_CURVE = (level) => {
 };
 
 export const MILESTONE_REWARDS = Object.freeze({
-  2: Object.freeze({ bits: 50 }),
-  3: Object.freeze({ bits: 50 }),
-  4: Object.freeze({ bits: 50 }),
-  5: Object.freeze({ bits: 250 }),
-  10: Object.freeze({ bits: 500 }),
-  15: Object.freeze({ bits: 750 }),
-  20: Object.freeze({ bits: 1000 }),
-  25: Object.freeze({ bits: 1500 }),
-  50: Object.freeze({ bits: 5000 }),
-  100: Object.freeze({ bits: 10000 })
+  2: Object.freeze({ credits: 50, bits: 50 }),
+  3: Object.freeze({ credits: 50, bits: 50 }),
+  4: Object.freeze({ credits: 50, bits: 50 }),
+  5: Object.freeze({ credits: 150, bits: 150 }),
+  10: Object.freeze({ credits: 350, bits: 350, sparks: 1 }),
+  15: Object.freeze({ credits: 600, bits: 600, sparks: 2 }),
+  20: Object.freeze({ credits: 1000, bits: 1000, sparks: 3 }),
+  25: Object.freeze({ credits: 1500, bits: 1500, sparks: 5 }),
+  50: Object.freeze({ credits: 4000, bits: 4000, sparks: 10 }),
+  100: Object.freeze({ credits: 10000, bits: 10000, sparks: 25 })
 });
 
 export class EconomyManager {
@@ -305,6 +307,111 @@ export class EconomyManager {
   }
 
   // ==========================================
+  // Sparks Prestige Currency Management
+  // ==========================================
+
+  /**
+   * Retrieves the current Sparks balance.
+   * @returns {number}
+   */
+  getSparks() {
+    this._ensureStorageReady();
+    return this.storage.get('player.currency.sparks', 0);
+  }
+
+  /**
+   * Checks whether the player has sufficient Sparks for a transaction.
+   * Strict integer validation: rejects negative, fractional, NaN, and non-numeric inputs.
+   * @param {number} cost
+   * @returns {boolean}
+   */
+  canAffordSparks(cost) {
+    if (typeof cost !== 'number' || !Number.isInteger(cost) || cost < 0) {
+      return false;
+    }
+    return this.getSparks() >= cost;
+  }
+
+  /**
+   * Awards Sparks to the player.
+   * Strict integer validation: rejects non-positive, fractional, NaN, and non-numeric inputs.
+   * @param {number} amount
+   * @param {string} [source='reward']
+   * @returns {boolean} True if awarded, false if input was invalid
+   */
+  awardSparks(amount, source = 'reward') {
+    if (typeof amount !== 'number' || !Number.isInteger(amount) || amount <= 0) {
+      return false;
+    }
+
+    this._ensureStorageReady();
+    const currentSparks = this.getSparks();
+    const newSparks = currentSparks + amount;
+
+    this.storage.set('player.currency.sparks', newSparks, { immediate: false });
+
+    const eventPayload = {
+      amount,
+      source: String(source),
+      balance: newSparks,
+      timestamp: Date.now()
+    };
+
+    this._addAuditEntry({
+      type: EconomyEvents.SPARKS_EARNED,
+      amount,
+      source: String(source),
+      balanceAfter: newSparks
+    });
+
+    this.emit(EconomyEvents.SPARKS_EARNED, eventPayload);
+    return true;
+  }
+
+  /**
+   * Spends Sparks for a specified category and item.
+   * Strict integer validation: rejects non-positive, fractional, NaN, non-numeric, or unaffordable costs.
+   * @param {number} cost
+   * @param {string} [category='general']
+   * @param {string|null} [itemId=null]
+   * @returns {boolean} True if successfully spent, false if insufficient balance or invalid input
+   */
+  spendSparks(cost, category = 'general', itemId = null) {
+    if (typeof cost !== 'number' || !Number.isInteger(cost) || cost <= 0) {
+      return false;
+    }
+
+    if (!this.canAffordSparks(cost)) {
+      return false;
+    }
+
+    this._ensureStorageReady();
+    const currentSparks = this.getSparks();
+    const newSparks = currentSparks - cost;
+
+    this.storage.set('player.currency.sparks', newSparks, { immediate: false });
+
+    const eventPayload = {
+      cost,
+      category: String(category),
+      itemId: itemId ? String(itemId) : null,
+      balance: newSparks,
+      timestamp: Date.now()
+    };
+
+    this._addAuditEntry({
+      type: EconomyEvents.SPARKS_SPENT,
+      amount: -cost,
+      category: String(category),
+      itemId: itemId ? String(itemId) : null,
+      balanceAfter: newSparks
+    });
+
+    this.emit(EconomyEvents.SPARKS_SPENT, eventPayload);
+    return true;
+  }
+
+  // ==========================================
   // Progression & XP Engine
   // ==========================================
 
@@ -356,18 +463,23 @@ export class EconomyManager {
    * @returns {{ bits: number, milestones: Array<{ level: number, reward: object }> }}
    */
   _calculateMilestoneRewards(oldLevel, newLevel) {
-    let totalBits = 0;
+    let totalCredits = 0;
+    let totalSparks = 0;
     const milestones = [];
 
     for (let lvl = oldLevel + 1; lvl <= newLevel; lvl++) {
-      const reward = this.milestoneRewards[lvl] || { bits: 50 };
-      if (reward.bits) {
-        totalBits += reward.bits;
+      const reward = this.milestoneRewards[lvl] || { credits: 25, bits: 25 };
+      const ac = reward.credits ?? reward.bits ?? 0;
+      if (ac) {
+        totalCredits += ac;
+      }
+      if (reward.sparks) {
+        totalSparks += reward.sparks;
       }
       milestones.push({ level: lvl, reward });
     }
 
-    return { bits: totalBits, milestones };
+    return { credits: totalCredits, bits: totalCredits, sparks: totalSparks, milestones };
   }
 
   /**
@@ -425,8 +537,11 @@ export class EconomyManager {
 
     if (leveledUp) {
       const rewards = this._calculateMilestoneRewards(oldLevel, currentLevel);
-      if (rewards.bits > 0) {
-        this.awardBits(rewards.bits, 'level_up_milestone');
+      if (rewards.credits > 0) {
+        this.awardCredits(rewards.credits, 'level_up_milestone');
+      }
+      if (rewards.sparks > 0) {
+        this.awardSparks(rewards.sparks, 'level_up_milestone');
       }
 
       this._addAuditEntry({
@@ -469,6 +584,12 @@ export class EconomyManager {
     };
     targetWindow.gameDebug.addBits = targetWindow.gameDebug.addCredits;
 
+    targetWindow.gameDebug.addSparks = (amount) => {
+      const res = this.awardSparks(Number(amount), 'debug_console');
+      this.storage.save({ immediate: true });
+      return res;
+    };
+
     targetWindow.gameDebug.setXP = (amount) => {
       const intXP = Math.max(0, Math.floor(Number(amount) || 0));
       this._ensureStorageReady();
@@ -498,7 +619,8 @@ export class EconomyManager {
     targetWindow.gameDebug.resetEconomy = () => {
       this._ensureStorageReady();
       this.storage.set('player.currency.credits', 0, { immediate: false });
-      this.storage.set('player.currency.bits', 0, { immediate: true });
+      this.storage.set('player.currency.bits', 0, { immediate: false });
+      this.storage.set('player.currency.sparks', 0, { immediate: true });
       this.storage.set('player.level', 1, { immediate: true });
       this.storage.set('player.xp', 0, { immediate: true });
       this.clearAuditLog();

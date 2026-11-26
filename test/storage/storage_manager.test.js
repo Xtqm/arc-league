@@ -32,6 +32,7 @@ assert.strictEqual(typeof defaultA.stats, 'object');
 assert.strictEqual(defaultA.player.currency.bits, 0);
 assert.strictEqual(defaultA.calibration_bypassed, false);
 assert.strictEqual(defaultA.calibration_completed, false);
+assert.strictEqual(defaultA.stats.hardcoreSwarmHighestWave, 0);
 
 // Immutability & deep-cloning check
 defaultA.player.currency.bits = 5000;
@@ -75,7 +76,15 @@ assert.strictEqual(initialState.version, '1.0.0');
 assert.strictEqual(testManager.get('player.handle'), 'USER_PROGRAM');
 assert.strictEqual(testManager.get('player.currency.bits'), 0);
 assert.strictEqual(testManager.get('stats.highestWave'), 1);
+assert.strictEqual(testManager.get('stats.hardcoreSwarmHighestWave'), 0);
 assert.strictEqual(testManager.get('non.existent.path', 'fallback_val'), 'fallback_val');
+
+testManager.set('stats.hardcoreSwarmHighestWave', 12, { immediate: true });
+testManager.importState({ stats: { hardcoreSwarmHighestWave: 8 } });
+assert.strictEqual(testManager.get('stats.hardcoreSwarmHighestWave'), 12, 'importState must preserve monotonic max for hardcoreSwarmHighestWave');
+testManager.importState({ stats: { hardcoreSwarmHighestWave: 15 } });
+assert.strictEqual(testManager.get('stats.hardcoreSwarmHighestWave'), 15);
+testManager.reset();
 
 // Empty and wildcard root state reads
 const rootEmpty = testManager.get('');

@@ -131,10 +131,10 @@ calibrationMode.destroyTarget(state.foes[0]);
 
 assert.ok(debriefOutcome, 'Debrief modal must be invoked on repeat clear');
 assert.strictEqual(debriefOutcome.firstTimeClear, false, 'Must identify as repeat clear');
-assert.strictEqual(debriefOutcome.rewards.bits, 25, 'Repeat clear payout must be exactly 25 Arc Bits');
+assert.strictEqual(debriefOutcome.rewards.bits, 20, 'Repeat clear payout must be exactly 20 AC');
 const postRepeatBits = economyManager.getCredits();
-assert.strictEqual(postRepeatBits, preRepeatBits + 25, 'EconomyManager must award 25 Bits on repeat clear (exploit eliminated)');
-console.log('✓ Repeat clear correctly awarded 25 Bits (infinite 100 Arc Bits exploit eliminated)');
+assert.strictEqual(postRepeatBits, preRepeatBits + 20, 'EconomyManager must award 20 AC on repeat clear (exploit eliminated)');
+console.log('✓ Repeat clear correctly awarded 20 AC (infinite 100 AC exploit eliminated)');
 
 // Test 5: Contextual Escape Key handling
 console.log('\n[Test 5] Testing contextual Escape key handling...');

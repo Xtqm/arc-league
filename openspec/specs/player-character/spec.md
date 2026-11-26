@@ -59,11 +59,15 @@ The system SHALL maintain player health and energy pools, regenerating energy au
 - **THEN** the player is de-rezzed, pointer lock is immediately released, the system cursor is restored, and the elimination game-over flow is presented.
 
 ### Requirement: Combat Viewport Stability and Aim Alignment
-The system SHALL maintain a glitch-free, 1:1 responsive third-person combat camera that eliminates gimbal lock flips, boundary collision inversion, and pointer lock delta spikes while clamping rapid mouse swipes to preserve continuous aim orientation.
+The system SHALL maintain a glitch-free, 1:1 responsive third-person combat camera that eliminates gimbal lock flips, boundary collision inversion, and pointer lock delta spikes while clamping rapid mouse swipes to preserve continuous aim orientation, aligning the player avatar forward orientation with the aim direction away from the trailing camera.
 
 #### Scenario: Rapid rotational flick
 - **WHEN** the player rapidly rotates their view by 90 or 180 degrees
 - **THEN** the camera rotational orientation matches player aim instantly without swinging through a distorted arc or flipping 180 degrees.
+
+#### Scenario: Third-person athlete avatar faces aim direction away from camera
+- **WHEN** the player spawns, turns, or moves in third-person perspective
+- **THEN** the athlete avatar's forward visor and throwing stance face away from the over-the-shoulder camera along the aim vector rather than facing backward toward the camera.
 
 #### Scenario: Backwards dash and close-range combat maneuvering
 - **WHEN** the player dashes backwards or maneuvers rapidly towards the trailing camera

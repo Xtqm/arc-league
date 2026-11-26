@@ -256,7 +256,8 @@ export function updatePlayer(dt) {
 
   if (state.player.obj) {
     state.player.obj.position.copy(state.player.pos);
-    state.player.obj.rotation.y = state.player.yaw;
+    state.player.obj.rotation.order = 'YXZ';
+    state.player.obj.rotation.y = state.player.yaw + Math.PI;
     state.player.obj.position.y = state.player.y + (state.player.grounded ? Math.sin(state.time * 11) * .05 * Math.min(state.player.vel.length() / 8, 1) : 0);
     state.player.obj.rotation.x = THREE.MathUtils.clamp(-state.player.vy * 0.018, -.22, .22);
 
@@ -638,7 +639,8 @@ export function resetRound(spawnX = 0, spawnZ = 14, yaw = Math.PI) {
   resetTouchInputs();
   if (state.player.obj) {
     state.player.obj.position.copy(state.player.pos);
-    state.player.obj.rotation.y = state.player.yaw;
+    state.player.obj.rotation.order = 'YXZ';
+    state.player.obj.rotation.y = state.player.yaw + Math.PI;
   }
   snapCamera();
 

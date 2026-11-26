@@ -5,7 +5,11 @@
  */
 
 import assert from 'assert';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import * as THREE from '../../vendor/three.module.js';
+import { GLTFLoader } from '../../vendor/GLTFLoader.js';
 import { makeProgram, animateProgramKinematics } from '../../src/graphics/materials.js';
 import {
   REQUIRED_CONSTRUCT_CLIPS,
@@ -586,6 +590,76 @@ assert.strictEqual(glbPlayerRig.userData.activeActionName, 'dash_burst');
 
 clearConstructAssetCache();
 console.log('✓ Group 5: Cached GLB rig instantiation and AnimationMixer combat blending verified.');
+
+// =========================================================================
+// Group 6: Real athlete_base.glb Halo Placement & Rest-Relative Oscillation
+// =========================================================================
+console.log('\n[Group 6] Testing real athlete_base.glb halo_crown placement & kinematics...');
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const athleteGlbPath = path.resolve(__dirname, '../../assets/models/constructs/athlete_base.glb');
+const athleteGlbBytes = fs.readFileSync(athleteGlbPath);
+const athleteArrayBuf = athleteGlbBytes.buffer.slice(
+  athleteGlbBytes.byteOffset,
+  athleteGlbBytes.byteOffset + athleteGlbBytes.byteLength
+);
+
+await loadConstructAsset('player', {
+  loader: {
+    loadAsync() {
+      return new Promise((resolve, reject) => {
+        new GLTFLoader().parse(athleteArrayBuf, '', resolve, reject);
+      });
+    }
+  }
+});
+
+const realGlbRig = makeProgram(0x00f3ff, { archetype: 'player' });
+realGlbRig.updateMatrixWorld(true);
+
+const realHalo = realGlbRig.userData.headHalo;
+const suitHead = realGlbRig.getObjectByName('suit_head');
+assert.ok(realHalo, 'Real athlete_base.glb rig must expose headHalo (halo_crown)');
+assert.ok(suitHead, 'Real athlete_base.glb rig must contain suit_head');
+
+const haloBox = new THREE.Box3().setFromObject(realHalo);
+const headBox = new THREE.Box3().setFromObject(suitHead);
+assert.ok(
+  haloBox.min.y > headBox.max.y,
+  `halo_crown (min.y=${haloBox.min.y.toFixed(4)}) must float cleanly above suit_head (max.y=${headBox.max.y.toFixed(4)})`
+);
+
+const haloWorldQuat = new THREE.Quaternion();
+realHalo.getWorldQuaternion(haloWorldQuat);
+const haloWorldUp = new THREE.Vector3(0, 1, 0).applyQuaternion(haloWorldQuat).normalize();
+const tiltFromHorizontalDeg = THREE.MathUtils.radToDeg(Math.acos(THREE.MathUtils.clamp(haloWorldUp.y, -1, 1)));
+assert.ok(
+  tiltFromHorizontalDeg <= 25,
+  `halo_crown must be horizontally tilted within ~25 deg of XZ plane, got ${tiltFromHorizontalDeg.toFixed(2)} deg`
+);
+
+const authoredRotZ = realHalo.rotation.z;
+animateProgramKinematics(realGlbRig, 0.016, {
+  speed: 0,
+  grounded: true,
+  vy: 0,
+  blocking: false,
+  time: 0.5,
+  hasDisc: true
+});
+assert.strictEqual(
+  realHalo.userData._baseHaloRotZ,
+  authoredRotZ,
+  'animateProgramKinematics must cache authored rest rotation.z in userData._baseHaloRotZ'
+);
+assert.ok(
+  Math.abs(realHalo.rotation.z - authoredRotZ) <= 0.065,
+  'headHalo must oscillate gently around its authored rest rotation rather than snapping to 0.22'
+);
+
+clearConstructAssetCache();
+console.log(`✓ Group 6: Real athlete_base.glb halo_crown verified above head (${tiltFromHorizontalDeg.toFixed(1)}° tilt).`);
 
 console.log('\n=============================================================');
 console.log('ALL MAGNETIC CONSTRUCT RIG & KINEMATICS TESTS PASSED (100%)');

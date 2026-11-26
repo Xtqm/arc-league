@@ -53,7 +53,11 @@ The system SHALL build distinct floating construct visual silhouettes per combat
 
 #### Scenario: Player and athlete construct assembly
 - **WHEN** a player, teammate, or multiplayer athlete rig is instantiated
-- **THEN** the rig renders faceted dark obsidian/ceramic floating torso and limb shards around a radiant spherical chest core, a faceted head encircled by a tilted glowing halo, tapered hover-point legs, and no back wings on the base frame.
+- **THEN** the rig renders faceted dark obsidian/ceramic floating torso and limb shards around a radiant spherical chest core, a faceted head encircled above by a slightly tilted horizontal glowing halo, tapered hover-point legs, and no back wings on the base frame.
+
+#### Scenario: Athlete halo ring floats horizontally tilted above head
+- **WHEN** a Player Athlete Rig (`archetype: 'player'`) is instantiated from either an authored GLB model or procedural fallback
+- **THEN** the halo ring floats clearly above the head crown with a subtle horizontal tilt (within ~25 degrees of the horizontal XZ plane) rather than standing upright around the head and neck.
 
 #### Scenario: Purely cosmetic parity across player rig variants
 - **WHEN** a player equips any unlocked Athlete Rig skin or visual chassis variant

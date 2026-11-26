@@ -1137,7 +1137,11 @@ export function animateProgramKinematics(rig, dt, params = {}) {
     rig.userData.litMaterial.emissiveIntensity = baseEmissive + (chargingThrow ? charge * 1.4 : Math.sin(time * 3.2) * 0.2);
   }
   if (rig.userData.headHalo) {
-    rig.userData.headHalo.rotation.z = 0.22 + Math.sin(time * 1.4) * 0.06;
+    const halo = rig.userData.headHalo;
+    if (halo.userData._baseHaloRotZ === undefined) {
+      halo.userData._baseHaloRotZ = halo.rotation.z;
+    }
+    halo.rotation.z = halo.userData._baseHaloRotZ + Math.sin(time * 1.4) * 0.06;
   }
 
   const usingMixer = updateRigAnimationMixer(rig, dt, {

@@ -3,6 +3,8 @@ import * as THREE from '../../vendor/three.module.js';
 import { state } from '../../src/core/state.js';
 import { config } from '../../src/core/config.js';
 import { camera, updateCamera, snapCamera } from '../../src/graphics/scene.js';
+import { updatePlayer, resetRound } from '../../src/entities/Player.js';
+import { makeProgram } from '../../src/graphics/materials.js';
 
 function computeAimDir() {
   return new THREE.Vector3(
@@ -133,5 +135,36 @@ assert(
   `Camera direction diverged from player aim vector: dot=${rayDot}`
 );
 console.log('✓ Camera view vector matches player aim vector perfectly (dot > 0.9999)');
+
+// 6. Player Rig Forward Alignment (local +Z faces -Z away from trailing camera at yaw = 0)
+console.log('Testing player Construct rig forward alignment...');
+const rig = makeProgram(0x00f3ff, { archetype: 'player', forceProcedural: true });
+state.player.obj = rig;
+resetRound(0, 14, 0);
+state.player.alive = true;
+state.player.yaw = 0;
+state.player.vy = 0;
+updatePlayer(0.016);
+rig.updateMatrixWorld(true);
+
+const rigWorldForward = new THREE.Vector3(0, 0, 1).applyQuaternion(rig.quaternion).normalize();
+assert(
+  rigWorldForward.distanceTo(new THREE.Vector3(0, 0, -1)) < 1e-4,
+  `At yaw=0, player rig local +Z must face -Z away from camera, got (${rigWorldForward.x.toFixed(3)}, ${rigWorldForward.y.toFixed(3)}, ${rigWorldForward.z.toFixed(3)})`
+);
+
+// Verify airborne pitch tilts nose upward when jumping (vy > 0) regardless of yaw
+state.player.yaw = Math.PI / 2;
+state.player.grounded = false;
+state.player.vy = 10;
+updatePlayer(0.016);
+rig.updateMatrixWorld(true);
+const airborneForward = new THREE.Vector3(0, 0, 1).applyQuaternion(rig.quaternion).normalize();
+assert(
+  airborneForward.x < -0.9 && airborneForward.y > 0.05,
+  `Airborne upward velocity must pitch rig nose up along -X aim direction, got (${airborneForward.x.toFixed(3)}, ${airborneForward.y.toFixed(3)}, ${airborneForward.z.toFixed(3)})`
+);
+state.player.obj = null;
+console.log('✓ Player rig forward alignment and airborne pitch verified');
 
 console.log('--- Camera Combat Viewport Stability Test Suite PASSED ---');

@@ -5,7 +5,7 @@
  * is non-decreasing across all devices and sessions.
  */
 
-import { deepClone, normalizeContractsState } from './schema.js';
+import { deepClone, normalizeApexTrialsState, normalizeContractsState } from './schema.js';
 
 export const DEFAULT_LOADOUT = Object.freeze({
   activeDisc: 'disc_identity_default',
@@ -190,6 +190,13 @@ export function normalizeSaveState(state = {}) {
 
   const inventory = normalizeInventory(s.inventory);
   const loadout = normalizeLoadout(s.loadout);
+  const titles = Array.isArray(s.titles)
+    ? Array.from(new Set(s.titles.map(String).filter(Boolean)))
+    : (Array.isArray(s.player?.titles) ? Array.from(new Set(s.player.titles.map(String).filter(Boolean))) : []);
+  const rawEquippedTitle = s.equippedTitle !== undefined ? s.equippedTitle : s.player?.equippedTitle;
+  const equippedTitle = typeof rawEquippedTitle === 'string' && titles.includes(rawEquippedTitle)
+    ? rawEquippedTitle
+    : null;
   const calibrationCompleted = Boolean(s.calibration_completed || s.calibrationCompleted || s.player?.calibration_completed);
   const calibrationBypassed = Boolean(s.calibration_bypassed || s.calibrationBypassed || s.player?.calibration_bypassed);
 
@@ -203,10 +210,13 @@ export function normalizeSaveState(state = {}) {
     lastActiveAt: s.lastActiveAt || s.updatedAt || Date.now(),
     bits,
     level,
+    titles,
+    equippedTitle,
     starMastery,
     campaign,
     inventory,
     loadout,
+    apexTrials: normalizeApexTrials(s.apexTrials),
     contracts: normalizeContracts(s.contracts),
     achievements: Array.isArray(s.achievements)
       ? Array.from(new Set(s.achievements.map(a => (typeof a === 'string' ? a : a.id))))
@@ -456,6 +466,48 @@ export function resolveLoadout(localLoadout = {}, cloudLoadout = {}, preferCloud
     activeArenaSkin,
     audioTheme: chosen.audioTheme || DEFAULT_LOADOUT.audioTheme
   };
+}
+
+/**
+ * Normalizes apexTrials state into canonical cycles map.
+ * @param {object|null} apexTrials
+ * @returns {{ cycles: Record<string, { freeTicketUsed: boolean, attempts: number, bestAR: number, claimed: boolean }> }}
+ */
+export function normalizeApexTrials(apexTrials) {
+  return normalizeApexTrialsState(apexTrials);
+}
+
+/**
+ * Merges apexTrials state monotonically across devices.
+ * - freeTicketUsed: Local || Cloud
+ * - claimed: Local || Cloud
+ * - attempts: max(Local, Cloud)
+ * - bestAR: max(Local, Cloud)
+ * @param {object} localApex
+ * @param {object} cloudApex
+ * @returns {{ cycles: Record<string, { freeTicketUsed: boolean, attempts: number, bestAR: number, claimed: boolean }> }}
+ */
+export function mergeApexTrials(localApex = {}, cloudApex = {}) {
+  const local = normalizeApexTrials(localApex);
+  const cloud = normalizeApexTrials(cloudApex);
+  const allCycleIds = new Set([
+    ...Object.keys(local.cycles || {}),
+    ...Object.keys(cloud.cycles || {})
+  ]);
+
+  const cycles = {};
+  for (const cycleId of allCycleIds) {
+    const loc = local.cycles[cycleId] || {};
+    const cld = cloud.cycles[cycleId] || {};
+    cycles[cycleId] = {
+      freeTicketUsed: Boolean(loc.freeTicketUsed || cld.freeTicketUsed),
+      attempts: Math.max(Number(loc.attempts || 0), Number(cld.attempts || 0)),
+      bestAR: Math.max(Number(loc.bestAR || 0), Number(cld.bestAR || 0)),
+      claimed: Boolean(loc.claimed || cld.claimed)
+    };
+  }
+
+  return { cycles };
 }
 
 /**
@@ -813,6 +865,38 @@ export function evaluateMonotonicInvariants(candidate, baseline, baselineName = 
     }
   }
 
+  // Titles set inclusion checks
+  const candidateTitles = new Set(candidate.titles || []);
+  for (const title of (baseline.titles || [])) {
+    if (!candidateTitles.has(title)) {
+      violations.push(`Title missing: "${title}" was revoked from ${baselineName}`);
+    }
+  }
+
+  // Apex Trials monotonic checks
+  if (baseline.apexTrials?.cycles) {
+    const candCycles = candidate.apexTrials?.cycles || {};
+    for (const [cycleId, baseCycle] of Object.entries(baseline.apexTrials.cycles)) {
+      const candCycle = candCycles[cycleId];
+      if (!candCycle) {
+        violations.push(`Apex Trial cycle "${cycleId}" missing from ${baselineName}`);
+        continue;
+      }
+      if (baseCycle.freeTicketUsed && !candCycle.freeTicketUsed) {
+        violations.push(`Apex Trial "${cycleId}" freeTicketUsed was revoked from ${baselineName}`);
+      }
+      if (baseCycle.claimed && !candCycle.claimed) {
+        violations.push(`Apex Trial "${cycleId}" claimed was revoked from ${baselineName}`);
+      }
+      if ((candCycle.attempts || 0) < (baseCycle.attempts || 0)) {
+        violations.push(`Apex Trial "${cycleId}" attempts decreased: ${candCycle.attempts || 0} < ${baselineName} (${baseCycle.attempts || 0})`);
+      }
+      if ((candCycle.bestAR || 0) < (baseCycle.bestAR || 0)) {
+        violations.push(`Apex Trial "${cycleId}" bestAR decreased: ${candCycle.bestAR || 0} < ${baselineName} (${baseCycle.bestAR || 0})`);
+      }
+    }
+  }
+
   // Cumulative stats checks
   if (candidate.stats.matchesPlayed < baseline.stats.matchesPlayed) {
     violations.push(`Matches played decreased: ${candidate.stats.matchesPlayed} < ${baselineName} (${baseline.stats.matchesPlayed})`);
@@ -929,6 +1013,9 @@ export class CloudSyncResolver {
     // Achievements = Local ∪ Cloud
     const mergedAchievements = mergeSetUnion(local.achievements, cloud.achievements);
 
+    // Titles = Local ∪ Cloud
+    const mergedTitles = mergeSetUnion(local.titles, cloud.titles);
+
     // Stats = max across all cumulative combat and match fields
     const mergedStats = mergeTelemetry(local.stats, cloud.stats);
 
@@ -938,11 +1025,24 @@ export class CloudSyncResolver {
       ? cloud.handle
       : (local.handle || cloud.handle || 'PROGRAM');
 
+    const resolvedEquippedTitle = (() => {
+      if (preferCloudMeta) {
+        if (cloud.equippedTitle === null) return null;
+        if (cloud.equippedTitle && mergedTitles.includes(cloud.equippedTitle)) return cloud.equippedTitle;
+      }
+      if (local.equippedTitle && mergedTitles.includes(local.equippedTitle)) return local.equippedTitle;
+      if (cloud.equippedTitle && mergedTitles.includes(cloud.equippedTitle)) return cloud.equippedTitle;
+      return null;
+    })();
+
     const resolvedSettings = preferCloudMeta
       ? { ...local.settings, ...cloud.settings }
       : { ...cloud.settings, ...local.settings };
 
     const resolvedLoadout = resolveLoadout(local.loadout, cloud.loadout, preferCloudMeta, mergedInventory);
+
+    // Apex Trials = Monotonic per-cycle merge
+    const mergedApexTrials = mergeApexTrials(local.apexTrials, cloud.apexTrials);
 
     // Contracts = Date-aware Daily + Monotonic Career merge
     const mergedContracts = mergeContracts(local.contracts, cloud.contracts, preferCloudMeta);
@@ -957,10 +1057,13 @@ export class CloudSyncResolver {
       lastActiveAt: Math.max(local.lastActiveAt || 0, cloud.lastActiveAt || 0, Date.now()),
       bits: mergedBits,
       level: mergedLevel,
+      titles: mergedTitles,
+      equippedTitle: resolvedEquippedTitle,
       starMastery: mergedStarMastery,
       campaign: mergedCampaign,
       inventory: mergedInventory,
       loadout: resolvedLoadout,
+      apexTrials: mergedApexTrials,
       contracts: mergedContracts,
       achievements: mergedAchievements,
       stats: mergedStats,
@@ -1003,6 +1106,9 @@ export function saveStateToRow(saveState) {
     settings: normalized.settings,
     campaign: normalized.campaign,
     loadout: normalized.loadout,
+    titles: normalized.titles,
+    equipped_title: normalized.equippedTitle,
+    apex_trials: normalized.apexTrials,
     contracts: normalized.contracts,
     created_at: new Date(normalized.createdAt || Date.now()).toISOString(),
     last_active_at: new Date(normalized.lastActiveAt || Date.now()).toISOString(),
@@ -1059,6 +1165,9 @@ export function rowToSaveState(row) {
     inventory,
     campaign,
     loadout,
+    titles: Array.isArray(row.titles) ? row.titles : undefined,
+    equippedTitle: typeof row.equipped_title === 'string' ? row.equipped_title : null,
+    apexTrials: typeof row.apex_trials === 'object' && row.apex_trials !== null ? row.apex_trials : undefined,
     contracts: typeof row.contracts === 'object' && row.contracts !== null ? row.contracts : undefined,
     achievements: Array.isArray(row.achievements) ? row.achievements : [],
     stats: typeof row.stats === 'object' && row.stats !== null ? row.stats : {},
@@ -1126,9 +1235,11 @@ CloudSyncResolver.upsertRemote = upsertRemoteSaveState;
 CloudSyncResolver.normalizeInventory = normalizeInventory;
 CloudSyncResolver.normalizeCampaign = normalizeCampaign;
 CloudSyncResolver.normalizeLoadout = normalizeLoadout;
+CloudSyncResolver.normalizeApexTrials = normalizeApexTrials;
 CloudSyncResolver.normalizeContracts = normalizeContracts;
 CloudSyncResolver.mergeInventory = mergeInventory;
 CloudSyncResolver.mergeCampaign = mergeCampaign;
+CloudSyncResolver.mergeApexTrials = mergeApexTrials;
 CloudSyncResolver.mergeContracts = mergeContracts;
 CloudSyncResolver.resolveLoadout = resolveLoadout;
 CloudSyncResolver.mergeTelemetry = mergeTelemetry;

@@ -347,6 +347,41 @@ assert.strictEqual(contractsMigStore.get('contracts.career.tierCompletions'), 4)
 assert.strictEqual(contractsMigStore.get('contracts.daily.slots.0.progress'), 2);
 console.log('✓ Contracts schema migration, defaults, and importState merge verified cleanly');
 
+// Test Group 9: Apex Trials & Player Titles Schema Migration & Persistence
+console.log('\n[Group 9] Testing Apex Trials & Player Titles Persistence...');
+const apexMigKey = 'tron_test_apex_mig';
+const apexMigStore = new StorageManager({ storageKey: apexMigKey });
+const preApexPayload = createDefaultSaveState();
+delete preApexPayload.apexTrials;
+delete preApexPayload.player.titles;
+delete preApexPayload.player.equippedTitle;
+apexMigStore._setItem(apexMigKey, JSON.stringify(preApexPayload));
+
+const migratedApexState = apexMigStore.load();
+assert.deepStrictEqual(migratedApexState.apexTrials, { cycles: {} }, 'Missing apexTrials must default to { cycles: {} }');
+assert.deepStrictEqual(migratedApexState.player.titles, [], 'Missing player.titles must default to []');
+assert.strictEqual(migratedApexState.player.equippedTitle, null, 'Missing player.equippedTitle must default to null');
+
+apexMigStore.importState({
+  player: {
+    titles: ['APEX PRIME // S1'],
+    equippedTitle: 'APEX PRIME // S1'
+  },
+  apexTrials: {
+    cycles: {
+      cycle_01: { freeTicketUsed: true, attempts: 2, bestAR: 4200, claimed: false }
+    }
+  }
+});
+assert.deepStrictEqual(apexMigStore.get('player.titles'), ['APEX PRIME // S1']);
+assert.strictEqual(apexMigStore.get('player.equippedTitle'), 'APEX PRIME // S1');
+assert.strictEqual(apexMigStore.get('apexTrials.cycles.cycle_01.freeTicketUsed'), true);
+assert.strictEqual(apexMigStore.get('apexTrials.cycles.cycle_01.attempts'), 2);
+assert.strictEqual(apexMigStore.get('apexTrials.cycles.cycle_01.bestAR'), 4200);
+assert.strictEqual(apexMigStore.get('apexTrials.cycles.cycle_01.claimed'), false);
+apexMigStore.destroy();
+console.log('✓ Apex Trials & Player Titles schema migration, defaults, and importState merge verified cleanly');
+
 // Clean up test instances
 testManager.destroy();
 corruptManager.destroy();

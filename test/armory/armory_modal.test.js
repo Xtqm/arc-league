@@ -209,13 +209,13 @@ assert(actionBarHtml.includes('[ ACQUIRE // 2000 AC ]'), 'Must show price on but
 assert(actionBarHtml.includes('disabled'), 'Insufficient credits button must be disabled');
 assert(actionBarHtml.includes('INSUFFICIENT AC // COMPETE IN THE ARCFIELD'), 'Must show amber warning message');
 
-// State 4b: Unowned Sparks Purchasable (Insufficient Sparks) -> Disabled with Sparks warning
-mem['economy.sparks'] = 10;
+// State 4b: Unowned Sparks Vault Item -> [ APEX VAULT // 75 SPARKS ] (disabled, gated to Spark Vault)
+mem['economy.sparks'] = 100;
 modal.selectedItemId = 'disc_hex_dark_matter'; // cost: 75 Sparks
 actionBarHtml = modal.renderActionBar();
-assert(actionBarHtml.includes('[ ACQUIRE // 75 SPARKS ]'), 'Must show Sparks price on button');
-assert(actionBarHtml.includes('disabled'), 'Insufficient Sparks button must be disabled');
-assert(actionBarHtml.includes('INSUFFICIENT SPARKS'), 'Must show Sparks warning message');
+assert(actionBarHtml.includes('[ APEX VAULT // 75 SPARKS ]'), 'Unowned Sparks item must display [ APEX VAULT // 75 SPARKS ]');
+assert(actionBarHtml.includes('disabled'), 'Spark Vault item button in Armory must be disabled');
+assert(actionBarHtml.includes('SPARK VAULT'), 'Must direct player to the Spark Vault');
 
 // State 5: Milestone Locked -> [ LOCKED // REQUIRES: ... ]
 modal.selectedItemId = 'disc_corrupted_void'; // achievementId: corrupted_void_mastery

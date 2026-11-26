@@ -11,13 +11,15 @@ import {
   STORAGE_BACKUP_KEY,
   StorageEvents,
   createDefaultSaveState,
+  ensureApexTrialsDefaults,
   ensureContractsDefaults,
+  normalizeApexTrialsState,
   normalizeContractsState,
   isValidSaveState,
   validateSaveState,
   deepClone
 } from './schema.js';
-import { mergeContracts } from './CloudSyncResolver.js';
+import { mergeApexTrials, mergeContracts } from './CloudSyncResolver.js';
 
 // In-memory fallback map for non-browser or storage-restricted environments
 const memoryStorage = new Map();
@@ -334,12 +336,20 @@ export class StorageManager {
       parsed.inventory.unlockedMaps = ['arena_grid_01'];
     }
 
-    if (parsed.player && parsed.player.currency) {
-      if (typeof parsed.player.currency.credits !== 'number') {
-        parsed.player.currency.credits = typeof parsed.player.currency.bits === 'number' ? parsed.player.currency.bits : 0;
+    if (parsed.player) {
+      if (!Array.isArray(parsed.player.titles)) {
+        parsed.player.titles = [];
       }
-      if (typeof parsed.player.currency.bits !== 'number') {
-        parsed.player.currency.bits = parsed.player.currency.credits;
+      if (parsed.player.equippedTitle === undefined) {
+        parsed.player.equippedTitle = null;
+      }
+      if (parsed.player.currency) {
+        if (typeof parsed.player.currency.credits !== 'number') {
+          parsed.player.currency.credits = typeof parsed.player.currency.bits === 'number' ? parsed.player.currency.bits : 0;
+        }
+        if (typeof parsed.player.currency.bits !== 'number') {
+          parsed.player.currency.bits = parsed.player.currency.credits;
+        }
       }
     }
 
@@ -367,6 +377,7 @@ export class StorageManager {
       }
     }
 
+    parsed.apexTrials = ensureApexTrialsDefaults(parsed.apexTrials);
     parsed.contracts = ensureContractsDefaults(parsed.contracts);
     return parsed;
   }
@@ -719,6 +730,18 @@ export class StorageManager {
     const rawCredits = s.player?.currency?.credits ?? s.player?.currency?.bits ?? s.bits ?? existing.player?.currency?.credits ?? 0;
     const rawSparks = s.player?.currency?.sparks ?? s.sparks ?? existing.player?.currency?.sparks ?? 0;
 
+    const mergedTitles = Array.from(new Set([
+      ...(Array.isArray(existing.player?.titles) ? existing.player.titles.map(String).filter(Boolean) : []),
+      ...(Array.isArray(s.player?.titles) ? s.player.titles.map(String).filter(Boolean) : []),
+      ...(Array.isArray(s.titles) ? s.titles.map(String).filter(Boolean) : [])
+    ]));
+    const rawEquippedTitle = s.player?.equippedTitle !== undefined
+      ? s.player.equippedTitle
+      : (s.equippedTitle !== undefined ? s.equippedTitle : (existing.player?.equippedTitle ?? null));
+    const equippedTitle = typeof rawEquippedTitle === 'string' && mergedTitles.includes(rawEquippedTitle)
+      ? rawEquippedTitle
+      : null;
+
     // Loadout
     const loadout = {
       activeDisc: s.loadout?.activeDisc || existing.loadout?.activeDisc || base.loadout.activeDisc,
@@ -880,6 +903,11 @@ export class StorageManager {
       ...(s.settings || {})
     };
 
+    // Apex Trials
+    const apexTrials = s.apexTrials !== undefined
+      ? mergeApexTrials(existing.apexTrials, s.apexTrials)
+      : normalizeApexTrialsState(existing.apexTrials);
+
     // Contracts
     const preferIncomingContracts = (s.lastActiveAt || s.updatedAt || 0) >= (existing.lastActiveAt || existing.updatedAt || 0);
     const contracts = s.contracts !== undefined
@@ -895,6 +923,8 @@ export class StorageManager {
         handle: playerHandle,
         level: playerLevel,
         xp: playerXp,
+        titles: mergedTitles,
+        equippedTitle,
         currency: {
           bits: rawBits,
           credits: rawCredits,
@@ -904,6 +934,7 @@ export class StorageManager {
       loadout,
       campaign,
       inventory,
+      apexTrials,
       contracts,
       achievements,
       stats,

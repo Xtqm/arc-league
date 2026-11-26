@@ -292,10 +292,14 @@ export class ArmoryManager {
   /**
    * Verifies if an item is eligible for purchase by the active player.
    * Checks item validity, existing ownership, Bits price, and balance affordability.
+   * UNLOCK_TYPES.SPARKS items are gated to the active Spark Vault rotation and cannot
+   * be purchased directly via standard Armory purchase calls.
    * @param {string} itemId
+   * @param {object} [options]
+   * @param {boolean} [options.fromSparkVault=false]
    * @returns {boolean}
    */
-  canPurchase(itemId) {
+  canPurchase(itemId, options = {}) {
     if (!itemId || typeof itemId !== 'string') {
       return false;
     }
@@ -316,6 +320,9 @@ export class ArmoryManager {
     }
 
     if (item.unlockType === UNLOCK_TYPES.SPARKS) {
+      if (!options?.fromSparkVault) {
+        return false;
+      }
       return typeof this.economy.canAffordSparks === 'function'
         ? this.economy.canAffordSparks(item.cost)
         : false;
@@ -333,10 +340,12 @@ export class ArmoryManager {
    * Deducts currency via EconomyManager, records ownership in StorageManager,
    * flushes persistence, and broadcasts ARMORY_ITEM_UNLOCKED event.
    * @param {string} itemId
+   * @param {object} [options]
+   * @param {boolean} [options.fromSparkVault=false]
    * @returns {boolean} True if successfully purchased and unlocked, false otherwise
    */
-  purchaseItem(itemId) {
-    if (!this.canPurchase(itemId)) {
+  purchaseItem(itemId, options = {}) {
+    if (!this.canPurchase(itemId, options)) {
       return false;
     }
 

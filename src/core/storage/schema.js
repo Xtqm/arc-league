@@ -160,6 +160,70 @@ export function ensureContractsDefaults(raw) {
 }
 
 /**
+ * Creates a fresh default apexTrials state branch.
+ * @returns {{ cycles: Record<string, { freeTicketUsed: boolean, attempts: number, bestAR: number, claimed: boolean }> }}
+ */
+export function createDefaultApexTrialsState() {
+  return {
+    cycles: {}
+  };
+}
+
+/**
+ * Normalizes a partial or legacy apexTrials object into the canonical structure.
+ * @param {any} raw
+ * @returns {{ cycles: Record<string, { freeTicketUsed: boolean, attempts: number, bestAR: number, claimed: boolean }> }}
+ */
+export function normalizeApexTrialsState(raw = {}) {
+  const obj = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const rawCycles = obj.cycles && typeof obj.cycles === 'object' && !Array.isArray(obj.cycles) ? obj.cycles : {};
+  const cycles = {};
+
+  for (const [cycleId, entry] of Object.entries(rawCycles)) {
+    if (!cycleId || !entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const parsedAttempts = Number(entry.attempts);
+    const parsedBestAR = Number(entry.bestAR);
+    cycles[String(cycleId)] = {
+      freeTicketUsed: Boolean(entry.freeTicketUsed),
+      attempts: Number.isFinite(parsedAttempts) && parsedAttempts >= 0 ? Math.floor(parsedAttempts) : 0,
+      bestAR: Number.isFinite(parsedBestAR) && parsedBestAR >= 0 ? parsedBestAR : 0,
+      claimed: Boolean(entry.claimed)
+    };
+  }
+
+  return { cycles };
+}
+
+/**
+ * Populates missing apexTrials subfields on a parsed save state without masking invalid types.
+ * @param {any} raw
+ * @returns {any}
+ */
+export function ensureApexTrialsDefaults(raw) {
+  if (raw === undefined) {
+    return createDefaultApexTrialsState();
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return raw;
+  }
+
+  const next = deepClone(raw);
+  if (next.cycles === undefined) {
+    next.cycles = {};
+  } else if (next.cycles && typeof next.cycles === 'object' && !Array.isArray(next.cycles)) {
+    for (const [cycleId, entry] of Object.entries(next.cycles)) {
+      if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+        if (entry.freeTicketUsed === undefined) entry.freeTicketUsed = false;
+        if (entry.attempts === undefined) entry.attempts = 0;
+        if (entry.bestAR === undefined) entry.bestAR = 0;
+        if (entry.claimed === undefined) entry.claimed = false;
+      }
+    }
+  }
+  return next;
+}
+
+/**
  * Default frozen reference baseline for TronSaveState v1.0.0
  */
 export const DEFAULT_SAVE_STATE = Object.freeze({
@@ -173,6 +237,8 @@ export const DEFAULT_SAVE_STATE = Object.freeze({
     handle: 'USER_PROGRAM',
     level: 1,
     xp: 0,
+    titles: Object.freeze([]),
+    equippedTitle: null,
     currency: Object.freeze({
       bits: 0,
       credits: 0,
@@ -200,6 +266,9 @@ export const DEFAULT_SAVE_STATE = Object.freeze({
     unlockedMaps: Object.freeze(['arena_grid_01'])
   }),
   achievements: Object.freeze([]),
+  apexTrials: Object.freeze({
+    cycles: Object.freeze({})
+  }),
   contracts: Object.freeze({
     daily: Object.freeze({
       dateKey: '',
@@ -252,6 +321,12 @@ export function createDefaultSaveState(overrides = {}) {
       handle: overrides?.player?.handle || 'USER_PROGRAM',
       level: overrides?.player?.level ?? 1,
       xp: overrides?.player?.xp ?? 0,
+      titles: Array.isArray(overrides?.player?.titles)
+        ? Array.from(new Set(overrides.player.titles.map(String).filter(Boolean)))
+        : [],
+      equippedTitle: typeof overrides?.player?.equippedTitle === 'string' && overrides.player.equippedTitle
+        ? overrides.player.equippedTitle
+        : null,
       currency: {
         bits: overrides?.player?.currency?.credits ?? overrides?.player?.currency?.bits ?? 0,
         credits: overrides?.player?.currency?.credits ?? overrides?.player?.currency?.bits ?? 0,
@@ -279,6 +354,7 @@ export function createDefaultSaveState(overrides = {}) {
       unlockedMaps: Array.isArray(overrides?.inventory?.unlockedMaps) ? [...overrides.inventory.unlockedMaps] : ['arena_grid_01']
     },
     achievements: Array.isArray(overrides?.achievements) ? deepClone(overrides.achievements) : [],
+    apexTrials: normalizeApexTrialsState(overrides?.apexTrials),
     contracts: normalizeContractsState(overrides?.contracts),
     stats: {
       matchesPlayed: overrides?.stats?.matchesPlayed ?? 0,
@@ -318,6 +394,10 @@ export function isValidSaveState(data) {
   if (!data.campaign || typeof data.campaign !== 'object') return false;
   if (!data.inventory || typeof data.inventory !== 'object') return false;
   if (!Array.isArray(data.achievements)) return false;
+  if (data.player.titles !== undefined && !Array.isArray(data.player.titles)) return false;
+  if (data.apexTrials !== undefined && (!data.apexTrials || typeof data.apexTrials !== 'object' || Array.isArray(data.apexTrials))) {
+    return false;
+  }
   if (data.contracts !== undefined && (!data.contracts || typeof data.contracts !== 'object' || Array.isArray(data.contracts))) {
     return false;
   }
@@ -344,6 +424,12 @@ export function validateSaveState(data) {
     if (typeof data.player.id !== 'string') errors.push('"player.id" must be a string');
     if (typeof data.player.handle !== 'string') errors.push('"player.handle" must be a string');
     if (typeof data.player.level !== 'number') errors.push('"player.level" must be a number');
+    if (data.player.titles !== undefined && !Array.isArray(data.player.titles)) {
+      errors.push('"player.titles" must be an array');
+    }
+    if (data.player.equippedTitle !== undefined && data.player.equippedTitle !== null && typeof data.player.equippedTitle !== 'string') {
+      errors.push('"player.equippedTitle" must be a string or null');
+    }
     if (data.player.currency && typeof data.player.currency !== 'object') {
       errors.push('"player.currency" must be an object');
     }
@@ -356,6 +442,34 @@ export function validateSaveState(data) {
     errors.push('"inventory.unlockedMaps" must be an array');
   }
   if (!Array.isArray(data.achievements)) errors.push('Missing or invalid "achievements" array');
+  if (data.apexTrials !== undefined) {
+    if (!data.apexTrials || typeof data.apexTrials !== 'object' || Array.isArray(data.apexTrials)) {
+      errors.push('"apexTrials" must be a non-null object');
+    } else if (data.apexTrials.cycles !== undefined) {
+      if (!data.apexTrials.cycles || typeof data.apexTrials.cycles !== 'object' || Array.isArray(data.apexTrials.cycles)) {
+        errors.push('"apexTrials.cycles" must be an object');
+      } else {
+        for (const [cycleId, entry] of Object.entries(data.apexTrials.cycles)) {
+          if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+            errors.push(`"apexTrials.cycles.${cycleId}" must be an object`);
+          } else {
+            if (entry.freeTicketUsed !== undefined && typeof entry.freeTicketUsed !== 'boolean') {
+              errors.push(`"apexTrials.cycles.${cycleId}.freeTicketUsed" must be a boolean`);
+            }
+            if (entry.attempts !== undefined && (typeof entry.attempts !== 'number' || !Number.isFinite(entry.attempts) || entry.attempts < 0)) {
+              errors.push(`"apexTrials.cycles.${cycleId}.attempts" must be a number >= 0`);
+            }
+            if (entry.bestAR !== undefined && (typeof entry.bestAR !== 'number' || !Number.isFinite(entry.bestAR) || entry.bestAR < 0)) {
+              errors.push(`"apexTrials.cycles.${cycleId}.bestAR" must be a number >= 0`);
+            }
+            if (entry.claimed !== undefined && typeof entry.claimed !== 'boolean') {
+              errors.push(`"apexTrials.cycles.${cycleId}.claimed" must be a boolean`);
+            }
+          }
+        }
+      }
+    }
+  }
   if (data.contracts !== undefined) {
     if (!data.contracts || typeof data.contracts !== 'object' || Array.isArray(data.contracts)) {
       errors.push('"contracts" must be a non-null object');

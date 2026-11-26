@@ -78,6 +78,11 @@ const TEST_DOMAINS = {
     'contracts/contracts_integration.test.js',
     'ui/contracts_modal.test.js'
   ],
+  events: [
+    'events/apex_trial_registry.test.js',
+    'events/apex_trial_manager.test.js',
+    'events/spark_vault_manager.test.js'
+  ],
   desktop: [
     'ui/tactical_rail_menu.test.js',
     'ui/directives_modal.test.js',
@@ -93,6 +98,7 @@ const TEST_DOMAINS = {
     'ui/update_notification.test.js',
     'ui/achievements_modal.test.js',
     'ui/contracts_modal.test.js',
+    'ui/apex_trials_modal.test.js',
     'ui/achievement_toast.test.js',
     'ui/duel_map_selector.test.js'
   ],

@@ -588,6 +588,24 @@ export function populateDossierData() {
       authTypeEl.textContent = 'TRANSIENT GUEST';
     }
   }
+
+  const titleSelect = document.getElementById('dossierTitleSelect');
+  if (titleSelect) {
+    const unlockedTitles = typeof storageManager?.get === 'function'
+      ? storageManager.get('player.titles', [])
+      : (saveState?.player?.titles || []);
+    const equippedTitle = typeof storageManager?.get === 'function'
+      ? storageManager.get('player.equippedTitle', null)
+      : (saveState?.player?.equippedTitle || null);
+
+    const titlesArr = Array.isArray(unlockedTitles) ? unlockedTitles : [];
+    titleSelect.innerHTML = `<option value="">NO TITLE EQUIPPED</option>` +
+      titlesArr.map((t) => {
+        const escaped = String(t).replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        return `<option value="${escaped}">${escaped}</option>`;
+      }).join('');
+    titleSelect.value = equippedTitle && titlesArr.includes(equippedTitle) ? equippedTitle : '';
+  }
 }
 
 /**
@@ -719,6 +737,23 @@ export function initAuthTerminal() {
 
   const modal = document.getElementById('authModal');
   if (!modal) return;
+
+  const titleSelect = document.getElementById('dossierTitleSelect');
+  if (titleSelect) {
+    titleSelect.addEventListener('change', (e) => {
+      const nextTitle = e.target.value ? String(e.target.value) : null;
+      if (typeof storageManager?.set === 'function') {
+        storageManager.set('player.equippedTitle', nextTitle, { immediate: true });
+      }
+      if (authManager.saveState) {
+        authManager.saveState.player = authManager.saveState.player || {};
+        authManager.saveState.player.equippedTitle = nextTitle;
+        try { saveSaveState(authManager.saveState); } catch (_) {}
+      }
+      updateIdentityHeader();
+      setConsoleMessage(nextTitle ? `> EQUIPPED TITLE: "${nextTitle}"` : '> TITLE UNEQUIPPED.', 'success');
+    });
+  }
 
   // Prevent click-through to Three.js canvas; strict modal dismissal via [X] only
   if (modal.addEventListener) {

@@ -316,11 +316,17 @@ assert.strictEqual(armory.isUnlocked(ARMORY_CATEGORIES.UNLOCKED_MAPS, 'arena_zer
 const storedMaps = testStorage.get('inventory.unlockedMaps', []);
 assert.ok(storedMaps.includes('arena_zero_g_nexus'), 'Map must be saved to inventory.unlockedMaps');
 
-// 4.4b Sparks-priced items (disc_hex_dark_matter: 75 Sparks)
-assert.strictEqual(armory.canPurchase('disc_hex_dark_matter'), false, 'Insufficient Sparks must reject purchase');
+// 4.4b Sparks-priced items (disc_hex_dark_matter: 75 Sparks) are gated to Spark Vault
+assert.strictEqual(armory.canPurchase('disc_hex_dark_matter'), false, 'Direct Sparks purchase must be rejected without Vault');
 testEconomy.awardSparks(75, 'hardcore_test');
-assert.strictEqual(armory.canPurchase('disc_hex_dark_matter'), true);
-assert.strictEqual(armory.purchaseItem('disc_hex_dark_matter'), true);
+assert.strictEqual(armory.canPurchase('disc_hex_dark_matter'), false, 'Direct Armory purchase must still be rejected even with 75 Sparks');
+assert.strictEqual(armory.purchaseItem('disc_hex_dark_matter'), false, 'purchaseItem must reject UNLOCK_TYPES.SPARKS outside Spark Vault');
+assert.strictEqual(testEconomy.getSparks(), 75, 'Rejected purchase must preserve Sparks balance');
+assert.strictEqual(armory.isUnlocked(ARMORY_CATEGORIES.DISC_SKINS, 'disc_hex_dark_matter'), false);
+
+// Unlocking via Spark Vault option / unlockRewardItem succeeds
+assert.strictEqual(armory.canPurchase('disc_hex_dark_matter', { fromSparkVault: true }), true);
+assert.strictEqual(armory.purchaseItem('disc_hex_dark_matter', { fromSparkVault: true }), true);
 assert.strictEqual(testEconomy.getSparks(), 0);
 assert.strictEqual(armory.isUnlocked(ARMORY_CATEGORIES.DISC_SKINS, 'disc_hex_dark_matter'), true);
 

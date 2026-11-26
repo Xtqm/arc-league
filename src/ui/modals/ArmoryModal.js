@@ -423,25 +423,30 @@ export class ArmoryModal {
       `;
     }
 
-    // 4. Credit / Sparks Purchasable: check affordability
-    const isSparks = item.unlockType === UNLOCK_TYPES.SPARKS;
-    const currencyUnit = isSparks ? 'SPARKS' : 'AC';
-    const insufficientMsg = isSparks
-      ? 'INSUFFICIENT SPARKS // CLEAR HARDCORE SWARM OR ARBITERS'
-      : 'INSUFFICIENT AC // COMPETE IN THE ARCFIELD';
+    // 4. Spark Vault Exclusive (UNLOCK_TYPES.SPARKS)
+    if (item.unlockType === UNLOCK_TYPES.SPARKS) {
+      return `
+        <button class="armory-action-btn btn-locked btn-apex-vault" id="armoryActionBtn" disabled>
+          [ APEX VAULT // ${item.cost} SPARKS ]
+        </button>
+        <div class="armory-action-warning">EXCLUSIVE TO WEEKLY SPARK VAULT ROTATION // OPEN APEX TRIALS</div>
+      `;
+    }
+
+    // 5. Credit Purchasable: check affordability
     const canAfford = this.armory.canPurchase(item.id);
     if (canAfford) {
       return `
         <button class="armory-action-btn btn-fabricate" id="armoryActionBtn" data-action="fabricate" data-item-id="${item.id}">
-          [ ACQUIRE // ${item.cost} ${currencyUnit} ]
+          [ ACQUIRE // ${item.cost} AC ]
         </button>
       `;
     } else {
       return `
         <button class="armory-action-btn btn-fabricate" id="armoryActionBtn" disabled>
-          [ ACQUIRE // ${item.cost} ${currencyUnit} ]
+          [ ACQUIRE // ${item.cost} AC ]
         </button>
-        <div class="armory-action-warning">${insufficientMsg}</div>
+        <div class="armory-action-warning">INSUFFICIENT AC // COMPETE IN THE ARCFIELD</div>
       `;
     }
   }

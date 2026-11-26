@@ -22,6 +22,7 @@ import { campaignManager } from '../campaign/CampaignManager.js';
 import { campaignHUD } from '../ui/campaign/CampaignHUD.js';
 import { trialDebriefModal } from '../ui/campaign/TrialDebriefModal.js';
 import { dynamicDirector } from '../ai/DynamicDirector.js';
+import { apexTrialManager } from '../events/ApexTrialManager.js';
 
 const _playerFwd = new THREE.Vector3();
 const _playerRight = new THREE.Vector3();
@@ -163,7 +164,10 @@ export function updatePlayer(dt) {
   }
 
   // Vertical physics: jump / double-jump / gravity
-  const GRAV = 30, JUMP_V = 11.5;
+  const gravScale = (state.gameMode === 'apex_trial' && state.activeTrialMutators?.gravityScale)
+    ? Number(state.activeTrialMutators.gravityScale)
+    : 1.0;
+  const GRAV = 30 * gravScale, JUMP_V = 11.5;
   const jumpRequested = !!(state.keys.Space || state.touchJumpHeld || state.gamepadJumpRequested);
   const jumpHeld = !!(state.keys.Space || state.touchJumpHeld || state.gamepadJumpHeld);
   if (jumpRequested && !state.player.jumpHeld) state.player.jumpBuf = 0.15;
@@ -374,7 +378,10 @@ export function throwDisc(customCharge = null) {
   const rawCurve = getPlayerCurveIntent();
   const gyroDamp = 1.0 - 0.65 * charge;
   const curve = rawCurve * gyroDamp;
-  const speed = (38.0 + 17.0 * charge) * (1.0 - 0.25 * Math.abs(curve));
+  const discMult = (state.gameMode === 'apex_trial' && state.activeTrialMutators?.discSpeedMult)
+    ? Number(state.activeTrialMutators.discSpeedMult)
+    : 1.0;
+  const speed = (38.0 + 17.0 * charge) * (1.0 - 0.25 * Math.abs(curve)) * discMult;
   const vel = _throwVel.copy(dir).multiplyScalar(speed);
   spawnDisc(origin, vel, 'player', config.CYAN, curve, charge);
   if (typeof window !== 'undefined') {
@@ -530,6 +537,8 @@ export function damagePlayer(amount, from) {
       campaignManager.recordMetric('finalHp', Math.max(0, state.player.hp));
       campaignHUD.updateIntegrity(state.player.hp, state.player.maxHp || 100);
     } catch (_) {}
+  } else if (state.gameMode === 'apex_trial' && state.trialRunStats) {
+    state.trialRunStats.damageTaken += amount;
   }
 
   if (state.player.hp <= 0) {
@@ -586,6 +595,9 @@ export function damagePlayer(amount, from) {
           rewards: { bits: 0, xp: 0 }
         });
       }, 900);
+    } else if (state.gameMode === 'apex_trial') {
+      settleApexTrialRun(false);
+      setTimeout(showGameOver, 900);
     } else {
       swarmEconomyBridge.resetStreak();
       setTimeout(showGameOver, 900);
@@ -684,6 +696,26 @@ export function resetGame(options = {}) {
         window.__tronSpawnWave();
       }
     };
+  } else if (state.gameMode === 'apex_trial') {
+    const startingWave = Math.max(1, Number(state.activeTrialMutators?.startingTier) || 1);
+    state.wave = startingWave;
+    state.trialHazardTimer = 0;
+    state.trialRunStats = {
+      startTimeMs: Date.now(),
+      wavesCleared: 0,
+      fractures: 0,
+      parries: 0,
+      ricochetFractures: 0,
+      damageDealt: 0,
+      damageTaken: 0,
+      settled: false
+    };
+    resetRound(0, 14, Math.PI);
+    state.onCountdownEnd = () => {
+      if (typeof window !== 'undefined' && window.__tronSpawnWave) {
+        window.__tronSpawnWave();
+      }
+    };
   } else {
     resetRound(0, 14, Math.PI);
   }
@@ -713,8 +745,38 @@ export function resetCampaignRound(levelConfig) {
   updateHUD();
 }
 
+export function settleApexTrialRun(victory = false) {
+  if (state.gameMode !== 'apex_trial' || !state.trialRunStats || state.trialRunStats.settled) {
+    return null;
+  }
+  state.trialRunStats.settled = true;
+  const cycleId = state.activeTrialCycleId || apexTrialManager.getActiveTrial()?.cycleId || null;
+  if (!cycleId) return null;
+
+  const stats = state.trialRunStats;
+  const survivalSeconds = stats.startTimeMs > 0
+    ? Math.max(0, (Date.now() - stats.startTimeMs) / 1000)
+    : 0;
+  const hpRemainingRatio = victory && state.player.maxHp
+    ? Math.max(0, Math.min(1, state.player.hp / state.player.maxHp))
+    : 0;
+
+  return apexTrialManager.recordRunResult(cycleId, {
+    wavesCleared: stats.wavesCleared,
+    survivalSeconds,
+    fractures: stats.fractures,
+    parries: stats.parries,
+    ricochetFractures: stats.ricochetFractures,
+    damageDealt: stats.damageDealt,
+    damageTaken: stats.damageTaken,
+    hpRemainingRatio,
+    victory
+  });
+}
+
 if (typeof window !== 'undefined') {
   window.__tronResetGame = resetGame;
   window.__tronResetRound = resetRound;
   window.__tronResetCampaignRound = resetCampaignRound;
+  window.__tronSettleApexTrialRun = settleApexTrialRun;
 }

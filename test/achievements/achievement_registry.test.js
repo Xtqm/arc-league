@@ -9,6 +9,8 @@ import {
   LAUNCH_ACHIEVEMENTS,
   ACHIEVEMENT_MAP,
   GRID_01_LEVEL_IDS,
+  ALL_CAMPAIGN_LEVEL_IDS,
+  ALL_CAMPAIGN_MAX_STARS,
   getAchievement,
   getAllAchievements,
   getAchievementsByCategory,
@@ -48,26 +50,27 @@ for (const id of expectedIds) {
 }
 
 // Check specific reward amounts per specification
-assert.strictEqual(getAchievement('ach_first_blood').reward.bits, 100);
+assert.strictEqual(getAchievement('ach_first_blood').reward.credits, 100);
 assert.strictEqual(getAchievement('ach_first_blood').reward.cosmetic, null);
 
-assert.strictEqual(getAchievement('ach_curve_god').reward.bits, 300);
+assert.strictEqual(getAchievement('ach_curve_god').reward.credits, 300);
 assert.strictEqual(getAchievement('ach_curve_god').reward.cosmetic, null);
 
-assert.strictEqual(getAchievement('ach_parry_king').reward.bits, 250);
+assert.strictEqual(getAchievement('ach_parry_king').reward.credits, 500);
 assert.strictEqual(getAchievement('ach_parry_king').reward.cosmetic, null);
 
-assert.strictEqual(getAchievement('ach_untouchable').reward.bits, 500);
+assert.strictEqual(getAchievement('ach_untouchable').reward.credits, 250);
 assert.strictEqual(getAchievement('ach_untouchable').reward.cosmetic, null);
 
 const swarmAch = getAchievement('ach_swarm_survivor');
-assert.strictEqual(swarmAch.reward.bits, 750);
+assert.strictEqual(swarmAch.reward.credits, 750);
 assert.ok(swarmAch.reward.cosmetic);
 assert.strictEqual(swarmAch.reward.cosmetic.category, 'discSkins');
 assert.strictEqual(swarmAch.reward.cosmetic.itemId, 'disc_corrupted_void');
 
 const grid1Ach = getAchievement('ach_grid_one_master');
-assert.strictEqual(grid1Ach.reward.bits, 1000);
+assert.strictEqual(grid1Ach.reward.credits, 2500);
+assert.strictEqual(grid1Ach.reward.sparks, 5);
 assert.ok(grid1Ach.reward.cosmetic);
 assert.strictEqual(grid1Ach.reward.cosmetic.category, 'chassisSkins');
 assert.strictEqual(grid1Ach.reward.cosmetic.itemId, 'chassis_arbiter');
@@ -167,33 +170,20 @@ const progUntouchable = calculateProgress('ach_untouchable', stateTrialPerfect);
 assert.strictEqual(progUntouchable.satisfied, true);
 assert.strictEqual(progUntouchable.ratio, 1);
 
-// 3.5 Endless Firewall (ach_swarm_survivor)
-const stateSwarm10 = { stats: { swarmHighestWave: 10 } };
+// 3.5 Endless Firewall (ach_swarm_survivor - Hardcore Swarm Wave 15 only)
+const stateStandardSwarm15 = { stats: { swarmHighestWave: 15, hardcoreSwarmHighestWave: 0 } };
+assert.strictEqual(calculateProgress('ach_swarm_survivor', stateStandardSwarm15).satisfied, false, 'Standard Swarm must not satisfy Hardcore Wave 15');
+
+const stateSwarm10 = { stats: { hardcoreSwarmHighestWave: 10 } };
 const progSwarm10 = calculateProgress('ach_swarm_survivor', stateSwarm10);
 assert.strictEqual(progSwarm10.current, 10);
 assert.strictEqual(progSwarm10.satisfied, false);
 
-const stateSwarm15 = { stats: { swarmHighestWave: 15 } };
+const stateSwarm15 = { stats: { hardcoreSwarmHighestWave: 15 } };
 assert.strictEqual(calculateProgress('ach_swarm_survivor', stateSwarm15).satisfied, true);
 
-// 3.6 Outlands Conqueror (ach_grid_one_master - all 18 stars across Grid 01)
-const stateGrid1Partial = {
-  campaign: {
-    levelRecords: {
-      level_01_01: { stars: 3 },
-      level_01_02: { stars: 3 },
-      level_01_03: { stars: 3 },
-      level_01_04: { stars: 2 },
-      level_01_05: { stars: 3 },
-      level_01_06: { stars: 3 }
-    }
-  }
-};
-const progGridPart = calculateProgress('ach_grid_one_master', stateGrid1Partial);
-assert.strictEqual(progGridPart.current, 17);
-assert.strictEqual(progGridPart.satisfied, false);
-
-const stateGrid1Full = {
+// 3.6 Outlands Conqueror (ach_grid_one_master - all stars across Sectors 1-4)
+const stateGrid1Only = {
   campaign: {
     levelRecords: {
       level_01_01: { stars: 3 },
@@ -205,8 +195,17 @@ const stateGrid1Full = {
     }
   }
 };
-const progGridFull = calculateProgress('ach_grid_one_master', stateGrid1Full);
-assert.strictEqual(progGridFull.current, 18);
+const progGridPart = calculateProgress('ach_grid_one_master', stateGrid1Only);
+assert.strictEqual(progGridPart.current, 18);
+assert.strictEqual(progGridPart.target, ALL_CAMPAIGN_MAX_STARS);
+assert.strictEqual(progGridPart.satisfied, false, 'Sector 1 alone must not satisfy Sectors 1-4 mastery');
+
+const fullRecords = {};
+for (const lvlId of ALL_CAMPAIGN_LEVEL_IDS) {
+  fullRecords[lvlId] = { stars: 3 };
+}
+const progGridFull = calculateProgress('ach_grid_one_master', { campaign: { levelRecords: fullRecords } });
+assert.strictEqual(progGridFull.current, ALL_CAMPAIGN_MAX_STARS);
 assert.strictEqual(progGridFull.ratio, 1);
 assert.strictEqual(progGridFull.satisfied, true);
 

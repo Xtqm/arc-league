@@ -19,6 +19,13 @@ export const LEVEL_TYPES = Object.freeze({
   ARBITER: 'arbiter'
 });
 
+export const ARBITER_SPARK_REWARDS = Object.freeze({
+  level_01_06: 1,
+  level_02_07: 2,
+  level_03_07: 3,
+  level_04_08: 4
+});
+
 /**
  * Full campaign registry defining all 4 Grids and 28 levels.
  */
@@ -47,7 +54,7 @@ export const CAMPAIGN_GRIDS = Object.freeze([
         },
         payouts: {
           firstClearBits: 100,
-          repeatClearBits: 25,
+          repeatClearBits: 20,
           firstClearXp: 150,
           repeatClearXp: 30
         }
@@ -70,7 +77,7 @@ export const CAMPAIGN_GRIDS = Object.freeze([
         },
         payouts: {
           firstClearBits: 120,
-          repeatClearBits: 25,
+          repeatClearBits: 20,
           firstClearXp: 175,
           repeatClearXp: 35
         }
@@ -94,7 +101,7 @@ export const CAMPAIGN_GRIDS = Object.freeze([
         },
         payouts: {
           firstClearBits: 140,
-          repeatClearBits: 30,
+          repeatClearBits: 25,
           firstClearXp: 200,
           repeatClearXp: 40
         }
@@ -117,7 +124,7 @@ export const CAMPAIGN_GRIDS = Object.freeze([
         },
         payouts: {
           firstClearBits: 160,
-          repeatClearBits: 30,
+          repeatClearBits: 25,
           firstClearXp: 225,
           repeatClearXp: 45
         }
@@ -141,7 +148,7 @@ export const CAMPAIGN_GRIDS = Object.freeze([
         },
         payouts: {
           firstClearBits: 180,
-          repeatClearBits: 35,
+          repeatClearBits: 30,
           firstClearXp: 250,
           repeatClearXp: 50
         }
@@ -164,7 +171,8 @@ export const CAMPAIGN_GRIDS = Object.freeze([
         },
         payouts: {
           firstClearBits: 500,
-          repeatClearBits: 100,
+          repeatClearBits: 75,
+          firstThreeStarSparks: 1,
           firstClearXp: 500,
           repeatClearXp: 100
         }
@@ -336,7 +344,8 @@ export const CAMPAIGN_GRIDS = Object.freeze([
         },
         payouts: {
           firstClearBits: 500,
-          repeatClearBits: 100,
+          repeatClearBits: 75,
+          firstThreeStarSparks: 2,
           firstClearXp: 600,
           repeatClearXp: 120
         }
@@ -509,7 +518,8 @@ export const CAMPAIGN_GRIDS = Object.freeze([
         },
         payouts: {
           firstClearBits: 500,
-          repeatClearBits: 100,
+          repeatClearBits: 75,
+          firstThreeStarSparks: 3,
           firstClearXp: 750,
           repeatClearXp: 150
         }
@@ -708,7 +718,8 @@ export const CAMPAIGN_GRIDS = Object.freeze([
         },
         payouts: {
           firstClearBits: 500,
-          repeatClearBits: 100,
+          repeatClearBits: 75,
+          firstThreeStarSparks: 4,
           firstClearXp: 1000,
           repeatClearXp: 200
         }

@@ -217,6 +217,7 @@ export function normalizeSaveState(state = {}) {
       tilesDestroyed: Math.max(0, Number(stats.tilesDestroyed || 0)),
       highestWave: Math.max(1, Number(stats.highestWave || 1)),
       swarmHighestWave: Math.max(1, Number(stats.swarmHighestWave || stats.highestWave || 1)),
+      hardcoreSwarmHighestWave: Math.max(0, Number(stats.hardcoreSwarmHighestWave || 0)),
       highestTier: Math.max(1, Number(stats.highestTier || 1)),
       highestScore: Math.max(0, Number(stats.highestScore || 0)),
       totalScore: Math.max(0, Number(stats.totalScore || 0)),
@@ -476,6 +477,10 @@ export function mergeTelemetry(localStats = {}, cloudStats = {}) {
       Number(loc.swarmHighestWave || loc.highestWave || 1),
       Number(cld.swarmHighestWave || cld.highestWave || 1)
     ),
+    hardcoreSwarmHighestWave: Math.max(
+      Number(loc.hardcoreSwarmHighestWave || 0),
+      Number(cld.hardcoreSwarmHighestWave || 0)
+    ),
     highestScore: Math.max(Number(loc.highestScore || 0), Number(cld.highestScore || 0)),
     highestTier: Math.max(Number(loc.highestTier || 1), Number(cld.highestTier || 1)),
     totalScore: Math.max(Number(loc.totalScore || 0), Number(cld.totalScore || 0)),
@@ -603,6 +608,9 @@ export function evaluateMonotonicInvariants(candidate, baseline, baselineName = 
   }
   if (candidate.stats.highestWave < baseline.stats.highestWave) {
     violations.push(`Highest wave decreased: ${candidate.stats.highestWave} < ${baselineName} (${baseline.stats.highestWave})`);
+  }
+  if ((candidate.stats.hardcoreSwarmHighestWave || 0) < (baseline.stats.hardcoreSwarmHighestWave || 0)) {
+    violations.push(`Hardcore swarm highest wave decreased: ${candidate.stats.hardcoreSwarmHighestWave || 0} < ${baselineName} (${baseline.stats.hardcoreSwarmHighestWave || 0})`);
   }
   if (candidate.stats.highestTier < baseline.stats.highestTier) {
     violations.push(`Highest tier decreased: ${candidate.stats.highestTier} < ${baselineName} (${baseline.stats.highestTier})`);

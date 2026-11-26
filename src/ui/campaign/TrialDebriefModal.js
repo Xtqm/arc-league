@@ -130,7 +130,7 @@ export class TrialDebriefModal {
     const grid = this.registry.getGrid(level.gridId) || { name: 'SECTOR' };
 
     const isSuccess = Boolean(result.success);
-    const title = isSuccess ? 'TRIAL CLEARED' : 'DE-ALLOCATED // SIMULATION FAILED';
+    const title = isSuccess ? 'TRIAL CLEARED' : 'FRACTURED // SIMULATION FAILED';
     const subtitle = isSuccess
       ? `${level.name} // SECTOR PROTOCOL CONFIRMED`
       : 'PROGRAM INTEGRITY DEPLETED';
@@ -143,7 +143,7 @@ export class TrialDebriefModal {
       : Math.round((metrics.integrityRatio || 1) * 100);
     const precisionHits = metrics.precisionHits || (metrics.curveHits || 0) + (metrics.ricochetHits || 0);
 
-    const rewards = result.rewards || { bits: 0, xp: 0 };
+    const rewards = result.rewards || { credits: 0, bits: 0, sparks: 0, xp: 0 };
     const firstTimeClear = Boolean(result.firstTimeClear);
     const totalStars = result.totalStars || this.manager.getTotalStars();
 
@@ -155,10 +155,11 @@ export class TrialDebriefModal {
     );
 
     // Compute itemized rewards breakdown
-    const baseBits = rewards.bits;
-    const integrityBonusBits = evalData.star2 ? Math.round(baseBits * 0.25) : 0;
-    const masteryBonusBits = evalData.star3 ? Math.round(baseBits * 0.35) : 0;
-    const totalBitsPayout = baseBits + integrityBonusBits + masteryBonusBits;
+    const baseCredits = rewards.credits ?? rewards.bits ?? 0;
+    const sparksAwarded = rewards.sparks ?? 0;
+    const integrityBonusCredits = evalData.star2 ? Math.round(baseCredits * 0.25) : 0;
+    const masteryBonusCredits = evalData.star3 ? Math.round(baseCredits * 0.35) : 0;
+    const totalCreditsPayout = baseCredits + integrityBonusCredits + masteryBonusCredits;
 
     return `
       <div class="campaign-card debrief-card sector-theme-${level.gridId}">
@@ -188,19 +189,25 @@ export class TrialDebriefModal {
           </div>
           <div class="payout-row">
             <span>BASE CLEAR (${firstTimeClear ? 'FIRST CLEAR' : 'REPEAT CLEAR'}):</span>
-            <span>+${baseBits} BITS &nbsp; +${rewards.xp} XP</span>
+            <span>+${baseCredits} AC &nbsp; +${rewards.xp} XP</span>
           </div>
           <div class="payout-row">
             <span>INTEGRITY BONUS (&ge; 75% HP):</span>
-            <span style="color:${evalData.star2 ? '#00ffcc' : '#667788'};">+${integrityBonusBits} BITS</span>
+            <span style="color:${evalData.star2 ? '#00ffcc' : '#667788'};">+${integrityBonusCredits} AC</span>
           </div>
           <div class="payout-row">
             <span>MASTERY BONUS (TIME/TRICKSHOT):</span>
-            <span style="color:${evalData.star3 ? '#00ffcc' : '#667788'};">+${masteryBonusBits} BITS</span>
+            <span style="color:${evalData.star3 ? '#00ffcc' : '#667788'};">+${masteryBonusCredits} AC</span>
           </div>
+          ${sparksAwarded > 0 ? `
+          <div class="payout-row">
+            <span>ARBITER 3-STAR PRESTIGE:</span>
+            <span style="color:#bd00ff;">+${sparksAwarded} SPARK${sparksAwarded === 1 ? '' : 'S'}</span>
+          </div>
+          ` : ''}
           <div class="payout-row">
             <span>TOTAL YIELD ACCRUED:</span>
-            <span>+${totalBitsPayout} BITS</span>
+            <span>+${totalCreditsPayout} AC${sparksAwarded > 0 ? ` &nbsp; +${sparksAwarded} SPARK${sparksAwarded === 1 ? '' : 'S'}` : ''}</span>
           </div>
         </div>
 

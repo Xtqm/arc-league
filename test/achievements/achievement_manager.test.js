@@ -8,6 +8,7 @@ import {
   AchievementManager,
   AchievementEvents
 } from '../../src/achievements/AchievementManager.js';
+import { ALL_CAMPAIGN_LEVEL_IDS } from '../../src/achievements/AchievementRegistry.js';
 import { StorageEvents } from '../../src/core/storage/schema.js';
 
 console.log('--- Running Achievement Manager Test Suite (SPEC-ACHIEVE-001) ---');
@@ -81,12 +82,25 @@ function createMockStorage(initialState = {}) {
 // Mock Economy Manager
 function createMockEconomy() {
   let bits = 0;
+  let sparks = 0;
   const history = [];
   return {
     getBits: () => bits,
+    getCredits: () => bits,
+    getSparks: () => sparks,
     awardBits: (amount, source) => {
       bits += amount;
       history.push({ amount, source });
+      return true;
+    },
+    awardCredits: (amount, source) => {
+      bits += amount;
+      history.push({ amount, source });
+      return true;
+    },
+    awardSparks: (amount, source) => {
+      sparks += amount;
+      history.push({ sparks: amount, source });
       return true;
     },
     getHistory: () => [...history]
@@ -111,22 +125,21 @@ function createMockArmory() {
 // =========================================================================
 console.log('\n[Group 1] Testing Boot-Time Retroactive Reconciliation...');
 
+const fullCampaignRecords = {};
+for (const lvlId of ALL_CAMPAIGN_LEVEL_IDS) {
+  fullCampaignRecords[lvlId] = { stars: 3, completed: true, bestIntegrity: 0.9 };
+}
+
 const initialStorage = createMockStorage({
   stats: {
     totalDerezzes: 10,
     parriesExecuted: 5,
     curveEliminations: 0,
-    swarmHighestWave: 16
+    swarmHighestWave: 16,
+    hardcoreSwarmHighestWave: 15
   },
   campaign: {
-    levelRecords: {
-      level_01_01: { stars: 3, completed: true, bestIntegrity: 0.9 },
-      level_01_02: { stars: 3, completed: true, bestIntegrity: 0.8 },
-      level_01_03: { stars: 3, completed: true, bestIntegrity: 0.75 },
-      level_01_04: { stars: 3, completed: true, bestIntegrity: 0.95 },
-      level_01_05: { stars: 3, completed: true, bestIntegrity: 0.8 },
-      level_01_06: { stars: 3, completed: true, bestIntegrity: 0.85 }
-    }
+    levelRecords: fullCampaignRecords
   }
 });
 
@@ -179,8 +192,9 @@ assert.strictEqual(manager1.getPendingClaimCount(), 0);
 assert.strictEqual(manager1.isUnlocked('ach_swarm_survivor'), true);
 assert.strictEqual(manager1.isUnlocked('ach_grid_one_master'), true);
 
-// Rewards: 100 + 750 + 1000 = 1850 Bits
-assert.strictEqual(economy1.getBits(), 1850);
+// Rewards: 100 + 750 + 2500 = 3350 AC, and 5 Sparks
+assert.strictEqual(economy1.getCredits(), 3350);
+assert.strictEqual(economy1.getSparks(), 5);
 
 // Cosmetic rewards unlocked
 assert.ok(armory1.isUnlocked('discSkins', 'disc_corrupted_void'));
@@ -257,21 +271,21 @@ assert.strictEqual(manager2.getPendingClaimCount(), 2);
 assert.strictEqual(toastEvents.length, 0, 'Toasts remain suppressed mid-combat');
 assert.strictEqual(fanfareCount2, 0, 'Fanfare remains suppressed mid-combat');
 
-// Player visits Trophy Matrix and claims ach_parry_king
+// Player visits Trophy Matrix and claims ach_parry_king (500 AC)
 const claimedParry = manager2.claimReward('ach_parry_king');
 assert.strictEqual(claimedParry, true);
 assert.strictEqual(manager2.isUnlocked('ach_parry_king'), true);
-assert.strictEqual(economy2.getBits(), 250);
+assert.strictEqual(economy2.getCredits(), 500);
 assert.strictEqual(manager2.getPendingClaimCount(), 1);
 assert.strictEqual(fanfareCount2, 1);
 assert.strictEqual(unlockEvents.length, 1);
 assert.strictEqual(unlockEvents[0].achievementId, 'ach_parry_king');
 
-// Player claims rest in batch
+// Player claims rest in batch (ach_untouchable: 250 AC)
 const claimedBatch = manager2.claimAllRewards();
 assert.deepStrictEqual(claimedBatch, ['ach_untouchable']);
 assert.strictEqual(manager2.isUnlocked('ach_untouchable'), true);
-assert.strictEqual(economy2.getBits(), 250 + 500); // 750 Bits total
+assert.strictEqual(economy2.getCredits(), 500 + 250); // 750 AC total
 assert.strictEqual(manager2.getPendingClaimCount(), 0);
 assert.strictEqual(fanfareCount2, 2);
 

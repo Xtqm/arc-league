@@ -73,7 +73,7 @@ export function resetHUDDirtyState() {
 
 export function setCombatHUDVisibility(visible) {
   if (typeof document === 'undefined') return;
-  const ids = ['tr', 'bottomDock', 'reticle', 'crosshair', 'lockPrompt', 'lockstate', 'keymon'];
+  const ids = ['tl', 'tr', 'bottomDock', 'reticle', 'crosshair', 'lockPrompt', 'lockstate', 'keymon'];
   for (const id of ids) {
     const element = getCachedElement(id);
     if (element) {
@@ -655,99 +655,101 @@ export function updateOfflineBanner(isOnline, pendingCount = 0) {
   }
 }
 
+export const MAX_TACTICAL_XP_ENTRIES = 4;
+export const TACTICAL_XP_DURATION_MS = 2000;
+
 /**
- * Spawns an animated kinetic floating neon +Credits indicator on the HUD.
- * @param {number} amount
- * @param {string} [label=''] e.g. "PARRY", "BANK SHOT", "CURVE KILL"
+ * Pushes a non-overlapping tactical XP maneuver entry into the top-left `#tl` Flexbox queue.
+ * Caps visible entries at 4 and fades/removes each entry after 2.0s.
+ * @param {number} xp
+ * @param {string} [label=''] e.g. "PARRY", "DOUBLE BANK", "CURVE FRACTURE"
  * @param {object} [options]
  * @returns {object|null}
  */
-export function showFloatingNeonCredits(amount, label = '', options = {}) {
+export function showTacticalXP(xp, label = '', options = {}) {
   if (typeof document === 'undefined') return null;
 
-  let container = document.getElementById('floatingEconomyLayer');
+  let container = document.getElementById('tl');
   if (!container) {
     container = document.createElement('div');
-    container.id = 'floatingEconomyLayer';
-    container.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;overflow:hidden;';
+    container.id = 'tl';
+    container.style.cssText = 'position:fixed;top:12px;left:12px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;pointer-events:none;z-index:50;';
     if (document.body) {
       document.body.appendChild(container);
     }
+  } else {
+    container.style.display = 'flex';
+    if (!container.style.flexDirection) container.style.flexDirection = 'column';
+    if (!container.style.gap) container.style.gap = '6px';
+    container.style.pointerEvents = 'none';
+  }
 
-    if (document.head && !document.getElementById('floatingNeonBitsStyle')) {
-      const style = document.createElement('style');
-      style.id = 'floatingNeonBitsStyle';
-      style.textContent = `
-        @keyframes neonFloatRise {
-          0% {
-            opacity: 0;
-            transform: translate(-50%, 0) scale(0.85);
-          }
-          18% {
-            opacity: 1;
-            transform: translate(-50%, -16px) scale(1.12);
-          }
-          75% {
-            opacity: 1;
-            transform: translate(-50%, -46px) scale(1.0);
-          }
-          100% {
-            opacity: 0;
-            transform: translate(-50%, -70px) scale(0.9);
-          }
-        }
-      `;
-      document.head.appendChild(style);
+  // Enforce bounded capacity of 4 visible entries
+  const existing = container.querySelectorAll('.tactical-xp-entry');
+  if (existing.length >= MAX_TACTICAL_XP_ENTRIES) {
+    const excess = existing.length - MAX_TACTICAL_XP_ENTRIES + 1;
+    for (let i = 0; i < excess; i++) {
+      const oldest = existing[i];
+      if (oldest._cleanup) {
+        oldest._cleanup();
+      } else if (oldest.parentNode) {
+        oldest.parentNode.removeChild(oldest);
+      }
     }
   }
 
-  const badge = document.createElement('div');
-  badge.className = 'floating-neon-bits';
+  const entry = document.createElement('div');
+  entry.className = 'tactical-xp-entry';
   const labelText = label ? ` // ${label}` : '';
-  badge.textContent = `+${amount} CREDITS${labelText}`;
-
-  const jitterX = (Math.random() - 0.5) * 80;
-  const posX = options.x !== undefined ? options.x : (typeof window !== 'undefined' && window.innerWidth ? window.innerWidth / 2 + jitterX : 200);
-  const posY = options.y !== undefined ? options.y : (typeof window !== 'undefined' && window.innerHeight ? window.innerHeight * 0.38 : 150);
+  entry.textContent = `+${xp} XP${labelText}`;
 
   const accentColor = options.color || '#00f3ff';
   const glowColor = options.glow || '#0066ff';
+  entry.style.setProperty('--xp-accent', accentColor);
+  entry.style.color = accentColor;
+  entry.style.textShadow = `0 0 8px ${glowColor}`;
 
-  badge.style.cssText = `
-    position: absolute;
-    left: ${posX}px;
-    top: ${posY}px;
-    color: ${accentColor};
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 800;
-    letter-spacing: 2.5px;
-    text-shadow: 0 0 10px ${accentColor}, 0 0 20px ${glowColor}, 0 0 35px #ffffff;
-    pointer-events: none;
-    user-select: none;
-    animation: neonFloatRise 0.9s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
-    white-space: nowrap;
-    z-index: 10000;
-  `;
+  container.appendChild(entry);
 
-  container.appendChild(badge);
+  const durationMs = typeof options.durationMs === 'number' && options.durationMs > 0
+    ? options.durationMs
+    : TACTICAL_XP_DURATION_MS;
+  const fadeLeadMs = Math.min(250, Math.floor(durationMs * 0.25));
 
-  const timer = setTimeout(() => {
-    if (badge.parentNode) {
-      badge.parentNode.removeChild(badge);
+  const fadeTimer = setTimeout(() => {
+    entry.classList.add('fading');
+    entry.style.opacity = '0';
+  }, Math.max(0, durationMs - fadeLeadMs));
+
+  const removeTimer = setTimeout(() => {
+    if (entry.parentNode) {
+      entry.parentNode.removeChild(entry);
     }
-  }, 950);
+  }, durationMs);
 
-  return {
-    element: badge,
-    container,
-    cleanup: () => {
-      clearTimeout(timer);
-      if (badge.parentNode) {
-        badge.parentNode.removeChild(badge);
-      }
+  const cleanup = () => {
+    clearTimeout(fadeTimer);
+    clearTimeout(removeTimer);
+    if (entry.parentNode) {
+      entry.parentNode.removeChild(entry);
     }
   };
+  entry._cleanup = cleanup;
+
+  return {
+    element: entry,
+    container,
+    cleanup
+  };
+}
+
+/**
+ * Deprecated wrapper: redirects legacy floating +Credits maneuver calls
+ * into the top-left `#tl` tactical XP log.
+ * @deprecated Use showTacticalXP instead.
+ */
+export function showFloatingNeonCredits(amount, label = '', options = {}) {
+  return showTacticalXP(amount, label, options);
 }
 
 export const showFloatingNeonBits = showFloatingNeonCredits;

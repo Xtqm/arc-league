@@ -14,22 +14,35 @@
 
 import { economyManager as defaultEconomyManager } from '../core/economy/EconomyManager.js';
 import { storageManager as defaultStorageManager } from '../core/storage/StorageManager.js';
-import { showFloatingNeonBits } from '../ui/hud.js';
+import { showTacticalXP } from '../ui/hud.js';
 
 export const DUEL_PAYOUT_CONFIG = Object.freeze({
-  AI_VICTORY_BITS: 50,
-  AI_VICTORY_XP: 150,
-  MULTIPLAYER_VICTORY_BITS: 100,
+  AI_VICTORY_BITS: 0,
+  AI_VICTORY_XP: 0,
+  AI_ZERO_TIERS_CREDITS: 0,
+  AI_ZERO_TIERS_XP: 25,
+  AI_TIER_1_5_CREDITS: 25,
+  AI_TIER_1_5_XP: 80,
+  AI_TIER_6_PLUS_CREDITS: 35,
+  AI_TIER_6_PLUS_XP: 100,
+  MULTIPLAYER_VICTORY_CREDITS: 120,
+  MULTIPLAYER_VICTORY_BITS: 120,
   MULTIPLAYER_VICTORY_XP: 300,
-  AI_DEFEAT_XP: 40,
-  MULTIPLAYER_DEFEAT_XP: 75,
-  PARRY_BITS: 10,
-  PARRY_XP: 20,
-  RICOCHET_BASE_BITS: 15,
-  RICOCHET_EXTRA_BITS_PER_BOUNCE: 5,
+  MULTIPLAYER_DEFEAT_CREDITS: 15,
+  MULTIPLAYER_DEFEAT_BITS: 15,
+  MULTIPLAYER_DEFEAT_XP: 80,
+  AI_DEFEAT_XP: 25,
+  PARRY_CREDITS: 0,
+  PARRY_BITS: 0,
+  PARRY_XP: 40,
+  RICOCHET_BASE_CREDITS: 0,
+  RICOCHET_BASE_BITS: 0,
+  RICOCHET_BASE_XP: 30,
+  RICOCHET_EXTRA_XP_PER_BOUNCE: 10,
   RICOCHET_XP: 30,
-  CURVE_KILL_BITS: 25,
-  CURVE_KILL_XP: 50
+  CURVE_KILL_CREDITS: 0,
+  CURVE_KILL_BITS: 0,
+  CURVE_KILL_XP: 25
 });
 
 export const DuelEconomyEvents = Object.freeze({
@@ -49,7 +62,7 @@ export class DuelEconomyBridge {
     this.storage = options.storage || defaultStorageManager;
     this.floatingIndicatorFn = typeof options.floatingIndicatorFn === 'function'
       ? options.floatingIndicatorFn
-      : (...args) => showFloatingNeonBits(...args);
+      : (...args) => showTacticalXP(...args);
     this._listeners = new Map();
   }
 
@@ -88,18 +101,16 @@ export class DuelEconomyBridge {
   // ==========================================
 
   /**
-   * Awards Bits + XP for a confirmed incoming disc parry.
-   * Spawns a cyan floating HUD indicator.
+   * Awards XP (and 0 Arc Credits) for a confirmed incoming disc parry.
+   * Emits a top-left tactical XP HUD event.
    * @param {object} [details]
    * @returns {object} Reward payload
    */
   rewardParry(details = {}) {
-    const bits = DUEL_PAYOUT_CONFIG.PARRY_BITS;
+    const bits = 0;
+    const credits = 0;
     const xp = DUEL_PAYOUT_CONFIG.PARRY_XP;
 
-    if (this.economy && typeof this.economy.awardBits === 'function') {
-      this.economy.awardBits(bits, 'maneuver_parry');
-    }
     if (this.economy && typeof this.economy.awardXP === 'function') {
       this.economy.awardXP(xp, 'maneuver_parry');
     }
@@ -113,22 +124,23 @@ export class DuelEconomyBridge {
 
     if (typeof this.floatingIndicatorFn === 'function') {
       try {
-        this.floatingIndicatorFn(bits, 'PARRY', {
+        this.floatingIndicatorFn(xp, 'PARRY', {
           color: '#ffffff',
           glow: '#00f3ff',
+          isXP: true,
           ...details
         });
       } catch (_) {}
     }
 
-    const payload = { maneuver: 'parry', bits, xp, details };
+    const payload = { maneuver: 'parry', credits, bits, xp, label: 'PARRY', details };
     this.emit(DuelEconomyEvents.MANEUVER_REWARD, payload);
     return payload;
   }
 
   /**
-   * Awards Bits + XP for a disc strike executing 2 or more ricochet bounces.
-   * Spawns an amber/gold floating HUD indicator.
+   * Awards XP (and 0 Arc Credits) for a disc strike executing 2 or more ricochet bounces.
+   * Emits a top-left tactical XP HUD event.
    * @param {number} bounces
    * @param {object} [details]
    * @returns {object|null} Reward payload or null if bounces < 2
@@ -138,12 +150,10 @@ export class DuelEconomyBridge {
     if (b < 2) return null;
 
     const extraBounces = b - 2;
-    const bits = DUEL_PAYOUT_CONFIG.RICOCHET_BASE_BITS + (extraBounces * DUEL_PAYOUT_CONFIG.RICOCHET_EXTRA_BITS_PER_BOUNCE);
-    const xp = DUEL_PAYOUT_CONFIG.RICOCHET_XP;
+    const bits = 0;
+    const credits = 0;
+    const xp = DUEL_PAYOUT_CONFIG.RICOCHET_BASE_XP + (extraBounces * DUEL_PAYOUT_CONFIG.RICOCHET_EXTRA_XP_PER_BOUNCE);
 
-    if (this.economy && typeof this.economy.awardBits === 'function') {
-      this.economy.awardBits(bits, `maneuver_ricochet_${b}`);
-    }
     if (this.economy && typeof this.economy.awardXP === 'function') {
       this.economy.awardXP(xp, `maneuver_ricochet_${b}`);
     }
@@ -151,33 +161,32 @@ export class DuelEconomyBridge {
     const label = b === 2 ? 'DOUBLE BANK' : `${b}x BANK SHOT`;
     if (typeof this.floatingIndicatorFn === 'function') {
       try {
-        this.floatingIndicatorFn(bits, label, {
+        this.floatingIndicatorFn(xp, label, {
           color: '#ffaa00',
           glow: '#ff5500',
+          isXP: true,
           ...details
         });
       } catch (_) {}
     }
 
-    const payload = { maneuver: 'ricochet_hit', bounces: b, bits, xp, details };
+    const payload = { maneuver: 'ricochet_hit', bounces: b, credits, bits, xp, label, details };
     this.emit(DuelEconomyEvents.MANEUVER_REWARD, payload);
     return payload;
   }
 
   /**
-   * Awards Bits + XP for eliminating a foe using a curved disc throw.
-   * Spawns a plasma violet floating HUD indicator.
+   * Awards XP (and 0 Arc Credits) for eliminating a foe using a curved disc throw.
+   * Emits a top-left tactical XP HUD event.
    * @param {number} [curveIntensity=0]
    * @param {object} [details]
    * @returns {object} Reward payload
    */
   rewardCurveElimination(curveIntensity = 0, details = {}) {
-    const bits = DUEL_PAYOUT_CONFIG.CURVE_KILL_BITS;
+    const bits = 0;
+    const credits = 0;
     const xp = DUEL_PAYOUT_CONFIG.CURVE_KILL_XP;
 
-    if (this.economy && typeof this.economy.awardBits === 'function') {
-      this.economy.awardBits(bits, 'maneuver_curve_kill');
-    }
     if (this.economy && typeof this.economy.awardXP === 'function') {
       this.economy.awardXP(xp, 'maneuver_curve_kill');
     }
@@ -191,25 +200,121 @@ export class DuelEconomyBridge {
 
     if (typeof this.floatingIndicatorFn === 'function') {
       try {
-        this.floatingIndicatorFn(bits, 'CURVE KILL', {
+        this.floatingIndicatorFn(xp, 'CURVE FRACTURE', {
           color: '#bd00ff',
           glow: '#7700ff',
+          isXP: true,
           ...details
         });
       } catch (_) {}
     }
 
-    const payload = { maneuver: 'curve_elimination', curveIntensity, bits, xp, details };
+    const payload = { maneuver: 'curve_elimination', curveIntensity, credits, bits, xp, label: 'CURVE FRACTURE', details };
     this.emit(DuelEconomyEvents.MANEUVER_REWARD, payload);
     return payload;
   }
 
   // ==========================================
-  // Match Termination Payouts
+  // Match Termination & Session-End Payouts
   // ==========================================
 
   /**
+   * Settles an AI Practice (duel_ai) run based on tiers cleared during the session.
+   * - 0 tiers cleared: 0 AC + 25 XP
+   * - Tiers 1-5 beaten: 25 AC + 80 XP per tier
+   * - Tier 6+ beaten: 35 AC + 100 XP per tier
+   * @param {number} tiersCleared
+   * @param {object} [context={}]
+   * @returns {object} Payout summary
+   */
+  settleAIPracticeSession(tiersCleared, context = {}) {
+    const cleared = Math.max(0, Math.floor(Number(tiersCleared) || 0));
+    const startTier = context.startTier != null
+      ? Math.max(1, Math.floor(Number(context.startTier) || 1))
+      : (context.currentTier != null
+        ? Math.max(1, Math.floor(Number(context.currentTier) || 1) - cleared)
+        : 1);
+
+    let credits = 0;
+    let xp = 0;
+
+    if (cleared === 0) {
+      credits = DUEL_PAYOUT_CONFIG.AI_ZERO_TIERS_CREDITS;
+      xp = DUEL_PAYOUT_CONFIG.AI_ZERO_TIERS_XP;
+    } else {
+      for (let t = startTier; t < startTier + cleared; t++) {
+        if (t <= 5) {
+          credits += DUEL_PAYOUT_CONFIG.AI_TIER_1_5_CREDITS;
+          xp += DUEL_PAYOUT_CONFIG.AI_TIER_1_5_XP;
+        } else {
+          credits += DUEL_PAYOUT_CONFIG.AI_TIER_6_PLUS_CREDITS;
+          xp += DUEL_PAYOUT_CONFIG.AI_TIER_6_PLUS_XP;
+        }
+      }
+    }
+
+    const source = 'duel_ai_session';
+    if (credits > 0 && this.economy) {
+      if (typeof this.economy.awardCredits === 'function') {
+        this.economy.awardCredits(credits, source);
+      } else if (typeof this.economy.awardBits === 'function') {
+        this.economy.awardBits(credits, source);
+      }
+    }
+    if (xp > 0 && this.economy && typeof this.economy.awardXP === 'function') {
+      this.economy.awardXP(xp, source);
+    }
+
+    const payload = {
+      outcome: context.outcome || 'session_end',
+      mode: 'ai',
+      sessionTiersCleared: cleared,
+      startTier,
+      credits,
+      bits: credits,
+      xp,
+      isVictory: cleared > 0,
+      context
+    };
+
+    this.emit(DuelEconomyEvents.MATCH_PAYOUT, payload);
+    return payload;
+  }
+
+  /**
+   * Atomically settles an AI Practice session from live state once per run.
+   * Resets sessionTiersCleared to 0 and sets aiPracticeSettled = true immediately.
+   * @param {object} targetState
+   * @param {'defeat'|'exit'} [outcome='defeat']
+   * @returns {object|null}
+   */
+  settleAIPracticeFromState(targetState, outcome = 'defeat') {
+    if (!targetState) return null;
+    const isDuelAi = targetState.gameMode === 'duel' || targetState.gameMode === 'duel_ai';
+    if (!isDuelAi || targetState.aiPracticeSettled) {
+      return null;
+    }
+    if (targetState.matchmakingQueueState && targetState.matchmakingQueueState !== 'idle') {
+      targetState.sessionTiersCleared = 0;
+      targetState.aiPracticeSettled = true;
+      return null;
+    }
+
+    const cleared = Math.max(0, Math.floor(Number(targetState.sessionTiersCleared) || 0));
+    const currentTier = Math.max(1, Math.floor(Number(targetState.duelTier || targetState.tier || 1)));
+    targetState.aiPracticeSettled = true;
+    targetState.sessionTiersCleared = 0;
+
+    return this.settleAIPracticeSession(cleared, {
+      currentTier,
+      outcome
+    });
+  }
+
+  /**
    * Processes final match economy payouts based on victory/defeat and match mode.
+   * Ranked PvP ('multiplayer') awards 120 AC + 300 XP on victory and 15 AC + 80 XP on defeat.
+   * AI Practice ('ai') suppresses mid-run victory payouts and settles via sessionTiersCleared.
    * @param {'victory'|'defeat'} outcome
    * @param {'ai'|'multiplayer'} [mode='ai']
    * @param {object} [context={}]
@@ -219,36 +324,49 @@ export class DuelEconomyBridge {
     const isVictory = outcome === 'victory';
     const isMultiplayer = mode === 'multiplayer';
 
-    let bits = 0;
-    let xp = 0;
-
-    if (isVictory) {
-      if (isMultiplayer) {
-        bits = DUEL_PAYOUT_CONFIG.MULTIPLAYER_VICTORY_BITS;
-        xp = DUEL_PAYOUT_CONFIG.MULTIPLAYER_VICTORY_XP;
-      } else {
-        bits = DUEL_PAYOUT_CONFIG.AI_VICTORY_BITS;
-        xp = DUEL_PAYOUT_CONFIG.AI_VICTORY_XP;
+    if (!isMultiplayer) {
+      if (isVictory) {
+        return {
+          outcome,
+          mode,
+          credits: 0,
+          bits: 0,
+          xp: 0,
+          isVictory: true,
+          deferred: true,
+          context
+        };
       }
-    } else {
-      // Defeat participation credit (0 Bits, bounded XP)
-      bits = 0;
-      xp = isMultiplayer
-        ? DUEL_PAYOUT_CONFIG.MULTIPLAYER_DEFEAT_XP
-        : DUEL_PAYOUT_CONFIG.AI_DEFEAT_XP;
+      return this.settleAIPracticeSession(context.sessionTiersCleared ?? 0, {
+        ...context,
+        outcome
+      });
     }
 
-    if (bits > 0 && this.economy && typeof this.economy.awardBits === 'function') {
-      this.economy.awardBits(bits, `duel_${mode}_${outcome}`);
+    const credits = isVictory
+      ? DUEL_PAYOUT_CONFIG.MULTIPLAYER_VICTORY_CREDITS
+      : DUEL_PAYOUT_CONFIG.MULTIPLAYER_DEFEAT_CREDITS;
+    const xp = isVictory
+      ? DUEL_PAYOUT_CONFIG.MULTIPLAYER_VICTORY_XP
+      : DUEL_PAYOUT_CONFIG.MULTIPLAYER_DEFEAT_XP;
+
+    const source = `duel_${mode}_${outcome}`;
+    if (credits > 0 && this.economy) {
+      if (typeof this.economy.awardCredits === 'function') {
+        this.economy.awardCredits(credits, source);
+      } else if (typeof this.economy.awardBits === 'function') {
+        this.economy.awardBits(credits, source);
+      }
     }
     if (xp > 0 && this.economy && typeof this.economy.awardXP === 'function') {
-      this.economy.awardXP(xp, `duel_${mode}_${outcome}`);
+      this.economy.awardXP(xp, source);
     }
 
     const payload = {
       outcome,
       mode,
-      bits,
+      credits,
+      bits: credits,
       xp,
       isVictory,
       context

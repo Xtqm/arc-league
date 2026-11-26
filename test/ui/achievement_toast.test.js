@@ -79,7 +79,7 @@ try {
   const toastEl = mockParent.children[0];
   assert.strictEqual(toastEl.className, 'tron-achievement-toast');
   assert.ok(toastEl.innerHTML.includes('Initial Execution'), 'Toast must display achievement title');
-  assert.ok(toastEl.innerHTML.includes('+100 BITS'), 'Toast must render Bits reward badge');
+  assert.ok(toastEl.innerHTML.includes('+100 AC'), 'Toast must render AC reward badge');
   assert.ok(toastEl.innerHTML.includes('⚡'), 'Toast must display achievement icon');
   assert.ok(typeof toastEl.onclick === 'function', 'Toast must attach click dismiss listener');
 
@@ -112,7 +112,7 @@ try {
 
   toastManager2.show(swarmAchievement);
   const toastEl2 = mockParent2.children[0];
-  assert.ok(toastEl2.innerHTML.includes('+750 BITS'), 'Must render bits reward badge');
+  assert.ok(toastEl2.innerHTML.includes('+750 AC'), 'Must render AC reward badge');
   assert.ok(toastEl2.innerHTML.includes('CORRUPTED VOID'), 'Must render cosmetic reward badge');
 
   console.log('✓ Group 2: Dual Bits & Cosmetic skin rewards verified.');

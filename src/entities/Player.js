@@ -660,6 +660,8 @@ export function resetGame(options = {}) {
   state.gameOverReason = '';
 
   if (state.gameMode === 'duel' || state.gameMode === 'duel_ai') {
+    state.sessionTiersCleared = 0;
+    state.aiPracticeSettled = false;
     if (preserveTier) {
       const targetTier = Math.max(1, state.tier || state.duelTier || 1);
       state.tier = targetTier;

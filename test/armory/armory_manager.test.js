@@ -66,12 +66,12 @@ for (const item of allItems) {
   assert.ok(item.category, `Item must have a category: ${item.id}`);
   assert.ok(item.description, `Item must have a description: ${item.id}`);
   assert.ok(
-    [UNLOCK_TYPES.FREE, UNLOCK_TYPES.BITS, UNLOCK_TYPES.ACHIEVEMENT].includes(item.unlockType),
+    [UNLOCK_TYPES.FREE, UNLOCK_TYPES.BITS, UNLOCK_TYPES.CREDITS, UNLOCK_TYPES.SPARKS, UNLOCK_TYPES.ACHIEVEMENT].includes(item.unlockType),
     `Invalid unlockType for ${item.id}`
   );
   assert.strictEqual(typeof item.cost, 'number', `Cost must be numeric for ${item.id}`);
-  if (item.unlockType === UNLOCK_TYPES.BITS) {
-    assert.ok(item.cost > 0, `Bits item must have cost > 0: ${item.id}`);
+  if (item.unlockType === UNLOCK_TYPES.BITS || item.unlockType === UNLOCK_TYPES.CREDITS || item.unlockType === UNLOCK_TYPES.SPARKS) {
+    assert.ok(item.cost > 0, `Paid item must have cost > 0: ${item.id}`);
   } else {
     assert.strictEqual(item.cost, 0, `Free/achievement item must have cost 0: ${item.id}`);
   }
@@ -94,7 +94,7 @@ for (const chassis of chassisSkins) {
 // 1.5 Individual item lookups
 const amberDisc = getCatalogItem('disc_neon_amber');
 assert.ok(amberDisc);
-assert.strictEqual(amberDisc.cost, 400);
+assert.strictEqual(amberDisc.cost, 1200);
 assert.strictEqual(amberDisc.category, ARMORY_CATEGORIES.DISC_SKINS);
 
 const voidDisc = getCatalogItem('disc_corrupted_void');
@@ -242,15 +242,15 @@ testStorage.set('player.currency.bits', 350);
 assert.strictEqual(armory.canPurchase('disc_neon_amber'), false);
 
 // 3.4 Exact balance sufficient
-testStorage.set('player.currency.bits', 400);
+testStorage.set('player.currency.bits', 1200);
 assert.strictEqual(armory.canPurchase('disc_neon_amber'), true);
-assert.strictEqual(armory.canPurchase('disc_retro_green'), false); // Cost: 600
+assert.strictEqual(armory.canPurchase('disc_retro_green'), false); // Cost: 2000
 
 // 3.5 Abundant balance sufficient
-testStorage.set('player.currency.bits', 1500);
+testStorage.set('player.currency.bits', 15000);
 assert.strictEqual(armory.canPurchase('disc_retro_green'), true);
-assert.strictEqual(armory.canPurchase('arena_zero_g_nexus'), true); // Cost: 1000
-assert.strictEqual(armory.canPurchase('arena_derez_chasm'), true); // Cost: 1500
+assert.strictEqual(armory.canPurchase('arena_zero_g_nexus'), true); // Cost: 10000
+assert.strictEqual(armory.canPurchase('arena_derez_chasm'), true); // Cost: 15000
 
 console.log('✓ Group 3: Purchase feasibility and currency guards validated.');
 
@@ -260,26 +260,26 @@ console.log('✓ Group 3: Purchase feasibility and currency guards validated.');
 console.log('\n[Group 4] Testing Atomic Purchase Execution & State Persistence...');
 
 testStorage.reset();
-testEconomy.awardBits(1000, 'campaign_reward');
-assert.strictEqual(testEconomy.getBits(), 1000);
+testEconomy.awardBits(3000, 'campaign_reward');
+assert.strictEqual(testEconomy.getBits(), 3000);
 
 let unlockedEventPayload = null;
 const unsubscribeUnlock = armory.on(ArmoryEvents.ITEM_UNLOCKED, (payload) => {
   unlockedEventPayload = payload;
 });
 
-// 4.1 Purchase disc_neon_amber (Cost: 400 Bits)
+// 4.1 Purchase disc_neon_amber (Cost: 1200 AC)
 const purchaseSuccess = armory.purchaseItem('disc_neon_amber');
 assert.strictEqual(purchaseSuccess, true, 'Purchase should succeed');
 
-// Balance must be exactly 1000 - 400 = 600
-assert.strictEqual(testEconomy.getBits(), 600, 'Bits balance must reflect 400 Bits deduction');
+// Balance must be exactly 3000 - 1200 = 1800
+assert.strictEqual(testEconomy.getBits(), 1800, 'Balance must reflect 1200 AC deduction');
 
 // Event payload verification
 assert.ok(unlockedEventPayload, 'ARMORY_ITEM_UNLOCKED must be emitted');
 assert.strictEqual(unlockedEventPayload.category, ARMORY_CATEGORIES.DISC_SKINS);
 assert.strictEqual(unlockedEventPayload.itemId, 'disc_neon_amber');
-assert.strictEqual(unlockedEventPayload.cost, 400);
+assert.strictEqual(unlockedEventPayload.cost, 1200);
 assert.ok(unlockedEventPayload.timestamp > 0);
 
 // Ownership is now unlocked
@@ -293,28 +293,36 @@ assert.ok(storedDiscSkins.includes('disc_neon_amber'), 'Inventory array must con
 unlockedEventPayload = null;
 const repurchaseAttempt = armory.purchaseItem('disc_neon_amber');
 assert.strictEqual(repurchaseAttempt, false, 'Repurchasing owned item must be rejected');
-assert.strictEqual(testEconomy.getBits(), 600, 'Balance must not change on rejected repurchase');
+assert.strictEqual(testEconomy.getBits(), 1800, 'Balance must not change on rejected repurchase');
 assert.strictEqual(unlockedEventPayload, null, 'No event should be emitted on rejected purchase');
 
 // 4.3 Purchasing with insufficient Bits is rejected
 // Current balance is 600. chassis_black_guard costs 1200 Bits.
 const expensiveAttempt = armory.purchaseItem('chassis_black_guard');
 assert.strictEqual(expensiveAttempt, false, 'Insufficient funds purchase must be rejected');
-assert.strictEqual(testEconomy.getBits(), 600, 'Balance must remain intact');
+assert.strictEqual(testEconomy.getBits(), 1800, 'Balance must remain intact');
 assert.strictEqual(armory.isUnlocked(ARMORY_CATEGORIES.CHASSIS_SKINS, 'chassis_black_guard'), false);
 
 // 4.4 Purchasing map arena_zero_g_nexus (Cost 1000 Bits, balance is 600 -> reject)
 assert.strictEqual(armory.purchaseItem('arena_zero_g_nexus'), false);
 
-// Add 500 Bits -> balance 1100 -> buy arena_zero_g_nexus (1000 Bits) -> balance 100
-testEconomy.awardBits(500, 'match_reward');
-assert.strictEqual(testEconomy.getBits(), 1100);
+// Add 8300 AC -> balance 10100 -> buy arena_zero_g_nexus (10000 AC) -> balance 100
+testEconomy.awardBits(8300, 'match_reward');
+assert.strictEqual(testEconomy.getBits(), 10100);
 assert.strictEqual(armory.purchaseItem('arena_zero_g_nexus'), true);
 assert.strictEqual(testEconomy.getBits(), 100);
 assert.strictEqual(armory.isUnlocked(ARMORY_CATEGORIES.UNLOCKED_MAPS, 'arena_zero_g_nexus'), true);
 
 const storedMaps = testStorage.get('inventory.unlockedMaps', []);
 assert.ok(storedMaps.includes('arena_zero_g_nexus'), 'Map must be saved to inventory.unlockedMaps');
+
+// 4.4b Sparks-priced items (disc_hex_dark_matter: 75 Sparks)
+assert.strictEqual(armory.canPurchase('disc_hex_dark_matter'), false, 'Insufficient Sparks must reject purchase');
+testEconomy.awardSparks(75, 'hardcore_test');
+assert.strictEqual(armory.canPurchase('disc_hex_dark_matter'), true);
+assert.strictEqual(armory.purchaseItem('disc_hex_dark_matter'), true);
+assert.strictEqual(testEconomy.getSparks(), 0);
+assert.strictEqual(armory.isUnlocked(ARMORY_CATEGORIES.DISC_SKINS, 'disc_hex_dark_matter'), true);
 
 // 4.5 Directly unlocking reward items via unlockRewardItem
 let rewardUnlockPayload = null;

@@ -208,7 +208,9 @@ export class ArmoryModal {
       : (typeof this.economy.getBalance === 'function'
         ? this.economy.getBalance()
         : (typeof this.economy.getBits === 'function' ? this.economy.getBits() : 0));
-    const formattedBits = `CR ${balance.toLocaleString()}`;
+    const sparks = typeof this.economy.getSparks === 'function' ? this.economy.getSparks() : 0;
+    const formattedCredits = `${balance.toLocaleString()} AC`;
+    const formattedSparks = `${sparks.toLocaleString()} SPARKS`;
 
     return `
       <div class="armory-card" id="armoryCard">
@@ -228,7 +230,9 @@ export class ArmoryModal {
           <div class="armory-header-right">
             <div class="armory-bits-counter" id="armoryBitsCounter">
               <span style="color:#ffaa00;font-size:14px;">◆</span>
-              <span id="armoryBitsValue">${formattedBits}</span>
+              <span id="armoryBitsValue">${formattedCredits}</span>
+              <span style="color:#bd00ff;font-size:14px;margin-left:10px;">✦</span>
+              <span id="armorySparksValue">${formattedSparks}</span>
             </div>
             ${!this._inHub ? `<button class="armory-close-btn" id="armoryCloseBtn" title="Return to Grid (ESC)">[ESC // RETURN]</button>` : ''}
           </div>
@@ -291,8 +295,10 @@ export class ArmoryModal {
         badgeHtml = `<span class="armory-card-badge badge-equipped">EQUIPPED</span>`;
       } else if (isUnlocked) {
         badgeHtml = `<span class="armory-card-badge badge-owned">OWNED</span>`;
+      } else if (item.unlockType === UNLOCK_TYPES.SPARKS) {
+        badgeHtml = `<span class="armory-card-badge badge-cost badge-sparks">${item.cost} SPARKS</span>`;
       } else if (item.unlockType === UNLOCK_TYPES.BITS || item.unlockType === UNLOCK_TYPES.CREDITS) {
-        badgeHtml = `<span class="armory-card-badge badge-cost">${item.cost} CREDITS</span>`;
+        badgeHtml = `<span class="armory-card-badge badge-cost">${item.cost} AC</span>`;
       } else {
         badgeHtml = `<span class="armory-card-badge badge-locked">LOCKED</span>`;
       }
@@ -393,20 +399,25 @@ export class ArmoryModal {
       `;
     }
 
-    // 4. Credit Purchasable: check affordability
+    // 4. Credit / Sparks Purchasable: check affordability
+    const isSparks = item.unlockType === UNLOCK_TYPES.SPARKS;
+    const currencyUnit = isSparks ? 'SPARKS' : 'AC';
+    const insufficientMsg = isSparks
+      ? 'INSUFFICIENT SPARKS // CLEAR HARDCORE SWARM OR ARBITERS'
+      : 'INSUFFICIENT AC // COMPETE IN THE ARCFIELD';
     const canAfford = this.armory.canPurchase(item.id);
     if (canAfford) {
       return `
         <button class="armory-action-btn btn-fabricate" id="armoryActionBtn" data-action="fabricate" data-item-id="${item.id}">
-          [ ACQUIRE // ${item.cost} CREDITS ]
+          [ ACQUIRE // ${item.cost} ${currencyUnit} ]
         </button>
       `;
     } else {
       return `
         <button class="armory-action-btn btn-fabricate" id="armoryActionBtn" disabled>
-          [ ACQUIRE // ${item.cost} CREDITS ]
+          [ ACQUIRE // ${item.cost} ${currencyUnit} ]
         </button>
-        <div class="armory-action-warning">INSUFFICIENT CREDITS // COMPETE IN THE ARCFIELD</div>
+        <div class="armory-action-warning">${insufficientMsg}</div>
       `;
     }
   }
@@ -635,15 +646,19 @@ export class ArmoryModal {
   _refreshBitsCounter(flash = false) {
     const counterEl = this.container?.querySelector('#armoryBitsCounter');
     const valEl = this.container?.querySelector('#armoryBitsValue');
+    const sparksEl = this.container?.querySelector('#armorySparksValue');
     const balance = typeof this.economy.getCredits === 'function'
       ? this.economy.getCredits()
       : (typeof this.economy.getBalance === 'function'
         ? this.economy.getBalance()
         : (typeof this.economy.getBits === 'function' ? this.economy.getBits() : 0));
-    const formattedBits = `CR ${balance.toLocaleString()}`;
+    const sparks = typeof this.economy.getSparks === 'function' ? this.economy.getSparks() : 0;
 
     if (valEl) {
-      valEl.textContent = formattedBits;
+      valEl.textContent = `${balance.toLocaleString()} AC`;
+    }
+    if (sparksEl) {
+      sparksEl.textContent = `${sparks.toLocaleString()} SPARKS`;
     }
 
     if (flash && counterEl) {

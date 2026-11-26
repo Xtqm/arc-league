@@ -155,15 +155,15 @@ key.shadow.camera.bottom = -d;
 scene.add(key);
 
 // Dual-temperature stadium directional rim lights (non-shadow-casting)
-export const rimLightCool = new THREE.DirectionalLight(0x00d8ff, 0.72);
+export const rimLightCool = new THREE.DirectionalLight(0x00d8ff, 0.48);
 rimLightCool.name = 'stadiumRimCool';
-rimLightCool.position.set(-48, 22, -36);
+rimLightCool.position.set(-48, 36, -36);
 rimLightCool.castShadow = false;
 scene.add(rimLightCool);
 
-export const rimLightWarm = new THREE.DirectionalLight(0xff7b1a, 0.62);
+export const rimLightWarm = new THREE.DirectionalLight(0xff7b1a, 0.42);
 rimLightWarm.name = 'stadiumRimWarm';
-rimLightWarm.position.set(48, 20, 36);
+rimLightWarm.position.set(48, 34, 36);
 rimLightWarm.castShadow = false;
 scene.add(rimLightWarm);
 

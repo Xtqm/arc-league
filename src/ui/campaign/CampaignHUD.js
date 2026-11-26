@@ -12,6 +12,7 @@ import { SFX } from '../../audio/sfx.js';
 import { state, player } from '../../core/state.js';
 import { tryLock, focusGame, setCursor } from '../../input/InputManager.js';
 import { ARBITER_CONFIGS } from '../../ai/ArbiterBossController.js';
+import { showTacticalXP } from '../hud.js';
 
 function teardownSectorArena() {
   if (typeof window !== 'undefined' && typeof window.__tronTeardownSectorArena === 'function') {
@@ -161,7 +162,7 @@ export class CampaignHUD {
             <h1>${level.name}</h1>
           </div>
           <div style="font-family:'Courier New',Courier,monospace; font-size:11px; color:#ffd700; border:1px solid rgba(255,215,0,0.4); padding:4px 8px; border-radius:4px;">
-            FIRST CLEAR: +${payouts.firstClearBits || 100} BITS
+            FIRST CLEAR: +${payouts.firstClearBits || 100} AC
           </div>
         </div>
 
@@ -182,8 +183,8 @@ export class CampaignHUD {
           <div class="criteria-item">
             <span class="criteria-star">★</span>
             <div style="flex:1;">
-              <b style="color:#fff;">STAR 1: DE-REZ OBJECTIVE</b>
-              <div style="font-size:11px; color:#8ac0d0; margin-top:2px;">Neutralize and de-rez all hostile sub-routines in the trial sector.</div>
+              <b style="color:#fff;">STAR 1: FRACTURE OBJECTIVE</b>
+              <div style="font-size:11px; color:#8ac0d0; margin-top:2px;">Neutralize and fracture all hostile sub-routines in the trial sector.</div>
             </div>
           </div>
 
@@ -596,51 +597,15 @@ export class CampaignHUD {
   // ==========================================
 
   /**
-   * Spawns a floating kinetic +Bits accrual indicator.
-   * @param {number} amount Number of Bits accrued
-   * @param {number|null} [screenX=null] X coordinate or center
-   * @param {number|null} [screenY=null] Y coordinate or center
-   * @param {string|null} [label=null] Optional trickshot label (e.g. 'CURVE ELIMINATION')
+   * Deprecated wrapper: routes maneuver accrual feedback to the top-left tactical XP log (#tl).
+   * @deprecated Center-screen +Bits popups are deprecated.
    */
   spawnFloatingBits(amount = 25, screenX = null, screenY = null, label = null) {
     if (typeof document === 'undefined') return;
-    const container = this.floatingContainer;
-    if (!container) return;
-
-    SFX.bitAccrual();
-
-    const indicator = document.createElement('div');
-    indicator.className = 'kinetic-bit-pop';
-
-    const text = label ? `${label} +${amount} BITS` : `+${amount} BITS`;
-    indicator.textContent = text;
-
-    const posX = typeof screenX === 'number' ? screenX : (window.innerWidth / 2);
-    const posY = typeof screenY === 'number' ? screenY : (window.innerHeight * 0.42);
-
-    indicator.style.left = `${posX}px`;
-    indicator.style.top = `${posY}px`;
-
-    // Bound maximum active indicators to 8 to avoid DOM congestion
-    if (container.children.length >= 8) {
-      container.removeChild(container.firstChild);
-    }
-
-    container.appendChild(indicator);
-
-    // Auto-remove on animation completion
-    indicator.addEventListener('animationend', () => {
-      if (indicator.parentNode === container) {
-        container.removeChild(indicator);
-      }
+    showTacticalXP(amount, label || 'TRICKSHOT', {
+      color: '#00f3ff',
+      glow: '#0066ff'
     });
-
-    // Fallback cleanup
-    setTimeout(() => {
-      if (indicator.parentNode === container) {
-        container.removeChild(indicator);
-      }
-    }, 900);
   }
 
   // ==========================================
@@ -664,12 +629,12 @@ export class CampaignHUD {
         const remaining = Math.max(0, state.foes.filter(f => f.alive).length);
         this.updateHostiles(remaining);
 
-        // Check trickshot elimination bonus for floating bits
+        // Route trickshot elimination feedback to top-left tactical XP log
         if (state.lastEliminationTrickshot) {
           const trick = state.lastEliminationTrickshot;
-          const bits = trick === 'parry' ? 50 : 25;
-          const label = trick.toUpperCase();
-          this.spawnFloatingBits(bits, null, null, label);
+          const xp = trick === 'parry' ? 40 : (trick === 'ricochet' ? 30 : 25);
+          const label = trick === 'curve' ? 'CURVE FRACTURE' : trick.toUpperCase();
+          showTacticalXP(xp, label, { color: '#00f3ff', glow: '#0066ff' });
           state.lastEliminationTrickshot = null;
         }
       }

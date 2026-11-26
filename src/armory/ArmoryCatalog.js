@@ -23,6 +23,7 @@ export const UNLOCK_TYPES = Object.freeze({
   FREE: 'free',
   BITS: 'bits',
   CREDITS: 'credits',
+  SPARKS: 'sparks',
   ACHIEVEMENT: 'achievement'
 });
 
@@ -53,7 +54,7 @@ export const ARMORY_CATALOG = Object.freeze({
       category: ARMORY_CATEGORIES.DISC_SKINS,
       description: 'High-energy amber photon stream disc with golden ionization.',
       unlockType: UNLOCK_TYPES.BITS,
-      cost: 400,
+      cost: 1200,
       achievementId: null,
       shader: Object.freeze({
         primaryHex: '#ffaa00',
@@ -69,7 +70,7 @@ export const ARMORY_CATALOG = Object.freeze({
       category: ARMORY_CATEGORIES.DISC_SKINS,
       description: 'Vintage phosphor green terminal glow recalling early Sub-Strata origins.',
       unlockType: UNLOCK_TYPES.BITS,
-      cost: 600,
+      cost: 2000,
       achievementId: null,
       shader: Object.freeze({
         primaryHex: '#00ff66',
@@ -85,7 +86,7 @@ export const ARMORY_CATALOG = Object.freeze({
       category: ARMORY_CATEGORIES.DISC_SKINS,
       description: 'Deep ultraviolet plasma weave radiating synthwave harmonics.',
       unlockType: UNLOCK_TYPES.BITS,
-      cost: 850,
+      cost: 3500,
       achievementId: null,
       shader: Object.freeze({
         primaryHex: '#bd00ff',
@@ -120,7 +121,7 @@ export const ARMORY_CATALOG = Object.freeze({
       description: 'Aerodynamic tri-blade kinetic disc with high-frequency particle emission.',
       shape: 'triangle',
       unlockType: UNLOCK_TYPES.BITS,
-      cost: 900,
+      cost: 5500,
       achievementId: null,
       shader: Object.freeze({
         primaryHex: '#00f3ff',
@@ -142,7 +143,7 @@ export const ARMORY_CATALOG = Object.freeze({
       description: 'Diamond rotor disc generating balanced 4-pole quantum ionization fields.',
       shape: 'square',
       unlockType: UNLOCK_TYPES.BITS,
-      cost: 1100,
+      cost: 8000,
       achievementId: null,
       shader: Object.freeze({
         primaryHex: '#00ffcc',
@@ -163,9 +164,9 @@ export const ARMORY_CATALOG = Object.freeze({
       category: ARMORY_CATEGORIES.DISC_SKINS,
       description: 'Aggressive multi-bladed energy star forging intense crimson ricochet sparks.',
       shape: 'shuriken_4',
-      unlockType: UNLOCK_TYPES.ACHIEVEMENT,
-      cost: 0,
-      achievementId: 'corrupted_void_mastery',
+      unlockType: UNLOCK_TYPES.SPARKS,
+      cost: 100,
+      achievementId: null,
       shader: Object.freeze({
         primaryHex: '#ff0055',
         secondaryEmissiveHex: '#660022',
@@ -180,13 +181,13 @@ export const ARMORY_CATALOG = Object.freeze({
       })
     }),
     Object.freeze({
-      id: 'disc_custom_01',
-      displayName: 'Custom Kinetic Disc',
+      id: 'disc_hex_dark_matter',
+      displayName: 'Dark Matter',
       category: ARMORY_CATEGORIES.DISC_SKINS,
-      description: 'Custom prototype kinetic disc created in developer studio.',
+      description: 'Found in the lake of dark matter',
       shape: 'hexagon',
-      unlockType: UNLOCK_TYPES.FREE,
-      cost: 0,
+      unlockType: UNLOCK_TYPES.SPARKS,
+      cost: 75,
       achievementId: null,
       shader: Object.freeze({
         primaryHex: '#000000',
@@ -229,7 +230,7 @@ export const ARMORY_CATALOG = Object.freeze({
       category: ARMORY_CATEGORIES.CHASSIS_SKINS,
       description: 'Sleek stealth athlete frame minimizing radar cross-section with matte finish.',
       unlockType: UNLOCK_TYPES.BITS,
-      cost: 500,
+      cost: 2500,
       achievementId: null,
       shader: Object.freeze({
         primaryHex: '#00d4ff',
@@ -248,7 +249,7 @@ export const ARMORY_CATALOG = Object.freeze({
       category: ARMORY_CATEGORIES.CHASSIS_SKINS,
       description: 'Reinforced kinetic frame with radiant solar circuit highlights.',
       unlockType: UNLOCK_TYPES.BITS,
-      cost: 750,
+      cost: 5000,
       achievementId: null,
       shader: Object.freeze({
         primaryHex: '#ffea00',
@@ -267,7 +268,7 @@ export const ARMORY_CATALOG = Object.freeze({
       category: ARMORY_CATEGORIES.CHASSIS_SKINS,
       description: 'Intimidating pro-circuit plating with aggressive thermal flares.',
       unlockType: UNLOCK_TYPES.BITS,
-      cost: 1200,
+      cost: 9500,
       achievementId: null,
       shader: Object.freeze({
         primaryHex: '#ff2200',
@@ -324,7 +325,7 @@ export const ARMORY_CATALOG = Object.freeze({
       category: ARMORY_CATEGORIES.UNLOCKED_MAPS,
       description: 'Floating hexagonal platforms with low-gravity trajectory dynamics.',
       unlockType: UNLOCK_TYPES.BITS,
-      cost: 1000,
+      cost: 10000,
       achievementId: null,
       shader: Object.freeze({
         primaryHex: '#00ffcc',
@@ -340,7 +341,7 @@ export const ARMORY_CATALOG = Object.freeze({
       category: ARMORY_CATEGORIES.UNLOCKED_MAPS,
       description: 'Narrow high-velocity bridges suspended over an endless null void.',
       unlockType: UNLOCK_TYPES.BITS,
-      cost: 1500,
+      cost: 15000,
       achievementId: null,
       shader: Object.freeze({
         primaryHex: '#ff3366',

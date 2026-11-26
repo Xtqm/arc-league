@@ -286,12 +286,13 @@ export class CalibrationMode {
       return outcome;
     }
 
-    // 1. Award 100 Arc Bits
+    // 1. Award 100 Arc Credits
     try {
-      economyManager.awardBits(100, 'calibration_complete');
+      economyManager.awardCredits(100, 'calibration_complete');
     } catch (_) {
-      const currentBits = storageManager.get('player.currency.bits', 0);
-      storageManager.set('player.currency.bits', currentBits + 100);
+      const currentCredits = storageManager.get('player.currency.credits', storageManager.get('player.currency.bits', 0));
+      storageManager.set('player.currency.credits', currentCredits + 100);
+      storageManager.set('player.currency.bits', currentCredits + 100);
     }
 
     // 2. Award Grid 01 Star 1 in campaign storage
@@ -334,7 +335,7 @@ export class CalibrationMode {
       console.warn('Calibration campaign award error:', e);
     }
 
-    message('CALIBRATION COMPLETE // 100 ARC BITS ACCRUED // GRID 01 STAR 1 SECURED');
+    message('CALIBRATION COMPLETE // 100 AC ACCRUED // GRID 01 STAR 1 SECURED');
     SFX.achievementFanfare();
 
     setTimeout(() => {

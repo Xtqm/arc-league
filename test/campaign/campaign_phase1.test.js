@@ -77,10 +77,11 @@ for (const grid of allGrids) {
 
     if (level.type === LEVEL_TYPES.ARBITER) {
       assert.strictEqual(level.payouts.firstClearBits, 500, `Arbiter ${level.id} pays 500 firstClearBits`);
-      assert.strictEqual(level.payouts.repeatClearBits, 100, `Arbiter ${level.id} pays 100 repeatClearBits`);
+      assert.strictEqual(level.payouts.repeatClearBits, 75, `Arbiter ${level.id} pays 75 repeatClearBits`);
+      assert.ok(level.payouts.firstThreeStarSparks >= 1 && level.payouts.firstThreeStarSparks <= 4, `Arbiter ${level.id} grants 1-4 Sparks on first 3-star`);
     } else {
-      assert(level.payouts.firstClearBits >= 100 && level.payouts.firstClearBits <= 250, `Trial ${level.id} pays 100-250 Bits on first clear`);
-      assert(level.payouts.repeatClearBits >= 25 && level.payouts.repeatClearBits <= 50, `Trial ${level.id} pays 25-50 Bits on repeat clear`);
+      assert(level.payouts.firstClearBits >= 100 && level.payouts.firstClearBits <= 250, `Trial ${level.id} pays 100-250 AC on first clear`);
+      assert(level.payouts.repeatClearBits >= 20 && level.payouts.repeatClearBits <= 75, `Trial ${level.id} pays 20-75 AC on repeat clear`);
     }
   }
 }
@@ -396,7 +397,7 @@ assert.strictEqual(testEconomy.getLevel(), 2, 'Player reached level 2');
 assert.strictEqual(testEconomy.getBits(), initialBits + 120 + 50, 'Bits reflect clear payout (120) + level 2 milestone bonus (50)');
 assert.strictEqual(testEconomy.getXP(), initialXp + 175 - 250, 'XP rollover after level up');
 
-// Level 01_02 repeat clear: payouts are 25 Bits, 35 XP
+// Level 01_02 repeat clear: payouts are 20 AC, 35 XP
 testManager.startTrial('level_01_02');
 const repeat01_02 = testManager.completeTrial({
   finalHp: 90,
@@ -406,13 +407,13 @@ const repeat01_02 = testManager.completeTrial({
   ricochetHits: 1
 });
 assert.strictEqual(repeat01_02.firstTimeClear, false);
-assert.strictEqual(repeat01_02.rewards.bits, 25);
+assert.strictEqual(repeat01_02.rewards.bits, 20);
 assert.strictEqual(repeat01_02.rewards.xp, 35);
-assert.strictEqual(testEconomy.getBits(), initialBits + 120 + 50 + 25);
+assert.strictEqual(testEconomy.getBits(), initialBits + 120 + 50 + 20);
 assert.strictEqual(testEconomy.getXP(), initialXp + 175 - 250 + 35);
 
 // Arbiter Boss payouts test: Sentinel Arbiter (level_01_06)
-// First clear: 500 Bits, 500 XP. Repeat clear: 100 Bits, 100 XP.
+// First clear: 500 AC, 500 XP + 1 Spark on 3-star. Repeat clear: 75 AC, 100 XP, 0 Sparks.
 // Force unlock level_01_06 for payout verification
 testStorage.set('campaign.unlockedNodes', [...testStorage.get('campaign.unlockedNodes'), 'level_01_06']);
 testManager.startTrial('level_01_06');
@@ -424,8 +425,11 @@ const arbiterFirstClear = testManager.completeTrial({
   ricochetHits: 3
 });
 assert.strictEqual(arbiterFirstClear.firstTimeClear, true);
+assert.strictEqual(arbiterFirstClear.stars, 3);
 assert.strictEqual(arbiterFirstClear.rewards.bits, 500);
+assert.strictEqual(arbiterFirstClear.rewards.sparks, 1);
 assert.strictEqual(arbiterFirstClear.rewards.xp, 500);
+assert.strictEqual(testEconomy.getSparks(), 1);
 
 testManager.startTrial('level_01_06');
 const arbiterRepeatClear = testManager.completeTrial({
@@ -436,8 +440,10 @@ const arbiterRepeatClear = testManager.completeTrial({
   ricochetHits: 3
 });
 assert.strictEqual(arbiterRepeatClear.firstTimeClear, false);
-assert.strictEqual(arbiterRepeatClear.rewards.bits, 100);
+assert.strictEqual(arbiterRepeatClear.rewards.bits, 75);
+assert.strictEqual(arbiterRepeatClear.rewards.sparks, 0, 'Repeat 3-star Arbiter clear must not re-grant Sparks');
 assert.strictEqual(arbiterRepeatClear.rewards.xp, 100);
+assert.strictEqual(testEconomy.getSparks(), 1);
 
 console.log('✓ First-time vs repeat payouts verified for standard trials and Arbiter boss encounters');
 

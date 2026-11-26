@@ -256,8 +256,8 @@ assert.ok(markup.includes('50 / 50'), 'Must render parries progress (50 / 50)');
 assert.ok(markup.includes('12 / 18'), 'Must render grid stars progress (12 / 18)');
 
 // Reward Badges
-assert.ok(markup.includes('+100 BITS'));
-assert.ok(markup.includes('+300 BITS'));
+assert.ok(markup.includes('+100 AC'));
+assert.ok(markup.includes('+300 AC'));
 assert.ok(markup.includes('SKIN: CORRUPTED VOID'));
 assert.ok(markup.includes('SKIN: SOVEREIGN ARBITER'));
 

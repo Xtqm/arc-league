@@ -118,21 +118,22 @@ export function buildFoundrySurfaceBuffers(size = DEFAULT_TEXTURE_SIZE) {
       const perimeterSeam = (1 - smoothstep(0.004, 0.016, edgeDist)) * 0.65;
 
       // Height combines raised slab bevel, subtle plate relief, and carved channels
-      let h = 0.68 + (grain - 0.5) * 0.12 + (brushed - 0.5) * 0.04;
+      let h = 0.68 + (grain - 0.5) * 0.04 + (brushed - 0.5) * 0.015;
       h *= 0.45 + 0.55 * perimeterBevel;
-      h += perimeterRimHighlight * 0.1;
-      h -= recessedChannel * 0.46;
+      h += perimeterRimHighlight * 0.08;
+      h -= recessedChannel * 0.42;
 
-      // Roughness: polished chamfer ribs (~0.24), matte basalt interior (~0.56), rough grooves (~0.82)
-      let r = 0.52 + (grain - 0.5) * 0.18 + (brushed - 0.5) * 0.08;
-      r -= perimeterRimHighlight * 0.24;
-      r += recessedChannel * 0.28 + (1 - perimeterBevel) * 0.18;
+      // Roughness: satin-matte basalt interior (~0.86) & chamfered ribs (~0.70) so
+      // multiplied by tileMatIntact.roughness (0.42) the floor stays free of mirror glare.
+      let r = 0.86 + (grain - 0.5) * 0.10 + (brushed - 0.5) * 0.04;
+      r -= perimeterRimHighlight * 0.14;
+      r += recessedChannel * 0.08 + (1 - perimeterBevel) * 0.06;
 
       // Emissive mask concentrated strictly inside recessed seams & corner nodes
       const seam = Math.max(recessedChannel, perimeterSeam);
 
       heights[idx] = Math.max(0, Math.min(1, h));
-      roughness[idx] = Math.max(0.12, Math.min(0.95, r));
+      roughness[idx] = Math.max(0.55, Math.min(0.95, r));
       seamMask[idx] = Math.max(0, Math.min(1, seam));
     }
   }

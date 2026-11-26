@@ -4,6 +4,8 @@
  * for Tron Disc Arena (SPEC-ACHIEVE-001).
  */
 
+import { CAMPAIGN_GRIDS } from '../campaign/CampaignRegistry.js';
+
 export const ACHIEVEMENT_CATEGORIES = Object.freeze({
   COMBAT: 'combat',
   CAMPAIGN: 'campaign',
@@ -19,14 +21,19 @@ export const GRID_01_LEVEL_IDS = Object.freeze([
   'level_01_06'
 ]);
 
+export const ALL_CAMPAIGN_LEVEL_IDS = Object.freeze(
+  CAMPAIGN_GRIDS.flatMap((g) => g.levels.map((l) => l.id))
+);
+export const ALL_CAMPAIGN_MAX_STARS = ALL_CAMPAIGN_LEVEL_IDS.length * 3;
+
 /**
  * Launch matrix achievement definitions.
  */
 export const LAUNCH_ACHIEVEMENTS = Object.freeze([
   Object.freeze({
     id: 'ach_first_blood',
-    title: 'Initial Execution',
-    description: 'De-allocate first hostile rival',
+    title: 'Initial Fracture',
+    description: 'Fracture first hostile rival',
     category: ACHIEVEMENT_CATEGORIES.COMBAT,
     icon: '⚡',
     target: 1,
@@ -34,6 +41,7 @@ export const LAUNCH_ACHIEVEMENTS = Object.freeze([
     reward: Object.freeze({
       credits: 100,
       bits: 100,
+      sparks: 0,
       cosmetic: null
     }),
     evaluate: (state) => {
@@ -51,7 +59,7 @@ export const LAUNCH_ACHIEVEMENTS = Object.freeze([
   Object.freeze({
     id: 'ach_curve_god',
     title: 'Geometric Curved Path',
-    description: 'Eliminate 25 hostiles with curving disc shots',
+    description: 'Fracture 25 hostiles with curving disc shots',
     category: ACHIEVEMENT_CATEGORIES.COMBAT,
     icon: '🌀',
     target: 25,
@@ -59,6 +67,7 @@ export const LAUNCH_ACHIEVEMENTS = Object.freeze([
     reward: Object.freeze({
       credits: 300,
       bits: 300,
+      sparks: 0,
       cosmetic: null
     }),
     evaluate: (state) => {
@@ -82,8 +91,9 @@ export const LAUNCH_ACHIEVEMENTS = Object.freeze([
     target: 50,
     metricKey: 'stats.parriesExecuted',
     reward: Object.freeze({
-      credits: 250,
-      bits: 250,
+      credits: 500,
+      bits: 500,
+      sparks: 0,
       cosmetic: null
     }),
     evaluate: (state) => {
@@ -101,14 +111,15 @@ export const LAUNCH_ACHIEVEMENTS = Object.freeze([
   Object.freeze({
     id: 'ach_untouchable',
     title: 'Flawless Subroutine',
-    description: 'Complete any Circuit trial with 100% integrity',
+    description: 'Complete any Tour trial with 100% integrity',
     category: ACHIEVEMENT_CATEGORIES.CAMPAIGN,
     icon: '💎',
     target: 1,
     metricKey: 'campaign.levelRecords',
     reward: Object.freeze({
-      credits: 500,
-      bits: 500,
+      credits: 250,
+      bits: 250,
+      sparks: 0,
       cosmetic: null
     }),
     evaluate: (state) => {
@@ -134,14 +145,15 @@ export const LAUNCH_ACHIEVEMENTS = Object.freeze([
   Object.freeze({
     id: 'ach_swarm_survivor',
     title: 'Endless Firewall',
-    description: 'Survive 15 consecutive waves in Swarm Defense',
+    description: 'Survive 15 waves in Hardcore Swarm Protocol',
     category: ACHIEVEMENT_CATEGORIES.SURVIVAL,
     icon: '🔥',
     target: 15,
-    metricKey: 'stats.swarmHighestWave',
+    metricKey: 'stats.hardcoreSwarmHighestWave',
     reward: Object.freeze({
       credits: 750,
       bits: 750,
+      sparks: 0,
       cosmetic: Object.freeze({
         category: 'discSkins',
         itemId: 'disc_corrupted_void',
@@ -149,10 +161,7 @@ export const LAUNCH_ACHIEVEMENTS = Object.freeze([
       })
     }),
     evaluate: (state) => {
-      const current = Math.max(
-        Number(state?.stats?.swarmHighestWave || 0),
-        Number(state?.stats?.highestWave || 0)
-      );
+      const current = Number(state?.stats?.hardcoreSwarmHighestWave || 0);
       const target = 15;
       return {
         current,
@@ -166,14 +175,15 @@ export const LAUNCH_ACHIEVEMENTS = Object.freeze([
   Object.freeze({
     id: 'ach_grid_one_master',
     title: 'Outlands Conqueror',
-    description: 'Earn all 18 stars across Circuit 01',
+    description: `Earn all ${ALL_CAMPAIGN_MAX_STARS} stars across Sectors 1–4`,
     category: ACHIEVEMENT_CATEGORIES.CAMPAIGN,
     icon: '👑',
-    target: 18,
+    target: ALL_CAMPAIGN_MAX_STARS,
     metricKey: 'campaign.levelRecords',
     reward: Object.freeze({
-      credits: 1000,
-      bits: 1000,
+      credits: 2500,
+      bits: 2500,
+      sparks: 5,
       cosmetic: Object.freeze({
         category: 'chassisSkins',
         itemId: 'chassis_arbiter',
@@ -183,13 +193,13 @@ export const LAUNCH_ACHIEVEMENTS = Object.freeze([
     evaluate: (state) => {
       const records = state?.campaign?.levelRecords || {};
       let stars = 0;
-      for (const levelId of GRID_01_LEVEL_IDS) {
+      for (const levelId of ALL_CAMPAIGN_LEVEL_IDS) {
         const record = records[levelId];
         if (record && typeof record.stars === 'number') {
-          stars += record.stars;
+          stars += Math.min(3, record.stars);
         }
       }
-      const target = 18;
+      const target = ALL_CAMPAIGN_MAX_STARS;
       return {
         current: stars,
         target,

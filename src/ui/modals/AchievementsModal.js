@@ -296,8 +296,12 @@ export class AchievementsModal {
     // Reward preview pills
     let rewardPreview = '';
     const rewardCredits = ach.reward?.credits ?? ach.reward?.bits ?? 0;
+    const rewardSparks = ach.reward?.sparks ?? 0;
     if (rewardCredits > 0) {
-      rewardPreview += `<span style="background:rgba(255,170,0,0.15); border:1px solid #ffaa00; color:#ffaa00; padding:2px 8px; border-radius:3px; font-size:11px; font-weight:bold;">+${rewardCredits} BITS</span>`;
+      rewardPreview += `<span style="background:rgba(255,170,0,0.15); border:1px solid #ffaa00; color:#ffaa00; padding:2px 8px; border-radius:3px; font-size:11px; font-weight:bold;">+${rewardCredits} AC</span>`;
+    }
+    if (rewardSparks > 0) {
+      rewardPreview += `<span style="background:rgba(189,0,255,0.15); border:1px solid #bd00ff; color:#d896ff; padding:2px 8px; border-radius:3px; font-size:11px; font-weight:bold;">+${rewardSparks} SPARK${rewardSparks === 1 ? '' : 'S'}</span>`;
     }
     if (ach.reward?.cosmetic) {
       const cosmeticTitle = ach.reward.cosmetic.displayName || ach.reward.cosmetic.itemId;

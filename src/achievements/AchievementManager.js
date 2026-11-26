@@ -405,7 +405,7 @@ export class AchievementManager {
       retroactive: Boolean(options.retroactive)
     };
 
-    // 1. Distribute Arc Credits currency via EconomyManager
+    // 1. Distribute Arc Credits and Sparks currency via EconomyManager
     const rewardCredits = ach.reward?.credits ?? ach.reward?.bits ?? 0;
     if (rewardCredits > 0 && this.economy) {
       if (typeof this.economy.awardCredits === 'function') {
@@ -413,6 +413,10 @@ export class AchievementManager {
       } else if (typeof this.economy.awardBits === 'function') {
         this.economy.awardBits(rewardCredits, `achievement_${ach.id}`);
       }
+    }
+    const rewardSparks = ach.reward?.sparks ?? 0;
+    if (rewardSparks > 0 && this.economy && typeof this.economy.awardSparks === 'function') {
+      this.economy.awardSparks(rewardSparks, `achievement_${ach.id}`);
     }
 
     // 2. Distribute cosmetic skins via ArmoryManager

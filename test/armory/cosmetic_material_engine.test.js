@@ -617,7 +617,7 @@ console.log('✓ Group 10: Centralized hex sanitization, alpha stripping, and sa
 console.log('\n[Group 11] Testing Stealth Obsidian (#000000) & Piercing White (#ffffff) Validation...');
 
 const stealthDisc = makeDisc(0x00f3ff);
-engine.applyDiscSkin(stealthDisc, 'disc_custom_01');
+engine.applyDiscSkin(stealthDisc, 'disc_hex_dark_matter');
 
 // 1. Stealth Obsidian Outer Airframe
 assert.strictEqual(stealthDisc.userData.outerMesh.material.color.getHexString(), '000000', 'Outer airframe must render as black obsidian (#000000), not white fallback');
@@ -642,7 +642,7 @@ assert.strictEqual(stealthWf.material.color.getHexString(), 'ffffff', 'Wireframe
 
 // 5. Palm Disc Synchronization on Athlete Rig
 const rigWithStealthDisc = makeProgram(0x00f3ff);
-engine.applyDiscSkin(rigWithStealthDisc.userData.backDisc, 'disc_custom_01');
+engine.applyDiscSkin(rigWithStealthDisc.userData.backDisc, 'disc_hex_dark_matter');
 assert.strictEqual(rigWithStealthDisc.userData.backDisc.material.color.getHexString(), '000000', 'Palm disc airframe must synchronize to stealth obsidian');
 if (rigWithStealthDisc.userData.backDisc.userData.hubMesh) {
   assert.strictEqual(rigWithStealthDisc.userData.backDisc.userData.hubMesh.material.color.getHexString(), 'ffffff', 'Palm disc rotor must synchronize to white induction core');
@@ -651,7 +651,7 @@ assert.strictEqual(rigWithStealthDisc.userData.backDisc.userData.wireframeOverla
 
 // 6. Preview Bay Staging Verification
 const previewBay = new ArmoryPreviewScene();
-previewBay.previewDisc('disc_custom_01');
+previewBay.previewDisc('disc_hex_dark_matter');
 const stagedMesh = previewBay.stagedMesh;
 assert.ok(stagedMesh, 'ArmoryPreviewScene must stage custom disc');
 assert.strictEqual(stagedMesh.userData.outerMesh.material.color.getHexString(), '000000', 'Preview bay outer mesh must render stealth obsidian');

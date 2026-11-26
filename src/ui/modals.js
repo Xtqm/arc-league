@@ -197,8 +197,9 @@ export function showGameOver(customTitle, customSubtitle) {
     setCursor();
   }
   const isDuelMode = state.gameMode === 'duel' || state.gameMode === 'duel_ai';
+  const sessionCleared = Math.max(0, Number(state.sessionTiersCleared || 0));
   if (isDuelMode) {
-    duelEconomyBridge.processMatchOutcome('defeat', 'ai');
+    duelEconomyBridge.settleAIPracticeFromState(state, 'defeat');
   }
   const overlayEl = document.getElementById('overlay');
   if (overlayEl) overlayEl.style.display = 'flex';
@@ -206,7 +207,7 @@ export function showGameOver(customTitle, customSubtitle) {
   const title = customTitle || (isDuelMode ? 'DUEL ELIMINATED' : 'DE-ALLOCATED');
   const subtitle = customSubtitle || state.gameOverReason || 'YOUR DISC WAS CLAIMED';
   const stats = isDuelMode
-    ? `TIERS CLEARED <b style="color:#fff">${currentTier - 1}</b> &nbsp;·&nbsp; SCORE <b style="color:#fff">${state.score}</b>`
+    ? `TIERS CLEARED <b style="color:#fff">${sessionCleared}</b> &nbsp;·&nbsp; SCORE <b style="color:#fff">${state.score}</b>`
     : `CYCLES SURVIVED <b style="color:#fff">${state.wave - 1}</b> &nbsp;·&nbsp; SCORE <b style="color:#fff">${state.score}</b>`;
   const actionsHtml = isDuelMode
     ? `<button id="rematchTierBtn" class="btn">REMATCH TIER ${currentTier}</button>

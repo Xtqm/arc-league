@@ -82,6 +82,7 @@ export const DEFAULT_SAVE_STATE = Object.freeze({
     highestWave: 1,
     swarmHighestWave: 1,
     swarmMaxWave: 1,
+    hardcoreSwarmHighestWave: 0,
     highestScore: 0,
     totalPlaytimeSec: 0,
     totalDerezzes: 0,
@@ -146,6 +147,7 @@ export function createDefaultSaveState(overrides = {}) {
       highestWave: overrides?.stats?.highestWave ?? overrides?.stats?.swarmHighestWave ?? overrides?.stats?.swarmMaxWave ?? 1,
       swarmHighestWave: overrides?.stats?.swarmHighestWave ?? overrides?.stats?.highestWave ?? overrides?.stats?.swarmMaxWave ?? 1,
       swarmMaxWave: overrides?.stats?.swarmMaxWave ?? overrides?.stats?.swarmHighestWave ?? overrides?.stats?.highestWave ?? 1,
+      hardcoreSwarmHighestWave: overrides?.stats?.hardcoreSwarmHighestWave ?? 0,
       highestScore: overrides?.stats?.highestScore ?? 0,
       totalPlaytimeSec: overrides?.stats?.totalPlaytimeSec ?? 0,
       totalDerezzes: overrides?.stats?.totalDeallocations ?? overrides?.stats?.totalDerezzes ?? 0,
@@ -213,6 +215,9 @@ export function validateSaveState(data) {
   } else {
     if (data.stats.swarmHighestWave !== undefined && typeof data.stats.swarmHighestWave !== 'number') {
       errors.push('"stats.swarmHighestWave" must be a number');
+    }
+    if (data.stats.hardcoreSwarmHighestWave !== undefined && typeof data.stats.hardcoreSwarmHighestWave !== 'number') {
+      errors.push('"stats.hardcoreSwarmHighestWave" must be a number');
     }
     if (data.stats.totalDerezzes !== undefined && typeof data.stats.totalDerezzes !== 'number') {
       errors.push('"stats.totalDerezzes" must be a number');

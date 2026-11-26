@@ -146,8 +146,8 @@ function createDelegateItem() {
 
   const warningSlabMat = new THREE.MeshStandardMaterial({
     color: 0x07202c,
-    roughness: 0.38,
-    metalness: 0.8,
+    roughness: 0.42,
+    metalness: 0.38,
     normalMap: tileMatIntact.normalMap || null,
     normalScale: tileMatIntact.normalScale ? tileMatIntact.normalScale.clone() : new THREE.Vector2(1, 1),
     roughnessMap: tileMatIntact.roughnessMap || null,
@@ -733,16 +733,16 @@ export function teardownSectorArena() {
   wallMat.color.setHex(0x04141c);
   glowMat.color.setHex(config.CYAN);
   tileMatIntact.color.setHex(0x07202c);
-  tileMatIntact.roughness = 0.38;
-  tileMatIntact.metalness = 0.8;
+  tileMatIntact.roughness = 0.42;
+  tileMatIntact.metalness = 0.38;
   tileEdgeMatIntact.color.setHex(0x187588);
   tileMatIntact.needsUpdate = true;
   tileEdgeMatIntact.needsUpdate = true;
 
   for (const d of delegatePool) {
     d.warningSlabMat.color.setHex(0x07202c);
-    d.warningSlabMat.roughness = 0.38;
-    d.warningSlabMat.metalness = 0.8;
+    d.warningSlabMat.roughness = 0.42;
+    d.warningSlabMat.metalness = 0.38;
     d.warningEdgeMat.color.setHex(0x187588);
   }
 

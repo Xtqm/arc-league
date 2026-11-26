@@ -347,11 +347,18 @@ async function runMultiplayerTests() {
     window.__dbg.step(0.016);
   });
 
-  await guestPage.waitForFunction(() => {
-    const overlay = document.getElementById('overlay');
-    const h1 = overlay ? overlay.querySelector('h1') : null;
-    return h1 && h1.textContent === 'DEREZZED';
-  }, { timeout: 10000, polling: 100 });
+  await Promise.all([
+    hostPage.waitForFunction(() => {
+      const overlay = document.getElementById('overlay');
+      const h1 = overlay ? overlay.querySelector('h1') : null;
+      return overlay && overlay.style.display === 'flex' && h1 && h1.textContent === 'VICTORY';
+    }, { timeout: 10000, polling: 100 }),
+    guestPage.waitForFunction(() => {
+      const overlay = document.getElementById('overlay');
+      const h1 = overlay ? overlay.querySelector('h1') : null;
+      return overlay && overlay.style.display === 'flex' && h1 && h1.textContent === 'DEREZZED';
+    }, { timeout: 10000, polling: 100 })
+  ]);
 
   const endState = await Promise.all([
     hostPage.evaluate(() => {
@@ -374,10 +381,10 @@ async function runMultiplayerTests() {
   ]);
 
   console.log('End match screen results [Host, Guest]:', endState);
-  const guestDead = endState[1].header === 'DEREZZED';
-  const hostVictoryOrRunning = endState[0].header === 'VICTORY' || (typeof window !== 'undefined' && window.__dbg !== undefined);
+  const hostVictory = endState[0].overlayVisible && endState[0].header === 'VICTORY';
+  const guestDead = endState[1].overlayVisible && endState[1].header === 'DEREZZED';
 
-  if (guestDead) {
+  if (hostVictory && guestDead) {
     const postNames = await Promise.all([
       hostPage.evaluate(() => document.getElementById('postMatchMatchup')?.textContent || ''),
       guestPage.evaluate(() => document.getElementById('postMatchMatchup')?.textContent || '')
@@ -385,7 +392,7 @@ async function runMultiplayerTests() {
     if (!postNames[1].includes('TRON_HOST') || !postNames[1].includes('FLYNN_GUEST')) {
       throw new Error(`Test 8 FAILED (post-match names): ${JSON.stringify(postNames)}`);
     }
-    console.log('>>> TEST 8 PASSED: Defeated player displayed DEREZZED screen and match concluded!');
+    console.log('>>> TEST 8 PASSED: Host displayed VICTORY and defeated Guest displayed DEREZZED with strict overlay parity!');
   } else {
     throw new Error(`Test 8 FAILED: ${JSON.stringify(endState)}`);
   }
@@ -589,6 +596,206 @@ async function runMultiplayerTests() {
     throw new Error(`Test 11 FAILED (series UI/2v2): ${JSON.stringify(seriesUiCheck)}`);
   }
   console.log('>>> TEST 11 PASSED: Best-of-N HUD pips, sub-round intermission, and 2v2 series summary verified!');
+
+  // -------------------------------------------------------------
+  // TEST 12: Victim-Authoritative 1v1 Combat, Parry Ownership & Best-of-3 Progression
+  // -------------------------------------------------------------
+  console.log('\n--- TEST 12: Victim-Authoritative 1v1 Combat, Parry Ownership & Best-of-3 Progression ---');
+  await hostPage.evaluate(async () => {
+    await window.__dbg.createRoom({ bestOf: 3 });
+  });
+  const bo3Code = await hostPage.evaluate(() => window.__dbg.currentRoomId());
+  await guestPage.evaluate(async (code) => {
+    await window.__dbg.joinRoom(code);
+  }, bo3Code);
+
+  await Promise.all([
+    hostPage.waitForFunction(() => window.__dbg.running() && window.__dbg.mode() === 'duel_multi' && !!window.__dbg.duelOpponent(), { timeout: 10000, polling: 100 }),
+    guestPage.waitForFunction(() => window.__dbg.running() && window.__dbg.mode() === 'duel_multi' && !!window.__dbg.duelOpponent(), { timeout: 10000, polling: 100 })
+  ]);
+
+  // Speed up intermission for BO3 test
+  await Promise.all([
+    hostPage.evaluate(() => { window.__dbg.state.seriesIntermissionMs = 250; }),
+    guestPage.evaluate(() => { window.__dbg.state.seriesIntermissionMs = 250; })
+  ]);
+
+  // 12A: Thrower-side disc hit on remote opponent never mutates opp.hp or triggers premature VICTORY
+  const throwerHitCheck = await hostPage.evaluate(async () => {
+    const { spawnDisc } = await import('/src/entities/Disc.js');
+    const THREE = await import('/vendor/three.module.js');
+    const dbg = window.__dbg;
+    const opp = dbg.state.duelOpponent;
+    const hitOrigin = new THREE.Vector3(opp.pos.x, 1.5, opp.pos.z + 1.5);
+    const hitVel = new THREE.Vector3(0, 0, -45);
+    const localDisc = spawnDisc(hitOrigin, hitVel, 'player', 0x00ffff, 0, 1.0);
+    localDisc.throwId = 'local_hit_test';
+    dbg.state.player.hasDisc = false;
+    for (let f = 0; f < 10; f++) {
+      dbg.step(0.016);
+    }
+    return {
+      oppHp: opp.hp,
+      oppAlive: opp.alive,
+      seriesRoundFinished: dbg.state.seriesRoundFinished,
+      matchFinished: dbg.state.multiplayerMatchFinished,
+      discReturning: localDisc.returning
+    };
+  });
+  if (throwerHitCheck.oppHp !== 100 || !throwerHitCheck.oppAlive || throwerHitCheck.seriesRoundFinished || throwerHitCheck.matchFinished) {
+    throw new Error(`Test 12A FAILED (thrower-side premature damage/win): ${JSON.stringify(throwerHitCheck)}`);
+  }
+  console.log('>>> TEST 12A PASSED: Thrower-side contact never mutates remote opp.hp or triggers premature victory!');
+
+  // 12B: DISC_PARRY parentThrowId reconciliation + 1.5s deflect expiry (ignoring deflectBounces >= 2)
+  await hostPage.evaluate(() => {
+    window.__dbg.state.discs.length = 0;
+    window.__dbg.state.player.hasDisc = true;
+    window.__dbg.setPlayerPos(0, 18, 0);
+    window.__dbg.setYaw(0);
+    window.__dbg.syncNetworkState(0.1);
+  });
+  await guestPage.evaluate(() => {
+    window.__dbg.state.discs.length = 0;
+    window.__dbg.state.player.hasDisc = true;
+    window.__dbg.setPlayerPos(0, -18, 0);
+    window.__dbg.setYaw(Math.PI);
+    window.__dbg.setPlayerBlocking(true);
+    window.__dbg.syncNetworkState(0.1);
+  });
+  await new Promise(r => setTimeout(r, 150));
+
+  // Host throws at Guest; Guest parries incoming disc
+  await hostPage.evaluate(() => {
+    window.__dbg.throwDisc();
+  });
+  await guestPage.waitForFunction(() => window.__dbg.discs().some(d => d.owner === 'foe'), { timeout: 10000, polling: 100 });
+  const parrySpeedAndExpiry = await guestPage.evaluate(() => {
+    const dbg = window.__dbg;
+    const foeDisc = dbg.state.discs.find(d => d.owner !== 'player');
+    // Move disc right in front of guest (+Z side when yaw = Math.PI) so shield parries it
+    foeDisc.pos.set(0, 1.5, -16.8);
+    foeDisc.vel.set(0, 0, -45);
+    dbg.setPlayerBlocking(true);
+    dbg.setYaw(Math.PI);
+    for (let f = 0; f < 5; f++) {
+      dbg.step(0.016);
+      if (foeDisc.isDeflected) break;
+    }
+    const parrySpeed = foeDisc.vel.length();
+    const deflectedAfterParry = foeDisc.isDeflected;
+    // Simulate 2 wall bounces before 1.5s: multiplayer must NOT expire early on deflectBounces >= 2
+    foeDisc.deflectBounces = 2;
+    dbg.step(0.1);
+    const stillDeflectedAfter2Bounces = foeDisc.isDeflected && !foeDisc.returning;
+    // Advance past 1.5s: must expire and flip back to originalOwner (foe / p1)
+    foeDisc.deflectTime = 1.51;
+    dbg.step(0.016);
+    const returnedToOriginalThrower = !foeDisc.isDeflected && foeDisc.returning && foeDisc.owner !== 'player';
+    return {
+      deflectedAfterParry,
+      parrySpeed,
+      stillDeflectedAfter2Bounces,
+      returnedToOriginalThrower
+    };
+  });
+  if (
+    !parrySpeedAndExpiry.deflectedAfterParry ||
+    parrySpeedAndExpiry.parrySpeed < 42 ||
+    parrySpeedAndExpiry.parrySpeed > 62.01 ||
+    !parrySpeedAndExpiry.stillDeflectedAfter2Bounces ||
+    !parrySpeedAndExpiry.returnedToOriginalThrower
+  ) {
+    throw new Error(`Test 12B FAILED (parry speed/expiry/ownership): ${JSON.stringify(parrySpeedAndExpiry)}`);
+  }
+  // Host must also have received DISC_PARRY and reconciled parentThrowId (hasDisc = false)
+  await hostPage.waitForFunction(() => window.__dbg.state.discs.some(d => d.isDeflected), { timeout: 10000, polling: 100 });
+  const hostReconciled = await hostPage.evaluate(() => ({
+    hasDisc: window.__dbg.state.player.hasDisc,
+    deflectedCount: window.__dbg.state.discs.filter(d => d.isDeflected).length
+  }));
+  if (hostReconciled.hasDisc !== false || hostReconciled.deflectedCount !== 1) {
+    throw new Error(`Test 12B FAILED (host parentThrowId reconciliation): ${JSON.stringify(hostReconciled)}`);
+  }
+  console.log('>>> TEST 12B PASSED: DISC_PARRY velocity cap, 1.5s-only expiry, originalOwner flip, and parentThrowId reconciliation verified!');
+
+  // 12C: Victim-authoritative disc hits + WebRTC hp<=0 derez + Best-of-3 round progression & VICTORY/DEREZZED parity
+  // Round 1: Guest takes lethal disc hits on Guest's client (16 HP normal hit doesn't 1-shot; 7 hits = lethal)
+  await guestPage.evaluate(async () => {
+    const { spawnDisc } = await import('/src/entities/Disc.js');
+    const THREE = await import('/vendor/three.module.js');
+    const dbg = window.__dbg;
+    dbg.state.discs.length = 0;
+    dbg.setPlayerBlocking(false);
+    const opp = dbg.state.duelOpponent;
+    for (let h = 0; h < 7 && dbg.state.player.alive; h++) {
+      dbg.state.player.invuln = 0;
+      const d = spawnDisc(new THREE.Vector3(0, 1.5, -17.2), new THREE.Vector3(0, 0, -40), opp, 0xff00ff, 0, 0);
+      dbg.step(0.016);
+      if (h === 0 && dbg.state.player.hp >= 100) {
+        throw new Error('Expected victim HP to decrease on disc hit');
+      }
+    }
+  });
+
+  // Wait for Round 2 to start on both clients
+  await Promise.all([
+    hostPage.waitForFunction(() => window.__dbg.state.seriesRound === 2 && window.__dbg.running(), { timeout: 10000, polling: 100 }),
+    guestPage.waitForFunction(() => window.__dbg.state.seriesRound === 2 && window.__dbg.running(), { timeout: 10000, polling: 100 })
+  ]);
+  const r2Scores = await Promise.all([
+    hostPage.evaluate(() => window.__dbg.state.seriesScores),
+    guestPage.evaluate(() => window.__dbg.state.seriesScores)
+  ]);
+  if (r2Scores[0].t1 !== 1 || r2Scores[0].t2 !== 0 || r2Scores[1].t1 !== 1 || r2Scores[1].t2 !== 0) {
+    throw new Error(`Test 12C FAILED (Round 1 -> Round 2 score mismatch): ${JSON.stringify(r2Scores)}`);
+  }
+
+  // Round 2: Guest takes lethal damage again to clinch 2-0 Best-of-3
+  await guestPage.evaluate(async () => {
+    const { damagePlayer } = await import('/src/entities/Player.js');
+    window.__dbg.state.countdownTimer = 0;
+    window.__dbg.state.player.invuln = 0;
+    damagePlayer(100);
+  });
+
+  await hostPage.waitForFunction(() => {
+    const overlay = document.getElementById('overlay');
+    const h1 = overlay ? overlay.querySelector('h1') : null;
+    return overlay && overlay.style.display === 'flex' && h1 && h1.textContent === 'VICTORY';
+  }, { timeout: 10000, polling: 100 });
+  await guestPage.waitForFunction(() => {
+    const overlay = document.getElementById('overlay');
+    const h1 = overlay ? overlay.querySelector('h1') : null;
+    return overlay && overlay.style.display === 'flex' && h1 && h1.textContent === 'DEREZZED';
+  }, { timeout: 10000, polling: 100 });
+
+  const bo3Final = await Promise.all([
+    hostPage.evaluate(() => ({
+      header: document.getElementById('overlay')?.querySelector('h1')?.textContent,
+      seriesText: document.getElementById('postMatchSeriesScore')?.textContent || '',
+      oppAlive: window.__dbg.state.duelOpponent?.alive
+    })),
+    guestPage.evaluate(() => ({
+      header: document.getElementById('overlay')?.querySelector('h1')?.textContent,
+      seriesText: document.getElementById('postMatchSeriesScore')?.textContent || ''
+    }))
+  ]);
+  if (
+    bo3Final[0].header !== 'VICTORY' ||
+    bo3Final[1].header !== 'DEREZZED' ||
+    bo3Final[0].oppAlive !== false ||
+    !bo3Final[0].seriesText.includes('2 - 0') ||
+    !bo3Final[1].seriesText.includes('0 - 2')
+  ) {
+    throw new Error(`Test 12C FAILED (BO3 final overlay parity): ${JSON.stringify(bo3Final)}`);
+  }
+
+  await Promise.all([
+    hostPage.evaluate(() => { window.__dbg.teardownMultiplayer(); window.__dbg.showModeSelect(); }),
+    guestPage.evaluate(() => { window.__dbg.teardownMultiplayer(); window.__dbg.showModeSelect(); })
+  ]);
+  console.log('>>> TEST 12C PASSED: Victim-authoritative disc elimination, Best-of-3 progression, and VICTORY/DEREZZED parity verified!');
 
   console.log('\n========================================================');
   console.log('ALL 1v1 MULTIPLAYER DUEL ACCEPTANCE CRITERIA VERIFIED!');

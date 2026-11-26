@@ -1,5 +1,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { state } from '../core/state.js';
+import { config } from '../core/config.js';
+import { burst } from '../graphics/particles.js';
 import { animateProgramKinematics } from '../graphics/materials.js';
 import { getRoomRef, roomUpdateDoc } from './firebaseSetup.js';
 
@@ -321,6 +323,15 @@ export function handleIncomingFastPacket(data) {
   opp.hasDisc = s.hasDisc;
   opp.chargingThrow = s.chargingThrow;
   opp.throwCharge = s.throwCharge;
+
+  if (s.hp <= 0 && opp.alive) {
+    opp.alive = false;
+    opp.hp = 0;
+    if (opp.pos) {
+      burst(opp.pos.clone().setY((opp.y || 0) + 1.4), config.PURPLE, 80, 15);
+    }
+    if (opp.obj) opp.obj.visible = false;
+  }
 }
 
 /**

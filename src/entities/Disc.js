@@ -154,18 +154,29 @@ export function updateDiscs(dt) {
     // Deflection miss handling
     if (D.isDeflected) {
       D.deflectTime = (D.deflectTime || 0) + dt;
-      if ((D.deflectTime >= 1.5 || (D.deflectBounces || 0) >= 2) && !D.returning) {
+      const isMultiMode = state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi';
+      const deflectExpired = isMultiMode
+        ? (D.deflectTime >= 1.5)
+        : (D.deflectTime >= 1.5 || (D.deflectBounces || 0) >= 2);
+      if (deflectExpired && !D.returning) {
         D.isDeflected = false;
         D.returning = true;
-        const targetFoe = (D.originalOwner && state.foes.includes(D.originalOwner)) ? D.originalOwner : (state.foes[0] || null);
-        if (targetFoe) {
-          D.owner = targetFoe;
-          setDiscVisualColor(D, config.ORANGE, 0x993300);
+        if (isMultiMode && D.originalOwner === 'player') {
+          D.owner = 'player';
+          setDiscVisualColor(D, config.CYAN, 0x0088aa);
+        } else {
+          const targetFoe = (D.originalOwner && (state.foes.includes(D.originalOwner) || (isMultiMode && D.originalOwner.alive !== undefined)))
+            ? D.originalOwner
+            : (state.foes[0] || null);
+          if (targetFoe) {
+            D.owner = targetFoe;
+            setDiscVisualColor(D, config.ORANGE, 0x993300);
+          }
         }
       }
     }
 
-    if (!D.returning && (D.t > 1.5 || D.bounces >= 3)) D.returning = true;
+    if (!D.returning && !D.isDeflected && (D.t > 1.5 || D.bounces >= 3)) D.returning = true;
 
     if (D.returning) {
       const home = holder.pos.clone().setY(1.7 + (holder.y || 0));
@@ -339,8 +350,8 @@ export function updateDiscs(dt) {
         const fCenter = tmp.copy(f.pos).setY(1.5 + (f.y || 0));
         const dist = D.pos.distanceTo(fCenter);
 
-        // AI Threat Detection, Parry Defense & Catch Window
-        if (dist <= 2.2) {
+        // AI Threat Detection, Parry Defense & Catch Window (disabled for remote human opponents in 1v1)
+        if (dist <= 2.2 && state.gameMode !== 'duel_multi') {
           const toFoe = fCenter.clone().sub(D.pos);
           const movingToward = D.vel.dot(toFoe) > 0;
           const rotY = (f.obj && f.obj.rotation) ? f.obj.rotation.y : 0;
@@ -482,6 +493,39 @@ export function updateDiscs(dt) {
         if (dist < config.FOE_R + config.DISC_R + .35) {
           if (!D.hitFoes) D.hitFoes = new Set();
           D.hitFoes.add(f);
+
+          if (state.gameMode === 'duel_multi') {
+            const toTarget = D.pos.clone().sub(fCenter).setY(0);
+            if (toTarget.lengthSq() > 1e-4) toTarget.normalize();
+            else toTarget.set(0, 0, 1);
+
+            burst(D.pos.clone(), D.isDeflected ? config.WHITE : config.ORANGE, 20, 8);
+            shake(0.12);
+
+            D.vel.multiplyScalar(-0.45);
+            D.vel.x += (Math.random() - 0.5) * 4;
+            D.vel.z += (Math.random() - 0.5) * 4;
+            D.vel.y = Math.random() * 2 + 1;
+            D.bounces = 0;
+            D.curve = 0;
+            if (D.isDeflected) {
+              D.isDeflected = false;
+              const targetOwner = (D.originalOwner && D.originalOwner !== 'player') ? D.originalOwner : f;
+              D.owner = targetOwner;
+              setDiscVisualColor(D, config.ORANGE, 0x993300);
+            }
+            D.returning = true;
+            D.pos.addScaledVector(toTarget, 0.4);
+
+            if (D.owner === 'player' && D.pos.distanceTo(tmp.copy(holder.pos).setY(1.7 + (holder.y || 0))) < 1.4) {
+              state.player.hasDisc = true;
+              disposeDiscEntity(D);
+              state.discs.splice(i, 1);
+              discCaught = true;
+              SFX.catchDisc();
+            }
+            break;
+          }
 
           if (D.isDeflected) {
             if (state.gameMode === 'campaign') {
@@ -635,7 +679,9 @@ export function updateDiscs(dt) {
           if ((state.gameMode === 'calibration' || (state.gameMode === 'campaign' && state.campaignLevelId === 'level_01_01')) && typeof window !== 'undefined' && window.__tronCalibrationMode) {
             window.__tronCalibrationMode.onDiscDeflected();
           }
-          D.originalOwner = (D.owner !== 'player') ? D.owner : (D.originalOwner || state.foes[0]);
+          if (!D.isDeflected) {
+            D.originalOwner = (D.owner !== 'player') ? D.owner : (D.originalOwner || state.foes[0]);
+          }
           D.owner = 'player';
           D.color = config.WHITE;
           D.isDeflected = true;
@@ -649,8 +695,13 @@ export function updateDiscs(dt) {
           if (D.hitFoes) D.hitFoes.clear();
           setDiscVisualColor(D, config.WHITE, config.CYAN);
           const incomingSpd = D.vel.length();
-          const spd = Math.max(36, incomingSpd * 1.25);
-          let targetFoe = (D.originalOwner && state.foes.includes(D.originalOwner)) ? D.originalOwner : state.foes[0];
+          const isMultiMode = state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi';
+          const spd = isMultiMode
+            ? Math.min(62, Math.max(42, incomingSpd * 1.12))
+            : Math.max(36, incomingSpd * 1.25);
+          let targetFoe = (D.originalOwner && D.originalOwner !== 'player' && state.foes.includes(D.originalOwner))
+            ? D.originalOwner
+            : state.foes[0];
           if (!targetFoe && state.foes.length > 0) targetFoe = state.foes[0];
           if (targetFoe) {
             const dirToRival = targetFoe.pos.clone().setY(1.7 + (targetFoe.y || 0)).sub(D.pos).normalize();
@@ -659,10 +710,20 @@ export function updateDiscs(dt) {
             D.vel.copy(facing).multiplyScalar(spd);
           }
 
-          if (state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi') {
+          if (isMultiMode) {
+            const parryId = Math.random().toString(36).substring(2, 9);
+            const originalOwnerRole = D.originalOwner === 'player'
+              ? state.playerRole
+              : ((D.originalOwner && D.originalOwner.role) || (state.duelOpponent && state.duelOpponent.role) || null);
             const parryThrow = {
-              id: Math.random().toString(36).substring(2, 9),
+              id: parryId,
+              throwId: parryId,
+              parentThrowId: D.remoteThrowId || D.throwId || null,
               sender: state.playerRole,
+              originalOwnerRole,
+              isDeflected: true,
+              charge: +(D.charge || 0).toFixed(2),
+              rallyHits: D.rallyHits || 1,
               x: +D.pos.x.toFixed(2),
               y: +D.pos.y.toFixed(2),
               z: +D.pos.z.toFixed(2),
@@ -671,6 +732,7 @@ export function updateDiscs(dt) {
               vz: +D.vel.z.toFixed(2),
               curve: 0
             };
+            D.remoteThrowId = parryId;
             if (state.webrtcPeer && state.webrtcPeer.connectionState === 'connected') {
               state.webrtcPeer.sendReliable({
                 type: 'DISC_PARRY',
@@ -704,7 +766,11 @@ export function updateDiscs(dt) {
           const behind = toDisc.dot(facing) < -0.25;
           const charge = D.charge || 0;
           const baseDmg = (16 + D.bounces * 6) * (1 + charge * 0.8);
-          damagePlayer(baseDmg * (behind && D.bounces > 0 ? 1.8 : 1));
+          const rallyHits = Math.max(1, D.rallyHits || 1);
+          const parryMult = D.isDeflected
+            ? (1 + Math.min(0.75, 0.25 + (rallyHits - 1) * 0.15))
+            : 1;
+          damagePlayer(baseDmg * parryMult * (behind && D.bounces > 0 ? 1.8 : 1));
           burst(D.pos.clone(), config.ORANGE, 18, 7);
           shake(0.18 + charge * 0.15);
 
@@ -714,11 +780,20 @@ export function updateDiscs(dt) {
           D.vel.y = Math.random() * 2 + 1;
           D.bounces = 0;
           D.curve = 0;
+          if (D.isDeflected && (state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi') && D.originalOwner) {
+            D.owner = D.originalOwner;
+            if (D.owner === 'player') {
+              setDiscVisualColor(D, config.CYAN, 0x0088aa);
+            } else {
+              setDiscVisualColor(D, config.ORANGE, 0x993300);
+            }
+          }
           D.isDeflected = false;
           D.returning = true;
           D.pos.addScaledVector(toDisc, config.PLAYER_R + config.DISC_R + 0.4);
 
-          if (D.pos.distanceTo(tmp.copy(holder.pos).setY(1.7 + (holder.y || 0))) < 1.4) {
+          const returnHolder = D.owner === 'player' ? player : D.owner;
+          if (returnHolder && returnHolder.pos && D.pos.distanceTo(tmp.copy(returnHolder.pos).setY(1.7 + (returnHolder.y || 0))) < 1.4) {
             if (D.owner === 'player') {
               state.player.hasDisc = true;
             } else if (D.owner) {

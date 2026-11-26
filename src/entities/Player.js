@@ -15,7 +15,7 @@ import { setCursor } from '../input/mouse.js';
 import { touchMove, updateCurveButtons, updateTouchMomentum, resetTouchInputs } from '../input/touch.js';
 import { getLeftStick, getRightStick, playGamepadHaptics } from '../input/gamepad.js';
 import { getRoomRef, roomUpdateDoc } from '../network/firebaseSetup.js';
-import { showMultiplayerDefeat, reportMultiplayerMatchEnd } from '../network/roomManager.js';
+import { showMultiplayerDefeat, reportMultiplayerMatchEnd, reportDuelElimination } from '../network/roomManager.js';
 import { updateHUD, resetHintVisibility, clearArenaNameplates } from '../ui/hud.js';
 import { swarmEconomyBridge } from '../modes/SwarmEconomyBridge.js';
 import { campaignManager } from '../campaign/CampaignManager.js';
@@ -384,7 +384,12 @@ export function throwDisc(customCharge = null) {
     : 1.0;
   const speed = (38.0 + 17.0 * charge) * (1.0 - 0.25 * Math.abs(curve)) * discMult;
   const vel = _throwVel.copy(dir).multiplyScalar(speed);
-  spawnDisc(origin, vel, 'player', config.CYAN, curve, charge);
+  const throwId = Math.random().toString(36).substring(2, 9);
+  const localDisc = spawnDisc(origin, vel, 'player', config.CYAN, curve, charge);
+  if (localDisc) {
+    localDisc.throwId = throwId;
+  }
+  state.lastLocalThrowId = throwId;
   if (typeof window !== 'undefined') {
     window.__lastThrowDot = _throwNormDir.copy(dir).normalize().dot(_throwAimToOrigin.copy(aim.point).sub(origin).normalize());
   }
@@ -410,7 +415,8 @@ export function throwDisc(customCharge = null) {
   // Network sync throw for multiplayer
   if (state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi') {
     const throwData = {
-      id: Math.random().toString(36).substring(2, 9),
+      id: throwId,
+      throwId,
       sender: state.playerRole,
       x: +origin.x.toFixed(2),
       y: +origin.y.toFixed(2),
@@ -557,7 +563,23 @@ export function damagePlayer(amount, from) {
     burst(_playerBurstPos.copy(state.player.pos).setY(state.player.y + 1.4), config.CYAN, 90, 16);
     if (state.player.obj) state.player.obj.visible = false;
 
-    if (state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi') {
+    if (state.gameMode === 'duel_multi') {
+      const myState = {
+        x: +state.player.pos.x.toFixed(2),
+        y: +state.player.y.toFixed(2),
+        z: +state.player.pos.z.toFixed(2),
+        yaw: +state.player.yaw.toFixed(2),
+        pitch: +state.player.pitch.toFixed(2),
+        hp: 0,
+        blocking: false,
+        hasDisc: state.player.hasDisc
+      };
+      reportDuelElimination({
+        role: state.playerRole,
+        reason: state.gameOverReason || '',
+        playerState: myState
+      });
+    } else if (state.gameMode === 'duos_multi') {
       const myState = {
         x: +state.player.pos.x.toFixed(2),
         y: +state.player.y.toFixed(2),
@@ -570,11 +592,8 @@ export function damagePlayer(amount, from) {
       };
       const myTeam = (state.playerRole === 'p1' || state.playerRole === 'p3') ? 1 : 2;
       const winnerTeam = myTeam === 1 ? 2 : 1;
-      const winner = state.gameMode === 'duel_multi'
-        ? (state.playerRole === 'p1' ? 'p2' : 'p1')
-        : null;
       reportMultiplayerMatchEnd({
-        winner,
+        winner: null,
         winnerTeam,
         loserRole: state.playerRole,
         reason: state.gameOverReason || '',

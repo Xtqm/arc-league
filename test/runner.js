@@ -56,7 +56,8 @@ const TEST_DOMAINS = {
     'network/binary_netcode.test.js',
     'network/signaling_bridge.test.js',
     'network/matchmaking_queue.test.js',
-    'network/warmup_sparring.test.js'
+    'network/warmup_sparring.test.js',
+    'network/duel_1v1_settlement.test.js'
   ],
   campaign: [
     'campaign/campaign_phase1.test.js',

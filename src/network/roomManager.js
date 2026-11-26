@@ -35,6 +35,14 @@ export function normalizeBestOf(val, fallback = 3) {
   return (n === 1 || n === 3 || n === 5 || n === 7) ? n : fallback;
 }
 
+export function clearDuelSettlementState() {
+  if (state._duelSettlementTimer) {
+    clearTimeout(state._duelSettlementTimer);
+    state._duelSettlementTimer = null;
+  }
+  state._duelEliminations = {};
+}
+
 export function clearSeriesIntermissionTimer() {
   if (state.seriesIntermissionTimer) {
     clearTimeout(state.seriesIntermissionTimer);
@@ -196,17 +204,51 @@ export function showJoinInputModal() {
 }
 
 export function handleRemoteThrow(t) {
-  if (!t || t.id === state.lastProcessedThrowId || t.sender === state.playerRole) return;
-  state.lastProcessedThrowId = t.id;
+  const incomingId = t && (t.id || t.throwId);
+  if (!t || !incomingId || incomingId === state.lastProcessedThrowId || t.sender === state.playerRole) return;
+  state.lastProcessedThrowId = incomingId;
+
+  if (t.isDeflected && t.parentThrowId) {
+    let removedMatchedLocal = false;
+    for (let i = state.discs.length - 1; i >= 0; i--) {
+      const d = state.discs[i];
+      if (d && d.owner === 'player' && (d.throwId === t.parentThrowId || d.remoteThrowId === t.parentThrowId)) {
+        disposeDiscEntity(d);
+        state.discs.splice(i, 1);
+        removedMatchedLocal = true;
+      }
+    }
+    const hasNewLocalInFlight = state.discs.some(d => d && d.owner === 'player' && d.throwId !== t.parentThrowId);
+    if ((removedMatchedLocal || state.lastLocalThrowId === t.parentThrowId) && !hasNewLocalInFlight && t.originalOwnerRole === state.playerRole) {
+      state.player.hasDisc = false;
+      if (state.player.obj && state.player.obj.userData && state.player.obj.userData.backDisc) {
+        state.player.obj.userData.backDisc.visible = false;
+      }
+    }
+  }
+
   const opp = state.multiPlayers[t.sender];
   if (opp) {
     const origin = new THREE.Vector3(t.x, t.y, t.z);
     const vel = new THREE.Vector3(t.vx, t.vy, t.vz);
-    const oppDisc = spawnDisc(origin, vel, opp, opp.team === (state.multiPlayers[state.playerRole]?.team || 1) ? config.CYAN : config.PURPLE, t.curve || 0, t.charge || 0);
-    oppDisc.remoteThrowId = t.id;
-    opp.hasDisc = false;
-    if (opp.obj && opp.obj.userData && opp.obj.userData.backDisc) {
-      opp.obj.userData.backDisc.visible = false;
+    const discColor = t.isDeflected
+      ? config.ORANGE
+      : (opp.team === (state.multiPlayers[state.playerRole]?.team || 1) ? config.CYAN : config.PURPLE);
+    const oppDisc = spawnDisc(origin, vel, opp, discColor, t.curve || 0, t.charge || 0);
+    oppDisc.remoteThrowId = incomingId;
+    if (t.isDeflected) {
+      oppDisc.isDeflected = true;
+      oppDisc.deflectTime = 0;
+      oppDisc.deflectBounces = 0;
+      oppDisc.rallyHits = t.rallyHits || 1;
+      oppDisc.originalOwner = (t.originalOwnerRole === state.playerRole)
+        ? 'player'
+        : (state.multiPlayers[t.originalOwnerRole] || opp);
+    } else {
+      opp.hasDisc = false;
+      if (opp.obj && opp.obj.userData && opp.obj.userData.backDisc) {
+        opp.obj.userData.backDisc.visible = false;
+      }
     }
     shake(0.08);
   }
@@ -423,19 +465,20 @@ export function evaluateHostRematchConsensus(data = null) {
   }
 }
 
-export function scheduleHostNextSeriesRound(scores, bestOf, nextSeriesRound) {
+export function scheduleHostNextSeriesRound(scores, bestOf, nextSeriesRound, { isDrawReplay = false } = {}) {
   if (state.playerRole !== 'p1') return;
   if (state.isTearingDownMultiplayer || state.peerDeparted || state.multiplayerMatchFinished) return;
-  if (state._pendingNextSeriesRound === nextSeriesRound) return;
+  const pendingKey = `${nextSeriesRound}:${isDrawReplay ? 'draw' : 'next'}`;
+  if (state._pendingNextSeriesRound === pendingKey) return;
   clearSeriesIntermissionTimer();
-  state._pendingNextSeriesRound = nextSeriesRound;
+  state._pendingNextSeriesRound = pendingKey;
 
   const delay = Number(state.seriesIntermissionMs) > 0 ? Number(state.seriesIntermissionMs) : 2000;
   state.seriesIntermissionTimer = setTimeout(() => {
     state.seriesIntermissionTimer = null;
     state._pendingNextSeriesRound = null;
     if (state.isTearingDownMultiplayer || state.peerDeparted || state.multiplayerMatchFinished) return;
-    if ((state.seriesRound || 1) >= nextSeriesRound) return;
+    if (!isDrawReplay && (state.seriesRound || 1) >= nextSeriesRound) return;
 
     const mode = state.gameMode === 'duos_multi' ? '2v2' : '1v1';
     const mapId = state.multiplayerMapId || null;
@@ -449,6 +492,7 @@ export function scheduleHostNextSeriesRound(scores, bestOf, nextSeriesRound) {
       type: 'NEXT_ROUND_START',
       roundId: state.multiplayerRoundId || 1,
       seriesRound: nextSeriesRound,
+      isDrawReplay,
       bestOf: resolvedBestOf,
       seriesScores: resolvedScores,
       mode,
@@ -479,6 +523,7 @@ export function scheduleHostNextSeriesRound(scores, bestOf, nextSeriesRound) {
         lastRoundWinner: null,
         lastRoundWinnerTeam: null,
         lastRoundLoserRole: null,
+        eliminations: null,
         lastThrow: null,
         fallen: []
       };
@@ -507,6 +552,7 @@ export function handleRemoteRoundOver(msg) {
     return;
   }
 
+  clearDuelSettlementState();
   state.seriesRoundFinished = true;
   state.running = false;
   clearMatchEndOverlayTimer();
@@ -560,13 +606,64 @@ export function handleRemoteRoundOver(msg) {
   }
 }
 
+export function handleRemoteRoundDraw(msg) {
+  if (!msg) return;
+  const ev = msg.payload ? { ...msg.payload, roundId: msg.roundId ?? msg.payload.roundId } : msg;
+  if (typeof ev.roundId === 'number' && state.multiplayerRoundId && ev.roundId !== state.multiplayerRoundId) {
+    return;
+  }
+  const evSeriesRound = typeof ev.seriesRound === 'number' ? ev.seriesRound : (state.seriesRound || 1);
+  if (state.multiplayerMatchFinished || state.seriesRoundFinished || evSeriesRound !== (state.seriesRound || 1)) {
+    return;
+  }
+
+  clearDuelSettlementState();
+  state.seriesRoundFinished = true;
+  state.running = false;
+  clearMatchEndOverlayTimer();
+  if (ev.bestOf !== undefined) {
+    state.seriesBestOf = normalizeBestOf(ev.bestOf, state.seriesBestOf || 3);
+  }
+  if (ev.seriesScores && typeof ev.seriesScores === 'object') {
+    state.seriesScores = {
+      t1: Number(ev.seriesScores.t1) || 0,
+      t2: Number(ev.seriesScores.t2) || 0
+    };
+  }
+
+  state.player.alive = false;
+  state.player.hp = 0;
+  if (state.player.obj) state.player.obj.visible = false;
+  for (const r of ['p1', 'p2']) {
+    const opp = state.multiPlayers[r];
+    if (opp && opp.alive) {
+      opp.alive = false;
+      opp.hp = 0;
+      if (opp.obj) opp.obj.visible = false;
+    }
+  }
+
+  updateHUD();
+  showSeriesIntermission({
+    round: evSeriesRound,
+    won: false,
+    draw: true,
+    scores: state.seriesScores,
+    bestOf: state.seriesBestOf
+  });
+
+  if (state.playerRole === 'p1') {
+    scheduleHostNextSeriesRound(state.seriesScores, state.seriesBestOf, evSeriesRound, { isDrawReplay: true });
+  }
+}
+
 export function handleRemoteNextRoundStart(msg) {
   if (!msg || state.peerDeparted || state.multiplayerMatchFinished) return;
   if (typeof msg.roundId === 'number' && state.multiplayerRoundId && msg.roundId !== state.multiplayerRoundId) {
     return;
   }
   const nextSeriesRound = typeof msg.seriesRound === 'number' ? msg.seriesRound : (state.seriesRound || 1) + 1;
-  if (nextSeriesRound <= (state.seriesRound || 1)) return;
+  if (!msg.isDrawReplay && nextSeriesRound <= (state.seriesRound || 1)) return;
 
   if (msg.playerNames && typeof msg.playerNames === 'object') {
     for (const [r, n] of Object.entries(msg.playerNames)) {
@@ -618,6 +715,7 @@ export function handleRemoteGameOver(msg) {
     isWin = ev.loserRole !== state.playerRole;
   }
 
+  clearDuelSettlementState();
   clearSeriesIntermissionTimer();
   clearSeriesIntermission();
   state.seriesRoundFinished = true;
@@ -695,6 +793,7 @@ export function handleRemoteRematchStart(msg) {
 export function handleRemotePeerLeft() {
   if (state.isTearingDownMultiplayer) return;
   if (state.gameMode !== 'duel_multi' && state.gameMode !== 'duos_multi') return;
+  clearDuelSettlementState();
   clearSeriesIntermissionTimer();
   clearSeriesIntermission();
   if (state.peerDeparted) {
@@ -739,6 +838,12 @@ export function handleReliableMatchMessage(msg) {
     case 'ROUND_OVER':
       handleRemoteRoundOver(msg);
       break;
+    case 'ROUND_DRAW':
+      handleRemoteRoundDraw(msg);
+      break;
+    case 'PLAYER_ELIMINATED':
+      handleDuelPlayerEliminated(msg);
+      break;
     case 'NEXT_ROUND_START':
       handleRemoteNextRoundStart(msg);
       break;
@@ -778,6 +883,185 @@ export function handlePeerConnectionStateChange(connState, { hasRoomFallback = f
     if (!hasRoomFallback || hadConnected) {
       handleRemotePeerLeft({ reason: 'CONNECTION_LOST' });
     }
+  }
+}
+
+export function getDuelTradeWindowMs() {
+  return Math.min(140, Math.max(35, Math.round((state.ping || 60) / 2 + 20)));
+}
+
+function settleDuelRound(winnerRole, loserRole, reason = '', isDraw = false) {
+  if (state.playerRole !== 'p1' || state.gameMode !== 'duel_multi') return;
+  if (state.multiplayerMatchFinished || state.seriesRoundFinished) return;
+  clearDuelSettlementState();
+
+  if (isDraw) {
+    state.seriesRoundFinished = true;
+    state.running = false;
+    clearMatchEndOverlayTimer();
+    const bestOf = normalizeBestOf(state.seriesBestOf ?? 3, 3);
+    const currentSeriesRound = state.seriesRound || 1;
+    const scores = {
+      t1: Number(state.seriesScores?.t1) || 0,
+      t2: Number(state.seriesScores?.t2) || 0
+    };
+    const drawPayload = {
+      type: 'ROUND_DRAW',
+      roundId: state.multiplayerRoundId || 1,
+      seriesRound: currentSeriesRound,
+      bestOf,
+      seriesScores: scores,
+      reason: reason || 'SIMULTANEOUS_ELIMINATION'
+    };
+
+    const sentOverWebRTC = dispatchReliableMatchEvent(drawPayload);
+    if (!sentOverWebRTC && state.db && state.currentRoomId && state.currentUser && state.roomUnsubscribe) {
+      const roomRef = getRoomRef(state.currentRoomId);
+      roomUpdateDoc(roomRef, {
+        status: 'round_draw',
+        roundId: state.multiplayerRoundId || 1,
+        bestOf,
+        seriesRound: currentSeriesRound,
+        seriesScores: scores
+      }).catch(err => console.warn("Round draw sync err:", err));
+    }
+
+    updateHUD();
+    showSeriesIntermission({
+      round: currentSeriesRound,
+      won: false,
+      draw: true,
+      scores,
+      bestOf
+    });
+    scheduleHostNextSeriesRound(scores, bestOf, currentSeriesRound, { isDrawReplay: true });
+    return;
+  }
+
+  const isLocalWin = winnerRole === state.playerRole;
+  const winnerTeam = getTeamForRole(winnerRole);
+  reportMultiplayerMatchEnd({
+    winner: winnerRole,
+    winnerTeam,
+    loserRole,
+    reason,
+    isLocalWin
+  });
+}
+
+export function handleDuelPlayerEliminated(msg) {
+  if (!msg || state.playerRole !== 'p1' || state.gameMode !== 'duel_multi') return;
+  if (state.multiplayerMatchFinished || state.seriesRoundFinished) return;
+  const roundId = typeof msg.roundId === 'number' ? msg.roundId : (state.multiplayerRoundId || 1);
+  const seriesRound = typeof msg.seriesRound === 'number' ? msg.seriesRound : (state.seriesRound || 1);
+  if (roundId !== (state.multiplayerRoundId || 1) || seriesRound !== (state.seriesRound || 1)) return;
+
+  const role = msg.role;
+  if (role !== 'p1' && role !== 'p2') return;
+
+  if (!state._duelEliminations) state._duelEliminations = {};
+  if (state._duelEliminations[role]) return;
+
+  const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  const oneWayMs = (state.ping || 60) / 2;
+  const fallbackElapsed = Math.max(0, now - (state.roundStartPerfMs || now) - (role === 'p2' ? oneWayMs : 0));
+  const clientElapsedMs = typeof msg.clientElapsedMs === 'number' ? msg.clientElapsedMs : fallbackElapsed;
+
+  state._duelEliminations[role] = {
+    role,
+    reason: msg.reason || '',
+    clientElapsedMs,
+    receivedAtMs: now
+  };
+
+  // Mark remote opponent dead locally if p2 reported elimination
+  if (role === 'p2' && state.multiPlayers.p2 && state.multiPlayers.p2.alive) {
+    state.multiPlayers.p2.alive = false;
+    state.multiPlayers.p2.hp = 0;
+    if (state.multiPlayers.p2.obj) state.multiPlayers.p2.obj.visible = false;
+  }
+
+  const elimP1 = state._duelEliminations.p1;
+  const elimP2 = state._duelEliminations.p2;
+
+  if (elimP1 && elimP2) {
+    const deltaMs = Math.abs(elimP1.clientElapsedMs - elimP2.clientElapsedMs);
+    if (deltaMs <= 16) {
+      settleDuelRound(null, null, 'SIMULTANEOUS_ELIMINATION', true);
+    } else if (elimP1.clientElapsedMs < elimP2.clientElapsedMs) {
+      settleDuelRound('p2', 'p1', elimP1.reason || 'ELIMINATED BY OPPONENT', false);
+    } else {
+      settleDuelRound('p1', 'p2', elimP2.reason || 'ELIMINATED BY OPPONENT', false);
+    }
+    return;
+  }
+
+  if (elimP2 && !elimP1) {
+    // Guest died while Host is alive: settle immediately
+    settleDuelRound('p1', 'p2', elimP2.reason || 'ELIMINATED BY OPPONENT', false);
+    return;
+  }
+
+  if (elimP1 && !elimP2) {
+    // Host died first: open RTT/2-aware trade window before awarding round to Guest
+    if (!state._duelSettlementTimer) {
+      const windowMs = getDuelTradeWindowMs();
+      state._duelSettlementTimer = setTimeout(() => {
+        state._duelSettlementTimer = null;
+        if (state.multiplayerMatchFinished || state.seriesRoundFinished) return;
+        const p1Entry = state._duelEliminations && state._duelEliminations.p1;
+        const p2Entry = state._duelEliminations && state._duelEliminations.p2;
+        if (p1Entry && p2Entry) {
+          const deltaMs = Math.abs(p1Entry.clientElapsedMs - p2Entry.clientElapsedMs);
+          if (deltaMs <= 16) {
+            settleDuelRound(null, null, 'SIMULTANEOUS_ELIMINATION', true);
+          } else if (p1Entry.clientElapsedMs < p2Entry.clientElapsedMs) {
+            settleDuelRound('p2', 'p1', p1Entry.reason || 'ELIMINATED BY OPPONENT', false);
+          } else {
+            settleDuelRound('p1', 'p2', p2Entry.reason || 'ELIMINATED BY OPPONENT', false);
+          }
+        } else if (p1Entry) {
+          settleDuelRound('p2', 'p1', p1Entry.reason || 'ELIMINATED BY OPPONENT', false);
+        }
+      }, windowMs);
+    }
+  }
+}
+
+export function reportDuelElimination({ role = state.playerRole, reason = '', playerState = null } = {}) {
+  if (state.multiplayerMatchFinished || state.seriesRoundFinished) return;
+  if (state.gameMode !== 'duel_multi') return;
+
+  const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  const clientElapsedMs = Math.max(0, now - (state.roundStartPerfMs || now));
+  const elimEvent = {
+    type: 'PLAYER_ELIMINATED',
+    role: role || state.playerRole,
+    reason: reason || '',
+    roundId: state.multiplayerRoundId || 1,
+    seriesRound: state.seriesRound || 1,
+    clientElapsedMs
+  };
+
+  if (state.playerRole === 'p1') {
+    if (playerState && state.db && state.currentRoomId && state.currentUser && state.roomUnsubscribe && !isWebRTCConnected()) {
+      const roomRef = getRoomRef(state.currentRoomId);
+      roomUpdateDoc(roomRef, { [`state.${state.playerRole}`]: playerState }).catch(() => {});
+    }
+    handleDuelPlayerEliminated(elimEvent);
+    return;
+  }
+
+  const sentOverWebRTC = dispatchReliableMatchEvent(elimEvent);
+  if (!sentOverWebRTC && state.db && state.currentRoomId && state.currentUser && state.roomUnsubscribe) {
+    const roomRef = getRoomRef(state.currentRoomId);
+    const patch = {
+      [`eliminations.${elimEvent.role}`]: elimEvent
+    };
+    if (playerState && state.playerRole) {
+      patch[`state.${state.playerRole}`] = playerState;
+    }
+    roomUpdateDoc(roomRef, patch).catch(err => console.warn("Elimination sync err:", err));
   }
 }
 
@@ -1144,6 +1428,7 @@ export function syncRematchTimeout(data = null) {
 export function resetMultiplayerSessionTracking(roundId = 0, options = {}) {
   clearMatchEndOverlayTimer();
   clearRematchVoteTimeout();
+  clearDuelSettlementState();
   clearSeriesIntermissionTimer();
   clearSeriesIntermission();
   state.multiplayerRoundId = roundId;
@@ -1421,6 +1706,9 @@ export function startMultiplayerDuel(role, roomCode, mode = '1v1', options = {})
   state.gameMode = mode === '2v2' ? 'duos_multi' : 'duel_multi';
   state.playerRole = role;
   state.currentRoomId = roomCode;
+  clearDuelSettlementState();
+  state.roundStartPerfMs = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  state.lastLocalThrowId = null;
   const localCallsign = options.localCallsign || getLocalCallsign();
   applyPlayerName(role, localCallsign);
   state.lastProcessedThrowId = null;
@@ -1655,20 +1943,15 @@ export function onRoomSnapshot(snap) {
     }
   }
 
-  if (data.lastThrow && data.lastThrow.id !== state.lastProcessedThrowId && data.lastThrow.sender !== state.playerRole) {
-    state.lastProcessedThrowId = data.lastThrow.id;
-    const t = data.lastThrow;
-    const opp = state.multiPlayers[t.sender];
-    if (opp) {
-      const origin = new THREE.Vector3(t.x, t.y, t.z);
-      const vel = new THREE.Vector3(t.vx, t.vy, t.vz);
-      const oppDisc = spawnDisc(origin, vel, opp, opp.team === (state.multiPlayers[state.playerRole]?.team || 1) ? config.CYAN : config.PURPLE, t.curve || 0, t.charge || 0);
-      oppDisc.remoteThrowId = t.id;
-      opp.hasDisc = false;
-      if (opp.obj && opp.obj.userData && opp.obj.userData.backDisc) {
-        opp.obj.userData.backDisc.visible = false;
+  if (data.lastThrow && (data.lastThrow.id || data.lastThrow.throwId) !== state.lastProcessedThrowId && data.lastThrow.sender !== state.playerRole) {
+    handleRemoteThrow(data.lastThrow);
+  }
+
+  if (state.playerRole === 'p1' && state.gameMode === 'duel_multi' && data.eliminations && typeof data.eliminations === 'object') {
+    for (const r of ['p1', 'p2']) {
+      if (data.eliminations[r]) {
+        handleDuelPlayerEliminated(data.eliminations[r]);
       }
-      shake(0.08);
     }
   }
 
@@ -1681,6 +1964,18 @@ export function onRoomSnapshot(snap) {
         triggerTileWarning(t, config.PURPLE);
       }
     }
+  }
+
+  if (data.status === 'round_draw') {
+    if (docRoundId === (state.multiplayerRoundId || 1) && docSeriesRound === (state.seriesRound || 1)) {
+      handleRemoteRoundDraw({
+        roundId: docRoundId,
+        seriesRound: docSeriesRound,
+        bestOf: docBestOf,
+        seriesScores: docScores
+      });
+    }
+    return;
   }
 
   if (data.status === 'round_over') {
@@ -1859,6 +2154,7 @@ export function showMultiplayerVictory(data = null) {
   state.running = false;
   state.seriesRoundFinished = true;
   state.multiplayerMatchFinished = true;
+  clearDuelSettlementState();
   clearSeriesIntermissionTimer();
   clearSeriesIntermission();
   if (!state.multiplayerPayoutProcessed) {
@@ -1895,6 +2191,7 @@ export function showMultiplayerDefeat(data = null) {
   state.running = false;
   state.seriesRoundFinished = true;
   state.multiplayerMatchFinished = true;
+  clearDuelSettlementState();
   clearSeriesIntermissionTimer();
   clearSeriesIntermission();
   if (!state.multiplayerPayoutProcessed) {
@@ -1968,6 +2265,9 @@ export function teardownMultiplayer({ flushPeerMs = 0 } = {}) {
   state.playerRole = null;
   state.multiplayerNames = { p1: null, p2: null, p3: null, p4: null };
   state.lastProcessedThrowId = null;
+  state.lastLocalThrowId = null;
+  state.roundStartPerfMs = 0;
+  clearDuelSettlementState();
   state.roomFallenTiles = [];
   state.gameMode = 'swarm';
   state.seriesBestOf = 3;

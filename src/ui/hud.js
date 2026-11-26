@@ -380,7 +380,7 @@ export function updateHUD() {
   }
 }
 
-export function showSeriesIntermission({ round = 1, won = false, scores = null, bestOf = 3 } = {}) {
+export function showSeriesIntermission({ round = 1, won = false, draw = false, scores = null, bestOf = 3 } = {}) {
   if (typeof document === 'undefined') return;
   const box = el('seriesIntermission');
   if (!box) return;
@@ -390,11 +390,15 @@ export function showSeriesIntermission({ round = 1, won = false, scores = null, 
   const myWins = Number(s[`t${myTeam}`]) || 0;
   const foeWins = Number(s[`t${foeTeam}`]) || 0;
   const winsNeeded = Math.ceil((Number(bestOf) || 3) / 2);
-  box.className = won ? '' : 'lost';
+  box.className = draw ? '' : (won ? '' : 'lost');
+  const titleText = draw ? `ROUND ${round} DRAW` : `ROUND ${round} ${won ? 'WON' : 'LOST'}`;
+  const subText = draw
+    ? `SIMULTANEOUS ELIMINATION · REPLAYING ROUND ${round}`
+    : `FIRST TO ${winsNeeded} WINS · NEXT ROUND INCOMING`;
   box.innerHTML = `
-    <div class="si-title">ROUND ${round} ${won ? 'WON' : 'LOST'}</div>
+    <div class="si-title">${titleText}</div>
     <div class="si-score"><span style="color:var(--cyan)">${myWins}</span> <span style="opacity:.5">-</span> <span style="color:#d896ff">${foeWins}</span></div>
-    <div class="si-sub">FIRST TO ${winsNeeded} WINS · NEXT ROUND INCOMING</div>
+    <div class="si-sub">${subText}</div>
   `;
   box.style.display = 'block';
 }

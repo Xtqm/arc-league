@@ -7,14 +7,18 @@ Coordinates real-time multiplayer room matchmaking, throttled state synchronizat
 ## Requirements
 
 ### Requirement: Room Lifecycle and Matchmaking
-The system SHALL facilitate creating and joining peer rooms using 4-character codes or direct signaling, establishing a direct WebRTC DataChannel connection with symmetrical spawn locations for 1v1 and 2v2 Duos matches.
+The system SHALL facilitate creating and joining peer rooms using 4-character codes or direct signaling, establishing a direct WebRTC DataChannel connection for `1v1` matches and synchronizing `2v2` Duos matches across all 4 participants via the shared room document with symmetrical spawn locations.
 
 #### Scenario: Symmetrical room join
-- **WHEN** a guest enters an active 4-character room code or accepts a direct peer handshake
+- **WHEN** a guest enters an active 4-character room code or accepts a direct peer handshake in a `1v1` match
 - **THEN** the system links the guest to the room via WebRTC DataChannel, assigns symmetrical spawn positions, and initiates the combat session.
 
+#### Scenario: Symmetrical 2v2 room join without 1-to-1 WebRTC miswiring
+- **WHEN** a host creates a `2v2` room and up to three guests enter the 4-character room code
+- **THEN** the system assigns symmetrical team spawn positions (`p1`/`p3` vs `p2`/`p4`), initiates the combat session via room-document synchronization without creating a 2-peer WebRTC DataChannel, and does not falsely trigger `OPPONENT LEFT` from 1-to-1 WebRTC state changes.
+
 #### Scenario: Connection fallback and retry
-- **WHEN** an initial direct P2P connection attempt fails or times out
+- **WHEN** an initial direct P2P connection attempt in a `1v1` room fails or times out
 - **THEN** the system retries ICE candidate exchange through configured STUN servers and notifies the player if the peer is unreachable.
 
 ### Requirement: Throttled State Synchronization and Interpolation
@@ -52,7 +56,15 @@ The system SHALL provide reversible post-match rematch voting over reliable WebR
 - **THEN** the local vote toggles to `false`, the button remains enabled displaying the unvoted state (`VOTE REMATCH`), the updated `REMATCH_VOTE` (`voted: false`) is broadcast to peers (or written to the room document), and all clients decrement the displayed vote tally (`0 / 2`).
 
 ### Requirement: Best-of-N Multi-Round Online Series Progression
-The system SHALL govern online `1v1` and `2v2` matches using a Best-of-N series format (`bestOf` in `{1, 3, 5, 7}`) where the first side to reach `ceil(bestOf / 2)` round wins clinches the match, displaying a brief automatic ~2-second round-result intermission before resetting the arena and starting the next round's 3-second countdown whenever an intermediate round finishes without clinching.
+The system SHALL govern online `1v1` and `2v2` matches using a Best-of-N series format (`bestOf` in `{1, 3, 5, 7}`) where the first side to reach `ceil(bestOf / 2)` round wins clinches the match, keeping eliminated `2v2` teammates in a live spectator view until the full team is eliminated and displaying a brief automatic ~2-second round-result intermission before resetting the arena and starting the next round's 3-second countdown whenever an intermediate round finishes without clinching.
+
+#### Scenario: Eliminated 2v2 player spectates living teammate until round completion
+- **WHEN** one player in a `2v2` match is eliminated while their teammate remains alive
+- **THEN** the eliminated player's local combat controls and position sync stop, their local simulation loop remains active to interpolate remote players, and their camera follows their surviving teammate until the round concludes.
+
+#### Scenario: Host-refereed 2v2 team-wipe settlement handles simultaneous teammate deaths
+- **WHEN** both teammates on a `2v2` team are eliminated (sequentially or within the same network update window)
+- **THEN** each eliminated player publishes their elimination state (`hp: 0`, `alive: false`) to the room document, and the Host evaluates full-team elimination across both teams to issue a single authoritative `round_over`, `finished`, or `round_draw` transition without hanging the match.
 
 #### Scenario: Hosted room persists and synchronizes series length and round scores
 - **WHEN** a host creates a `1v1` or `2v2` room with a selected `bestOf` format (`1`, `3`, `5`, or `7`)

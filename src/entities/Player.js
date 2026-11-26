@@ -15,8 +15,8 @@ import { setCursor } from '../input/mouse.js';
 import { touchMove, updateCurveButtons, updateTouchMomentum, resetTouchInputs } from '../input/touch.js';
 import { getLeftStick, getRightStick, playGamepadHaptics } from '../input/gamepad.js';
 import { getRoomRef, roomUpdateDoc } from '../network/firebaseSetup.js';
-import { showMultiplayerDefeat, reportMultiplayerMatchEnd, reportDuelElimination } from '../network/roomManager.js';
-import { updateHUD, resetHintVisibility, clearArenaNameplates } from '../ui/hud.js';
+import { showMultiplayerDefeat, reportMultiplayerMatchEnd, reportDuelElimination, reportDuosElimination } from '../network/roomManager.js';
+import { updateHUD, message, resetHintVisibility, clearArenaNameplates } from '../ui/hud.js';
 import { swarmEconomyBridge } from '../modes/SwarmEconomyBridge.js';
 import { campaignManager } from '../campaign/CampaignManager.js';
 import { campaignHUD } from '../ui/campaign/CampaignHUD.js';
@@ -551,9 +551,20 @@ export function damagePlayer(amount, from) {
   if (state.player.hp <= 0) {
     state.player.hp = 0;
     state.player.alive = false;
-    state.running = false;
-    state.gameOverT = 0;
+    cancelChargingThrow();
+    state.player.blocking = false;
+    state.player.parryTimer = 0;
     resetTouchInputs();
+    const hasLivingTeammate = state.gameMode === 'duos_multi' &&
+      Array.isArray(state.teammates) &&
+      state.teammates.some(t => t && t.alive && (t.hp === undefined || t.hp > 0));
+    if (hasLivingTeammate) {
+      state.isSpectating = true;
+    } else {
+      state.isSpectating = false;
+      state.running = false;
+      state.gameOverT = 0;
+    }
     if (typeof document !== 'undefined') {
       if (document.exitPointerLock) {
         try { document.exitPointerLock(); } catch (_) {}
@@ -580,6 +591,7 @@ export function damagePlayer(amount, from) {
         playerState: myState
       });
     } else if (state.gameMode === 'duos_multi') {
+      const eliminatedAtMs = Date.now();
       const myState = {
         x: +state.player.pos.x.toFixed(2),
         y: +state.player.y.toFixed(2),
@@ -587,18 +599,19 @@ export function damagePlayer(amount, from) {
         yaw: +state.player.yaw.toFixed(2),
         pitch: +state.player.pitch.toFixed(2),
         hp: 0,
+        alive: false,
         blocking: false,
-        hasDisc: state.player.hasDisc
+        hasDisc: state.player.hasDisc,
+        eliminatedAtMs
       };
-      const myTeam = (state.playerRole === 'p1' || state.playerRole === 'p3') ? 1 : 2;
-      const winnerTeam = myTeam === 1 ? 2 : 1;
-      reportMultiplayerMatchEnd({
-        winner: null,
-        winnerTeam,
-        loserRole: state.playerRole,
+      if (hasLivingTeammate) {
+        message('DEREZZED — SPECTATING TEAMMATE');
+      }
+      reportDuosElimination({
+        role: state.playerRole,
         reason: state.gameOverReason || '',
         playerState: myState,
-        isLocalWin: false
+        eliminatedAtMs
       });
     } else if (state.gameMode === 'campaign') {
       let outcome = null;
@@ -629,6 +642,7 @@ export function resetRound(spawnX = 0, spawnZ = 14, yaw = Math.PI) {
   state.slowMoActive = false;
   state.timeScale = 1.0;
   state.multiplayerPayoutProcessed = false;
+  state.isSpectating = false;
   state.player.hp = 100;
   state.player.energy = 100;
   state.player.hasDisc = true;

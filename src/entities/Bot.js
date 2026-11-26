@@ -393,7 +393,7 @@ export function completeCampaignTrial() {
 }
 
 export function killFoe(f) {
-  if (state.gameMode === 'duel_multi') return;
+  if (state.gameMode === 'duel_multi' || state.gameMode === 'duos_multi') return;
   if (f) {
     f.alive = false;
     f.hp = 0;

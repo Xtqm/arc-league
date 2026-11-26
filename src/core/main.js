@@ -280,7 +280,7 @@ export function update(dt) {
   updateArenaNameplates();
 
   // Analog steering when cursor unlocked (desktop)
-  if (!isLocked() && state.steerX && !state.isTouchDevice) {
+  if (!isLocked() && state.steerX && !state.isTouchDevice && state.player.alive && !state.isSpectating) {
     const RATE = 3.1;
     state.player.yaw -= state.steerX * RATE * dt;
     if (state.player.yaw > Math.PI) state.player.yaw -= Math.PI * 2;

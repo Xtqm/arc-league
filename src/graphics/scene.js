@@ -284,7 +284,17 @@ export function updateCamera(dt, snap = false) {
     state.player.pitch = THREE.MathUtils.lerp(state.player.pitch || 0, targetPitch, lerpFactor);
   }
 
-  const targetBlend = state.cameraPerspective === 'first_person' ? 0.0 : 1.0;
+  const spectateTarget = (state.isSpectating && state.gameMode === 'duos_multi' && Array.isArray(state.teammates))
+    ? state.teammates.find(t => t && t.alive && (t.hp === undefined || t.hp > 0))
+    : null;
+  const camPosSource = spectateTarget ? spectateTarget.pos : state.player.pos;
+  const camYSource = spectateTarget ? (spectateTarget.y || 0) : state.player.y;
+  const camYawSource = spectateTarget ? (spectateTarget.yaw || 0) : state.player.yaw;
+  const camPitchSource = spectateTarget
+    ? (spectateTarget.targetPitch !== undefined ? spectateTarget.targetPitch : -0.1)
+    : state.player.pitch;
+
+  const targetBlend = spectateTarget ? 1.0 : (state.cameraPerspective === 'first_person' ? 0.0 : 1.0);
   if (snap || dt <= 0) {
     state.cameraPerspectiveBlend = targetBlend;
   } else {
@@ -303,16 +313,16 @@ export function updateCamera(dt, snap = false) {
   const SHOULDER = THREE.MathUtils.lerp(0.0, 1.7, blend);
   const PITCH_DROP = THREE.MathUtils.lerp(0.0, 5.0, blend);
 
-  const fwd = new THREE.Vector3(-Math.sin(state.player.yaw), 0, -Math.cos(state.player.yaw));
+  const fwd = new THREE.Vector3(-Math.sin(camYawSource), 0, -Math.cos(camYawSource));
   const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
   const back = new THREE.Vector3(-fwd.x, 0, -fwd.z);
 
-  const pivot = state.player.pos.clone();
-  pivot.y += 1.8 + state.player.y * 0.85;
+  const pivot = camPosSource.clone();
+  pivot.y += 1.8 + camYSource * 0.85;
 
   const camOff = back.clone().multiplyScalar(DIST)
     .addScaledVector(right, SHOULDER)
-    .setY(HEIGHT - 1.8 - state.player.pitch * PITCH_DROP);
+    .setY(HEIGHT - 1.8 - camPitchSource * PITCH_DROP);
 
   // Soft boundary compression along boom to prevent wall clipping and player pass-through
   const maxArena = config.ARENA - 2;
@@ -341,7 +351,7 @@ export function updateCamera(dt, snap = false) {
   }
 
   // Set rotation directly from pitch/yaw using Euler YXZ to eliminate gimbal lock and lookAt singularities
-  camera.rotation.set(state.player.pitch, state.player.yaw, 0, 'YXZ');
+  camera.rotation.set(camPitchSource, camYawSource, 0, 'YXZ');
 
   if (state.shakeAmt > 0) {
     camera.position.x += (Math.random() - .5) * state.shakeAmt;

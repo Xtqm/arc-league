@@ -342,6 +342,7 @@ export function handleIncomingFastPacket(data) {
 export function syncNetworkState(dt) {
   if (state.gameMode !== 'duel_multi' && state.gameMode !== 'duos_multi') return;
   if (!state.currentRoomId || !state.playerRole || state.multiplayerMatchFinished || state.seriesRoundFinished) return;
+  if (!state.player.alive || state.isSpectating) return;
 
   state.netSyncTimer -= dt;
   if (state.netSyncTimer > 0) return;

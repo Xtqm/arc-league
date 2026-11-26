@@ -40,7 +40,12 @@ export function clearDuelSettlementState() {
     clearTimeout(state._duelSettlementTimer);
     state._duelSettlementTimer = null;
   }
+  if (state._duosSettlementTimer) {
+    clearTimeout(state._duosSettlementTimer);
+    state._duosSettlementTimer = null;
+  }
   state._duelEliminations = {};
+  state._duosEliminations = {};
 }
 
 export function clearSeriesIntermissionTimer() {
@@ -523,6 +528,7 @@ export function scheduleHostNextSeriesRound(scores, bestOf, nextSeriesRound, { i
         lastRoundWinner: null,
         lastRoundWinnerTeam: null,
         lastRoundLoserRole: null,
+        drawReplayAt: isDrawReplay ? Date.now() : null,
         eliminations: null,
         lastThrow: null,
         fallen: []
@@ -554,6 +560,7 @@ export function handleRemoteRoundOver(msg) {
 
   clearDuelSettlementState();
   state.seriesRoundFinished = true;
+  state.isSpectating = false;
   state.running = false;
   clearMatchEndOverlayTimer();
   if (ev.bestOf !== undefined) {
@@ -619,6 +626,7 @@ export function handleRemoteRoundDraw(msg) {
 
   clearDuelSettlementState();
   state.seriesRoundFinished = true;
+  state.isSpectating = false;
   state.running = false;
   clearMatchEndOverlayTimer();
   if (ev.bestOf !== undefined) {
@@ -634,7 +642,7 @@ export function handleRemoteRoundDraw(msg) {
   state.player.alive = false;
   state.player.hp = 0;
   if (state.player.obj) state.player.obj.visible = false;
-  for (const r of ['p1', 'p2']) {
+  for (const r of getActivePlayerRoles()) {
     const opp = state.multiPlayers[r];
     if (opp && opp.alive) {
       opp.alive = false;
@@ -720,6 +728,7 @@ export function handleRemoteGameOver(msg) {
   clearSeriesIntermission();
   state.seriesRoundFinished = true;
   state.multiplayerMatchFinished = true;
+  state.isSpectating = false;
   state.running = false;
   clearMatchEndOverlayTimer();
   updateHUD();
@@ -810,6 +819,7 @@ export function handleRemotePeerLeft() {
   const isOverlayVisible = !!(overlay && overlay.style.display === 'flex');
 
   if (state.running || !state.multiplayerMatchFinished) {
+    state.isSpectating = false;
     state.running = false;
     state.multiplayerMatchFinished = true;
     showMultiplayerVictory({ status: 'closed' });
@@ -1065,16 +1075,220 @@ export function reportDuelElimination({ role = state.playerRole, reason = '', pl
   }
 }
 
+export function reportDuosElimination({ role = state.playerRole, reason = '', playerState = null, eliminatedAtMs = Date.now() } = {}) {
+  if (state.multiplayerMatchFinished || state.seriesRoundFinished) return;
+  if (state.gameMode !== 'duos_multi') return;
+
+  const targetRole = role || state.playerRole;
+  const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  const clientElapsedMs = Math.max(0, now - (state.roundStartPerfMs || now));
+  const elimEvent = {
+    type: 'PLAYER_ELIMINATED',
+    role: targetRole,
+    team: getTeamForRole(targetRole),
+    reason: reason || '',
+    roundId: state.multiplayerRoundId || 1,
+    seriesRound: state.seriesRound || 1,
+    eliminatedAtMs,
+    clientElapsedMs
+  };
+
+  if (state.db && state.currentRoomId && state.currentUser && state.roomUnsubscribe) {
+    const roomRef = getRoomRef(state.currentRoomId);
+    const patch = {
+      [`eliminations.${targetRole}`]: elimEvent
+    };
+    if (playerState && targetRole) {
+      patch[`state.${targetRole}`] = {
+        ...playerState,
+        hp: 0,
+        alive: false,
+        eliminatedAtMs
+      };
+    }
+    roomUpdateDoc(roomRef, patch).catch(err => console.warn("Duos elimination sync err:", err));
+  }
+
+  if (state.playerRole === 'p1') {
+    handleDuosPlayerEliminated(elimEvent);
+  }
+}
+
+function settleDuosRound(winnerTeam, loserRole, reason = '', isDraw = false) {
+  if (state.playerRole !== 'p1' || state.gameMode !== 'duos_multi') return;
+  if (state.multiplayerMatchFinished || state.seriesRoundFinished) return;
+  clearDuelSettlementState();
+
+  if (isDraw) {
+    state.seriesRoundFinished = true;
+    state.isSpectating = false;
+    state.running = false;
+    clearMatchEndOverlayTimer();
+    const bestOf = normalizeBestOf(state.seriesBestOf ?? 3, 3);
+    const currentSeriesRound = state.seriesRound || 1;
+    const scores = {
+      t1: Number(state.seriesScores?.t1) || 0,
+      t2: Number(state.seriesScores?.t2) || 0
+    };
+    if (state.db && state.currentRoomId && state.currentUser && state.roomUnsubscribe) {
+      const roomRef = getRoomRef(state.currentRoomId);
+      roomUpdateDoc(roomRef, {
+        status: 'round_draw',
+        roundId: state.multiplayerRoundId || 1,
+        bestOf,
+        seriesRound: currentSeriesRound,
+        seriesScores: scores
+      }).catch(err => console.warn("Duos round draw sync err:", err));
+    }
+
+    updateHUD();
+    showSeriesIntermission({
+      round: currentSeriesRound,
+      won: false,
+      draw: true,
+      scores,
+      bestOf
+    });
+    scheduleHostNextSeriesRound(scores, bestOf, currentSeriesRound, { isDrawReplay: true });
+    return;
+  }
+
+  const isLocalWin = winnerTeam === getTeamForRole(state.playerRole);
+  reportMultiplayerMatchEnd({
+    winner: null,
+    winnerTeam,
+    loserRole,
+    reason,
+    isLocalWin,
+    forceRoundSettlement: true
+  });
+}
+
+function resolveDuosEliminations() {
+  if (state.playerRole !== 'p1' || state.gameMode !== 'duos_multi') return;
+  if (state.multiplayerMatchFinished || state.seriesRoundFinished) return;
+  const elims = state._duosEliminations || {};
+  const t1Wiped = !!(elims.p1 && elims.p3);
+  const t2Wiped = !!(elims.p2 && elims.p4);
+  if (!t1Wiped && !t2Wiped) return;
+
+  if (t1Wiped && t2Wiped) {
+    const t1Ms = Math.max(
+      elims.p1.clientElapsedMs ?? elims.p1.eliminatedAtMs ?? 0,
+      elims.p3.clientElapsedMs ?? elims.p3.eliminatedAtMs ?? 0
+    );
+    const t2Ms = Math.max(
+      elims.p2.clientElapsedMs ?? elims.p2.eliminatedAtMs ?? 0,
+      elims.p4.clientElapsedMs ?? elims.p4.eliminatedAtMs ?? 0
+    );
+    if (Math.abs(t1Ms - t2Ms) <= 50) {
+      settleDuosRound(null, null, 'SIMULTANEOUS_ELIMINATION', true);
+    } else if (t1Ms < t2Ms) {
+      const lastT1 = (elims.p3.clientElapsedMs ?? 0) >= (elims.p1.clientElapsedMs ?? 0) ? elims.p3 : elims.p1;
+      settleDuosRound(2, lastT1.role, lastT1.reason || 'ELIMINATED BY OPPONENT', false);
+    } else {
+      const lastT2 = (elims.p4.clientElapsedMs ?? 0) >= (elims.p2.clientElapsedMs ?? 0) ? elims.p4 : elims.p2;
+      settleDuosRound(1, lastT2.role, lastT2.reason || 'ELIMINATED BY OPPONENT', false);
+    }
+    return;
+  }
+
+  // Wait a brief trade window in case the surviving team's last player died in the same tick/RTT
+  if (!state._duosSettlementTimer) {
+    const windowMs = getDuelTradeWindowMs();
+    state._duosSettlementTimer = setTimeout(() => {
+      state._duosSettlementTimer = null;
+      if (state.multiplayerMatchFinished || state.seriesRoundFinished) return;
+      const cur = state._duosEliminations || {};
+      const curT1Wiped = !!(cur.p1 && cur.p3);
+      const curT2Wiped = !!(cur.p2 && cur.p4);
+      if (curT1Wiped && curT2Wiped) {
+        resolveDuosEliminations();
+      } else if (curT1Wiped) {
+        const lastT1 = (cur.p3.clientElapsedMs ?? 0) >= (cur.p1.clientElapsedMs ?? 0) ? cur.p3 : cur.p1;
+        settleDuosRound(2, lastT1.role, lastT1.reason || 'ELIMINATED BY OPPONENT', false);
+      } else if (curT2Wiped) {
+        const lastT2 = (cur.p4.clientElapsedMs ?? 0) >= (cur.p2.clientElapsedMs ?? 0) ? cur.p4 : cur.p2;
+        settleDuosRound(1, lastT2.role, lastT2.reason || 'ELIMINATED BY OPPONENT', false);
+      }
+    }, windowMs);
+  }
+}
+
+export function handleDuosPlayerEliminated(msg) {
+  if (!msg || state.playerRole !== 'p1' || state.gameMode !== 'duos_multi') return;
+  if (state.multiplayerMatchFinished || state.seriesRoundFinished) return;
+  const roundId = typeof msg.roundId === 'number' ? msg.roundId : (state.multiplayerRoundId || 1);
+  const seriesRound = typeof msg.seriesRound === 'number' ? msg.seriesRound : (state.seriesRound || 1);
+  if (roundId !== (state.multiplayerRoundId || 1) || seriesRound !== (state.seriesRound || 1)) return;
+
+  const role = msg.role;
+  if (role !== 'p1' && role !== 'p2' && role !== 'p3' && role !== 'p4') return;
+
+  if (!state._duosEliminations) state._duosEliminations = {};
+  if (!state._duosEliminations[role]) {
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const fallbackElapsed = Math.max(0, now - (state.roundStartPerfMs || now));
+    state._duosEliminations[role] = {
+      role,
+      reason: msg.reason || '',
+      eliminatedAtMs: typeof msg.eliminatedAtMs === 'number' ? msg.eliminatedAtMs : Date.now(),
+      clientElapsedMs: typeof msg.clientElapsedMs === 'number' ? msg.clientElapsedMs : fallbackElapsed
+    };
+  }
+
+  const mp = state.multiPlayers && state.multiPlayers[role];
+  if (role !== 'p1' && mp && mp.alive) {
+    mp.alive = false;
+    mp.hp = 0;
+    if (mp.obj) mp.obj.visible = false;
+  }
+
+  resolveDuosEliminations();
+}
+
+function evaluateDuosRoomEliminations(data) {
+  if (!data || state.playerRole !== 'p1' || state.gameMode !== 'duos_multi') return;
+  if (state.multiplayerMatchFinished || state.seriesRoundFinished) return;
+  if (data.status !== 'active') return;
+
+  const curRoundId = state.multiplayerRoundId || 1;
+  const curSeriesRound = state.seriesRound || 1;
+
+  if (data.eliminations && typeof data.eliminations === 'object') {
+    for (const r of ['p1', 'p2', 'p3', 'p4']) {
+      if (data.eliminations[r]) {
+        handleDuosPlayerEliminated(data.eliminations[r]);
+      }
+    }
+  }
+
+  if (data.state && typeof data.state === 'object') {
+    for (const r of ['p1', 'p2', 'p3', 'p4']) {
+      const s = data.state[r];
+      if (s && (s.alive === false || (typeof s.hp === 'number' && s.hp <= 0))) {
+        handleDuosPlayerEliminated({
+          role: r,
+          roundId: curRoundId,
+          seriesRound: curSeriesRound,
+          eliminatedAtMs: s.eliminatedAtMs
+        });
+      }
+    }
+  }
+}
+
 export function reportMultiplayerMatchEnd({
   winner = null,
   winnerTeam = null,
   loserRole = null,
   reason = '',
   playerState = null,
-  isLocalWin = false
+  isLocalWin = false,
+  forceRoundSettlement = false
 } = {}) {
   if (state.multiplayerMatchFinished) return;
-  const allFinished = isLocalWin || state.gameMode !== 'duos_multi' || state.teammates.every(t => t.hp <= 0);
+  const allFinished = forceRoundSettlement || isLocalWin || state.gameMode !== 'duos_multi' || state.teammates.every(t => t.hp <= 0);
   if (allFinished && state.seriesRoundFinished) return;
 
   const myTeam = getTeamForRole(state.playerRole);
@@ -1098,9 +1312,12 @@ export function reportMultiplayerMatchEnd({
     state.seriesScores = nextScores;
     if (seriesClinched) {
       state.multiplayerMatchFinished = true;
+      state.isSpectating = false;
+      state.running = false;
       clearSeriesIntermissionTimer();
       clearSeriesIntermission();
     } else {
+      state.isSpectating = false;
       state.running = false;
     }
   }
@@ -1434,6 +1651,7 @@ export function resetMultiplayerSessionTracking(roundId = 0, options = {}) {
   state.multiplayerRoundId = roundId;
   state.multiplayerMatchFinished = false;
   state.multiplayerPayoutProcessed = false;
+  state.isSpectating = false;
   state.seriesRoundFinished = false;
   state._pendingNextSeriesRound = null;
   if (!options.preserveSeries) {
@@ -1494,7 +1712,18 @@ export async function onClickCreateRoom(e, mode = '1v1', mapId = null, bestOf = 
     state.playerRole = 'p1';
     state.roomFallenTiles = [];
     state.multiplayerMapId = resolvedMapId;
-    initWebRTCPeerSession(true, code);
+    if (mode !== '2v2') {
+      initWebRTCPeerSession(true, code);
+    } else {
+      if (state.webrtcPeer) {
+        try { state.webrtcPeer.close(); } catch (_) {}
+        state.webrtcPeer = null;
+      }
+      if (state.signalingBridge) {
+        try { state.signalingBridge.disconnect(); } catch (_) {}
+        state.signalingBridge = null;
+      }
+    }
 
     const roomRef = getRoomRef(code);
     await roomSetDoc(roomRef, {
@@ -1625,7 +1854,18 @@ export async function onClickConfirmJoin(e) {
     state.roomFallenTiles = data.fallen || [];
     state.multiplayerMapId = data.mapId || null;
     state.gameMode = data.mode === '2v2' ? 'duos_multi' : 'duel_multi';
-    initWebRTCPeerSession(false, code);
+    if (data.mode !== '2v2') {
+      initWebRTCPeerSession(false, code);
+    } else {
+      if (state.webrtcPeer) {
+        try { state.webrtcPeer.close(); } catch (_) {}
+        state.webrtcPeer = null;
+      }
+      if (state.signalingBridge) {
+        try { state.signalingBridge.disconnect(); } catch (_) {}
+        state.signalingBridge = null;
+      }
+    }
 
     const patch = {
       [`players.${assignedRole}`]: state.currentUser.uid,
@@ -1870,7 +2110,17 @@ export function onRoomSnapshot(snap) {
   const isNextSeriesRound = data.status === 'active' &&
     docRoundId === (state.multiplayerRoundId || 0) &&
     docSeriesRound > (state.seriesRound || 1);
-  if (isInitialStart || isRematchStart || isNextSeriesRound) {
+  const isDrawReplayStart = data.status === 'active' &&
+    docRoundId === (state.multiplayerRoundId || 0) &&
+    docSeriesRound === (state.seriesRound || 1) &&
+    !!state.seriesRoundFinished &&
+    !state.multiplayerMatchFinished &&
+    typeof data.drawReplayAt === 'number' &&
+    data.drawReplayAt > (state._lastDrawReplayAt || 0);
+  if (isInitialStart || isRematchStart || isNextSeriesRound || isDrawReplayStart) {
+    if (isDrawReplayStart) {
+      state._lastDrawReplayAt = data.drawReplayAt;
+    }
     const rm = document.getElementById('roomModal');
     if (rm) rm.style.display = 'none';
     const jm = document.getElementById('joinModal');
@@ -1879,16 +2129,18 @@ export function onRoomSnapshot(snap) {
     const resolvedMapId = data.mapId !== undefined ? data.mapId : (state.multiplayerMapId || null);
     startMultiplayerDuel(state.playerRole, state.currentRoomId, data.mode || '1v1', {
       roundId: docRoundId,
-      seriesRound: isNextSeriesRound ? docSeriesRound : 1,
+      seriesRound: (isNextSeriesRound || isDrawReplayStart) ? docSeriesRound : 1,
       bestOf: docBestOf,
-      seriesScores: isNextSeriesRound ? docScores : { t1: 0, t2: 0 },
+      seriesScores: (isNextSeriesRound || isDrawReplayStart) ? docScores : { t1: 0, t2: 0 },
       mapId: resolvedMapId,
-      preserveSeries: isNextSeriesRound
+      preserveSeries: isNextSeriesRound || isDrawReplayStart
     });
     message(
       isInitialStart
         ? 'CHALLENGERS DETECTED — FIGHT!'
-        : (isNextSeriesRound ? `ROUND ${docSeriesRound} — FIGHT!` : 'REMATCH — FIGHT!')
+        : (isDrawReplayStart
+          ? `ROUND ${docSeriesRound} — REPLAY!`
+          : (isNextSeriesRound ? `ROUND ${docSeriesRound} — FIGHT!` : 'REMATCH — FIGHT!'))
     );
     return;
   }
@@ -1953,6 +2205,8 @@ export function onRoomSnapshot(snap) {
         handleDuelPlayerEliminated(data.eliminations[r]);
       }
     }
+  } else if (state.playerRole === 'p1' && state.gameMode === 'duos_multi') {
+    evaluateDuosRoomEliminations(data);
   }
 
   if (state.playerRole !== 'p1' && Array.isArray(data.fallen)) {
@@ -2004,6 +2258,8 @@ export function onRoomSnapshot(snap) {
     state.seriesRound = docSeriesRound;
     state.seriesRoundFinished = true;
     state.multiplayerMatchFinished = true;
+    state.isSpectating = false;
+    state.running = false;
     clearMatchEndOverlayTimer();
     updateHUD();
     if (data.rematchVotes) {

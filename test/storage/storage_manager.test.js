@@ -33,18 +33,46 @@ assert.strictEqual(defaultA.player.currency.bits, 0);
 assert.strictEqual(defaultA.calibration_bypassed, false);
 assert.strictEqual(defaultA.calibration_completed, false);
 assert.strictEqual(defaultA.stats.hardcoreSwarmHighestWave, 0);
+assert.deepStrictEqual(defaultA.contracts, {
+  daily: {
+    dateKey: '',
+    slots: [],
+    sweepClaimed: false
+  },
+  career: {
+    unlocked: false,
+    tier: 1,
+    tierCompletions: 0,
+    seenIds: {},
+    slots: [null, null, null]
+  }
+});
 
 // Immutability & deep-cloning check
 defaultA.player.currency.bits = 5000;
 defaultA.campaign.completedNodes.push('node_01');
+defaultA.contracts.daily.slots.push({ id: 'daily_test', progress: 1, target: 3 });
+defaultA.contracts.career.tier = 4;
 const defaultB = createDefaultSaveState();
 assert.strictEqual(defaultB.player.currency.bits, 0, 'Factory instances must be completely decoupled');
 assert.strictEqual(defaultB.campaign.completedNodes.length, 0, 'Factory array references must be isolated');
+assert.strictEqual(defaultB.contracts.daily.slots.length, 0, 'Contracts daily slots must be isolated');
+assert.strictEqual(defaultB.contracts.career.tier, 1, 'Contracts career tier must be isolated');
 
 // Validation checks
 assert.strictEqual(isValidSaveState(defaultB), true);
 assert.strictEqual(isValidSaveState(null), false);
 assert.strictEqual(isValidSaveState({ version: '1.0.0' }), false);
+
+const invalidContractsCheck = validateSaveState({
+  ...defaultB,
+  contracts: {
+    daily: { dateKey: 123, slots: 'bad' },
+    career: { tier: 0, slots: [null, null, null, null] }
+  }
+});
+assert.strictEqual(invalidContractsCheck.valid, false);
+assert.ok(invalidContractsCheck.errors.length >= 4);
 
 const invalidCheck = validateSaveState({ version: '1.0.0', player: {} });
 assert.strictEqual(invalidCheck.valid, false);
@@ -281,6 +309,44 @@ assert.strictEqual(reloadedStore.get('settings.renderScale'), 0.75, 'renderScale
 assert.strictEqual(reloadedStore.get('settings.bloomQuality'), 'half', 'bloomQuality must be preserved across reload');
 console.log('✓ renderScale and bloomQuality storage persistence verified cleanly');
 
+// Test Group 8: Contracts Schema Migration & importState Persistence
+console.log('\n[Group 8] Testing Contracts Schema Migration & Persistence...');
+const contractsMigKey = 'tron_test_contracts_mig';
+const contractsMigStore = new StorageManager({ storageKey: contractsMigKey });
+const preContractsPayload = createDefaultSaveState();
+delete preContractsPayload.contracts;
+preContractsPayload.player.handle = 'VETERAN_PROGRAM';
+contractsMigStore._setItem(contractsMigKey, JSON.stringify(preContractsPayload));
+
+const migratedContractsState = contractsMigStore.load();
+assert.strictEqual(migratedContractsState.player.handle, 'VETERAN_PROGRAM', 'Existing fields must not be corrupted');
+assert.deepStrictEqual(migratedContractsState.contracts, {
+  daily: { dateKey: '', slots: [], sweepClaimed: false },
+  career: { unlocked: false, tier: 1, tierCompletions: 0, seenIds: {}, slots: [null, null, null] }
+}, 'Missing contracts branch must initialize cleanly on migration');
+
+contractsMigStore.importState({
+  contracts: {
+    daily: {
+      dateKey: '2026-11-26',
+      slots: [{ id: 'daily_parry_3', progress: 2, target: 3, claimed: false, status: 'active' }],
+      sweepClaimed: false
+    },
+    career: {
+      unlocked: true,
+      tier: 2,
+      tierCompletions: 4,
+      seenIds: { '1': { combat: ['c1_parry'] } },
+      slots: [{ id: 'c2_curve', focus: 'combat', progress: 3, target: 5, claimed: false, status: 'active' }, null, null]
+    }
+  }
+});
+assert.strictEqual(contractsMigStore.get('contracts.career.unlocked'), true);
+assert.strictEqual(contractsMigStore.get('contracts.career.tier'), 2);
+assert.strictEqual(contractsMigStore.get('contracts.career.tierCompletions'), 4);
+assert.strictEqual(contractsMigStore.get('contracts.daily.slots.0.progress'), 2);
+console.log('✓ Contracts schema migration, defaults, and importState merge verified cleanly');
+
 // Clean up test instances
 testManager.destroy();
 corruptManager.destroy();
@@ -289,6 +355,7 @@ tab1.destroy();
 tab2.destroy();
 settingsStore.destroy();
 reloadedStore.destroy();
+contractsMigStore.destroy();
 
 console.log('\n======================================================');
 console.log('ALL STORAGE MANAGER TESTS PASSED CLEANLY (100% SUCCESS)');

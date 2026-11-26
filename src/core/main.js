@@ -25,6 +25,7 @@ import { offlineSyncQueue } from '../storage/OfflineSyncQueue.js';
 import { crossTabSync } from '../storage/CrossTabSync.js';
 import { initAuthTerminal, showAuthTerminal, hideAuthTerminal, isAuthTerminalOpen, updateIdentityHeader } from '../ui/authTerminal.js';
 import { achievementManager } from '../achievements/AchievementManager.js';
+import { contractManager } from '../contracts/ContractManager.js';
 import { updateNotification } from '../ui/components/UpdateNotification.js';
 import { settingsManager } from './settings.js';
 import { updateSteamRichPresence } from './steamTelemetry.js';
@@ -421,6 +422,7 @@ export function initApp() {
     bindMenuButtons();
     initAuthTerminal();
     achievementManager.init();
+    contractManager.init();
     updateNotification.init();
     settingsManager.load();
     updateSteamRichPresence('In Main Menu');

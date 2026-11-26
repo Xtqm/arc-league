@@ -11,10 +11,13 @@ import {
   STORAGE_BACKUP_KEY,
   StorageEvents,
   createDefaultSaveState,
+  ensureContractsDefaults,
+  normalizeContractsState,
   isValidSaveState,
   validateSaveState,
   deepClone
 } from './schema.js';
+import { mergeContracts } from './CloudSyncResolver.js';
 
 // In-memory fallback map for non-browser or storage-restricted environments
 const memoryStorage = new Map();
@@ -324,6 +327,50 @@ export class StorageManager {
   // Core Lifecycle Operations
   // ==========================================
 
+  _applyBackwardCompatibleDefaults(parsed) {
+    if (!parsed || typeof parsed !== 'object') return parsed;
+
+    if (parsed.inventory && !Array.isArray(parsed.inventory.unlockedMaps)) {
+      parsed.inventory.unlockedMaps = ['arena_grid_01'];
+    }
+
+    if (parsed.player && parsed.player.currency) {
+      if (typeof parsed.player.currency.credits !== 'number') {
+        parsed.player.currency.credits = typeof parsed.player.currency.bits === 'number' ? parsed.player.currency.bits : 0;
+      }
+      if (typeof parsed.player.currency.bits !== 'number') {
+        parsed.player.currency.bits = parsed.player.currency.credits;
+      }
+    }
+
+    if (parsed.stats) {
+      if (typeof parsed.stats.swarmHighestWave !== 'number') {
+        parsed.stats.swarmHighestWave = typeof parsed.stats.highestWave === 'number' ? parsed.stats.highestWave : 1;
+      }
+      if (typeof parsed.stats.highestWave !== 'number') {
+        parsed.stats.highestWave = parsed.stats.swarmHighestWave;
+      }
+      if (typeof parsed.stats.hardcoreSwarmHighestWave !== 'number') {
+        parsed.stats.hardcoreSwarmHighestWave = 0;
+      }
+      if (typeof parsed.stats.totalDerezzes !== 'number') {
+        parsed.stats.totalDerezzes = typeof parsed.stats.totalDeallocations === 'number' ? parsed.stats.totalDeallocations : 0;
+      }
+      if (typeof parsed.stats.totalDeallocations !== 'number') {
+        parsed.stats.totalDeallocations = parsed.stats.totalDerezzes;
+      }
+      if (typeof parsed.stats.parriesExecuted !== 'number') {
+        parsed.stats.parriesExecuted = 0;
+      }
+      if (typeof parsed.stats.curveEliminations !== 'number') {
+        parsed.stats.curveEliminations = 0;
+      }
+    }
+
+    parsed.contracts = ensureContractsDefaults(parsed.contracts);
+    return parsed;
+  }
+
   /**
    * Loads save state from persistent storage, applying migrations and corruption recovery.
    * @returns {object} The initialized TronSaveState
@@ -358,42 +405,7 @@ export class StorageManager {
       return this._handleCorruption(raw, err);
     }
 
-    if (parsed && parsed.inventory && !Array.isArray(parsed.inventory.unlockedMaps)) {
-      parsed.inventory.unlockedMaps = ['arena_grid_01'];
-    }
-
-    if (parsed && parsed.player && parsed.player.currency) {
-      if (typeof parsed.player.currency.credits !== 'number') {
-        parsed.player.currency.credits = typeof parsed.player.currency.bits === 'number' ? parsed.player.currency.bits : 0;
-      }
-      if (typeof parsed.player.currency.bits !== 'number') {
-        parsed.player.currency.bits = parsed.player.currency.credits;
-      }
-    }
-
-    if (parsed && parsed.stats) {
-      if (typeof parsed.stats.swarmHighestWave !== 'number') {
-        parsed.stats.swarmHighestWave = typeof parsed.stats.highestWave === 'number' ? parsed.stats.highestWave : 1;
-      }
-      if (typeof parsed.stats.highestWave !== 'number') {
-        parsed.stats.highestWave = parsed.stats.swarmHighestWave;
-      }
-      if (typeof parsed.stats.hardcoreSwarmHighestWave !== 'number') {
-        parsed.stats.hardcoreSwarmHighestWave = 0;
-      }
-      if (typeof parsed.stats.totalDerezzes !== 'number') {
-        parsed.stats.totalDerezzes = typeof parsed.stats.totalDeallocations === 'number' ? parsed.stats.totalDeallocations : 0;
-      }
-      if (typeof parsed.stats.totalDeallocations !== 'number') {
-        parsed.stats.totalDeallocations = parsed.stats.totalDerezzes;
-      }
-      if (typeof parsed.stats.parriesExecuted !== 'number') {
-        parsed.stats.parriesExecuted = 0;
-      }
-      if (typeof parsed.stats.curveEliminations !== 'number') {
-        parsed.stats.curveEliminations = 0;
-      }
-    }
+    this._applyBackwardCompatibleDefaults(parsed);
 
     const validation = validateSaveState(parsed);
     if (!validation.valid) {
@@ -649,6 +661,7 @@ export class StorageManager {
 
     let parsed = JSON.parse(rawString);
     parsed = this._applyMigrations(parsed);
+    this._applyBackwardCompatibleDefaults(parsed);
 
     const validation = validateSaveState(parsed);
     if (!validation.valid) {
@@ -867,6 +880,12 @@ export class StorageManager {
       ...(s.settings || {})
     };
 
+    // Contracts
+    const preferIncomingContracts = (s.lastActiveAt || s.updatedAt || 0) >= (existing.lastActiveAt || existing.updatedAt || 0);
+    const contracts = s.contracts !== undefined
+      ? mergeContracts(existing.contracts, s.contracts, preferIncomingContracts)
+      : normalizeContractsState(existing.contracts);
+
     const nextState = {
       version: SAVE_STATE_VERSION,
       createdAt: Math.min(existing.createdAt || Date.now(), s.createdAt || Date.now()),
@@ -885,6 +904,7 @@ export class StorageManager {
       loadout,
       campaign,
       inventory,
+      contracts,
       achievements,
       stats,
       settings

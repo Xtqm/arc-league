@@ -1222,6 +1222,37 @@
     }
   }
 
+  .utility-dock .contracts-btn .neon-pip-dot {
+    position: absolute;
+    top: 5px;
+    right: 6px;
+    margin-left: 0;
+    font-size: 0;
+  }
+
+  dialog#contractsModal {
+    border: none;
+    padding: 0;
+    background: transparent;
+    color: #ffffff;
+    max-width: 94vw;
+    max-height: 90vh;
+    margin: auto;
+  }
+  dialog#contractsModal[open] {
+    display: flex;
+    flex-direction: column;
+  }
+  dialog#contractsModal:modal {
+    overscroll-behavior: contain;
+  }
+  dialog#contractsModal::backdrop {
+    background: rgba(0, 8, 16, 0.85);
+    backdrop-filter: blur(6px);
+    overflow: hidden;
+    overscroll-behavior: contain;
+  }
+
   /* ───────────────────────── Grid Authorization Terminal Card ───────────────────────── */
   .auth-terminal-card {
     position: relative;
@@ -3521,6 +3552,7 @@
     margin-top: auto;
   }
   .utility-dock .dock-btn {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;

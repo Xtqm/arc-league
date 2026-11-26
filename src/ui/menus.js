@@ -7,9 +7,11 @@ import { updateIdentityHeader, showAuthTerminal } from './authTerminal.js';
 import { gridSelectorModal, levelSelectView, campaignHUD, trialDebriefModal } from './campaign/index.js';
 import { armoryModal } from './modals/ArmoryModal.js';
 import { achievementsModal } from './modals/AchievementsModal.js';
+import { contractsModal } from './modals/ContractsModal.js';
 import { settingsModal } from './modals/SettingsModal.js';
 import { directivesModal } from './modals/DirectivesModal.js';
 import { swarmModeModal } from './modals/SwarmModeModal.js';
+import { contractManager, ContractEvents } from '../contracts/ContractManager.js';
 import { spawnStagingDisc, despawnStagingDisc, spawnDiorama, despawnDiorama, refreshDioramaCosmetics, resetMatchCamera } from '../graphics/ambientLobby.js';
 import { updateSteamRichPresence, syncGameStateRichPresence } from '../core/steamTelemetry.js';
 import { storageManager } from '../core/storage/StorageManager.js';
@@ -28,6 +30,7 @@ campaignHUD.setOnCancelBrief(() => levelSelectView.show());
 trialDebriefModal.setOnReturnToGrid((gridId) => levelSelectView.show(gridId));
 armoryModal.setOnBackToMenu(() => showModeSelectMenu());
 achievementsModal.setOnBackToMenu(() => showModeSelectMenu());
+contractsModal.setOnBackToMenu(() => showModeSelectMenu());
 directivesModal.setOnClose(() => {
   if (typeof document !== 'undefined') {
     const rail = document.getElementById('mainMenu') || document.getElementById('directivesBtn');
@@ -35,7 +38,7 @@ directivesModal.setOnClose(() => {
   }
 });
 
-export { armoryModal, achievementsModal, settingsModal, directivesModal, swarmModeModal };
+export { armoryModal, achievementsModal, contractsModal, settingsModal, directivesModal, swarmModeModal };
 
 export {
   ARENA_MAP_METADATA,
@@ -138,12 +141,14 @@ export function startMode(mode) {
   }
   armoryModal.hide();
   achievementsModal.hide();
+  contractsModal.hide({ skipMenuCallback: true });
   directivesModal.hide();
   settingsModal.hide();
   swarmModeModal.hide({ skipCloseCallback: true, skipFocusRestore: true });
   state.authModalOpen = false;
   state.armoryModalOpen = false;
   state.achievementsModalOpen = false;
+  state.contractsModalOpen = false;
   if (typeof window !== 'undefined' && window.__tronResetGame) {
     window.__tronResetGame();
   }
@@ -308,12 +313,14 @@ export function showModeSelectMenu(options = {}) {
   trialDebriefModal.hide();
   armoryModal.hide();
   achievementsModal.hide();
+  contractsModal.hide({ skipMenuCallback: true });
   directivesModal.hide();
   settingsModal.hide();
   swarmModeModal.hide({ skipCloseCallback: true, skipFocusRestore: true });
   state.authModalOpen = false;
   state.armoryModalOpen = false;
   state.achievementsModalOpen = false;
+  state.contractsModalOpen = false;
   clearArenaNameplates();
   clearSeriesIntermission();
   updateHUD();
@@ -325,6 +332,8 @@ export function showModeSelectMenu(options = {}) {
   const card = overlay.querySelector('.card');
   if (card) card.scrollTop = 0;
   bindMainMenuEvents();
+  ensureContractsPipSubscription();
+  updateContractsPip();
 }
 
 export function startSoloSwarm(options = {}) {
@@ -486,11 +495,7 @@ export function bindMainMenuEvents() {
   const openContracts = (e) => {
     e.stopPropagation();
     if (e.cancelable) e.preventDefault();
-    if (typeof window !== 'undefined' && typeof window.__tronOpenContracts === 'function') {
-      window.__tronOpenContracts();
-    } else {
-      showProtocolStandingBy('CONTRACTS');
-    }
+    contractsModal.show();
   };
 
   const openSwarmModal = (e) => {
@@ -656,9 +661,62 @@ export function enterLobby(options = {}) {
   showModeSelectMenu({ ...options, force3D: true });
 }
 
+export function updateContractsPip(manager = contractManager) {
+  if (typeof document === 'undefined') return false;
+  const btn = document.getElementById('contractsBtn');
+  if (!btn) return false;
+
+  const hasClaimable = Boolean(
+    manager && (
+      (typeof manager.hasClaimableRewards === 'function' && manager.hasClaimableRewards()) ||
+      (typeof manager.getPendingClaimCount === 'function' && manager.getPendingClaimCount() > 0)
+    )
+  );
+
+  let pip = typeof btn.querySelector === 'function' ? btn.querySelector('.neon-pip-dot') : null;
+  if (hasClaimable) {
+    if (!pip && typeof document.createElement === 'function') {
+      pip = document.createElement('span');
+      pip.className = 'neon-pip-dot';
+      pip.textContent = '●';
+      pip.title = 'Claimable Contract Rewards Ready';
+      if (typeof btn.appendChild === 'function') {
+        btn.appendChild(pip);
+      }
+    }
+    return true;
+  }
+
+  if (pip) {
+    if (typeof pip.remove === 'function') {
+      pip.remove();
+    } else if (pip.parentNode && typeof pip.parentNode.removeChild === 'function') {
+      pip.parentNode.removeChild(pip);
+    }
+  }
+  return false;
+}
+
+let _contractsPipSubscribed = false;
+function ensureContractsPipSubscription() {
+  if (_contractsPipSubscribed) return;
+  if (contractManager && typeof contractManager.on === 'function') {
+    _contractsPipSubscribed = true;
+    const refreshPip = () => updateContractsPip(contractManager);
+    contractManager.on(ContractEvents.CONTRACTS_UPDATED, refreshPip);
+    contractManager.on(ContractEvents.CONTRACT_CLAIMABLE, refreshPip);
+    contractManager.on(ContractEvents.CONTRACT_CLAIMED, refreshPip);
+    contractManager.on(ContractEvents.DAILY_SWEEP_CLAIMABLE, refreshPip);
+    contractManager.on(ContractEvents.DAILY_SWEEP_CLAIMED, refreshPip);
+    contractManager.on(ContractEvents.DAILY_ROTATED, refreshPip);
+  }
+}
+
 export function bindMenuButtons() {
   bindMainMenuEvents();
   bindPauseAndModalEvents();
+  ensureContractsPipSubscription();
+  updateContractsPip();
 }
 
 if (typeof window !== 'undefined') {

@@ -72,6 +72,12 @@ const TEST_DOMAINS = {
     'ui/achievement_toast.test.js',
     'ui/achievements_modal.test.js'
   ],
+  contracts: [
+    'contracts/contract_registry.test.js',
+    'contracts/contract_manager.test.js',
+    'contracts/contracts_integration.test.js',
+    'ui/contracts_modal.test.js'
+  ],
   desktop: [
     'ui/tactical_rail_menu.test.js',
     'ui/directives_modal.test.js',
@@ -86,6 +92,7 @@ const TEST_DOMAINS = {
     'ui/swarm_mode_modal.test.js',
     'ui/update_notification.test.js',
     'ui/achievements_modal.test.js',
+    'ui/contracts_modal.test.js',
     'ui/achievement_toast.test.js',
     'ui/duel_map_selector.test.js'
   ],

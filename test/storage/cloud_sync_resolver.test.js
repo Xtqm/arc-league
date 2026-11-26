@@ -6,6 +6,7 @@ import {
   mergeSetUnion,
   mergeInventory,
   mergeCampaign,
+  mergeContracts,
   resolveLoadout,
   mergeTelemetry,
   evaluateMonotonicInvariants,
@@ -300,5 +301,104 @@ const restoredBoth = rowToSaveState(rowBoth);
 assert.strictEqual(restoredBoth.calibration_completed, true);
 assert.strictEqual(restoredBoth.calibration_bypassed, true);
 console.log('✓ Bidirectional serialization and round-trip restoration of calibration flags verified');
+
+// Test 10: Date-aware Daily & Monotonic Career Contracts Merging
+const localContractsState = {
+  userId: 'user_contracts_sync',
+  lastActiveAt: 1000,
+  contracts: {
+    daily: {
+      dateKey: '2026-11-26',
+      slots: [
+        { id: 'd_parry', progress: 3, target: 3, claimed: false, status: 'claimable' },
+        { id: 'd_wins', progress: 1, target: 2, claimed: false, status: 'active' },
+        { id: 'd_waves', progress: 0, target: 5, claimed: false, status: 'active' }
+      ],
+      sweepClaimed: false
+    },
+    career: {
+      unlocked: true,
+      tier: 2,
+      tierCompletions: 3,
+      seenIds: { '1': { combat: ['c1_a'] }, '2': { combat: ['c2_a'] } },
+      slots: [
+        { id: 'c2_a', focus: 'combat', progress: 4, target: 4, claimed: false, status: 'claimable' },
+        { id: 'c2_b', focus: 'endurance', progress: 2, target: 10, claimed: false, status: 'active' },
+        null
+      ]
+    }
+  }
+};
+
+const cloudContractsState = {
+  userId: 'user_contracts_sync',
+  lastActiveAt: 2000,
+  contracts: {
+    daily: {
+      dateKey: '2026-11-26',
+      slots: [
+        { id: 'd_parry', progress: 1, target: 3, claimed: true, status: 'claimed' },
+        { id: 'd_wins', progress: 2, target: 2, claimed: false, status: 'claimable' },
+        { id: 'd_waves', progress: 4, target: 5, claimed: false, status: 'active' }
+      ],
+      sweepClaimed: false
+    },
+    career: {
+      unlocked: false,
+      tier: 2,
+      tierCompletions: 3,
+      seenIds: { '2': { combat: ['c2_x'], duel: ['c2_d1'] } },
+      slots: [
+        { id: 'c2_a', focus: 'combat', progress: 1, target: 4, claimed: false, status: 'active' },
+        { id: 'c2_b', focus: 'endurance', progress: 5, target: 10, claimed: false, status: 'active' },
+        { id: 'c2_d1', focus: 'duel', progress: 1, target: 3, claimed: false, status: 'active' }
+      ]
+    }
+  }
+};
+
+const resolvedContractsFull = CloudSyncResolver.resolve(localContractsState, cloudContractsState);
+assert.strictEqual(resolvedContractsFull.contracts.daily.dateKey, '2026-11-26');
+assert.strictEqual(resolvedContractsFull.contracts.daily.slots[0].claimed, true);
+assert.strictEqual(resolvedContractsFull.contracts.daily.slots[0].progress, 3);
+assert.strictEqual(resolvedContractsFull.contracts.daily.slots[1].status, 'claimable');
+assert.strictEqual(resolvedContractsFull.contracts.daily.slots[2].progress, 4);
+assert.strictEqual(resolvedContractsFull.contracts.career.unlocked, true, 'Career unlock must merge via logical OR');
+assert.strictEqual(resolvedContractsFull.contracts.career.tier, 2);
+assert.strictEqual(resolvedContractsFull.contracts.career.slots[0].status, 'claimable', 'Higher progress claimable slot preserved');
+assert.strictEqual(resolvedContractsFull.contracts.career.slots[1].progress, 5);
+assert.strictEqual(resolvedContractsFull.contracts.career.slots[2].id, 'c2_d1');
+assert.ok(resolvedContractsFull.contracts.career.seenIds['2'].combat.includes('c2_a'));
+assert.ok(resolvedContractsFull.contracts.career.seenIds['2'].combat.includes('c2_x'));
+
+// Newer UTC dateKey supersedes older daily slots, while higher Career tier supersedes lower tier
+const newerDayAndTier = mergeContracts(
+  localContractsState.contracts,
+  {
+    daily: {
+      dateKey: '2026-11-27',
+      slots: [{ id: 'd_new', progress: 0, target: 3, claimed: false, status: 'active' }],
+      sweepClaimed: false
+    },
+    career: {
+      unlocked: true,
+      tier: 3,
+      tierCompletions: 1,
+      seenIds: { '3': { combat: ['c3_a'] } },
+      slots: [{ id: 'c3_a', focus: 'combat', progress: 0, target: 8, claimed: false, status: 'active' }, null, null]
+    }
+  },
+  true
+);
+assert.strictEqual(newerDayAndTier.daily.dateKey, '2026-11-27');
+assert.strictEqual(newerDayAndTier.daily.slots[0].id, 'd_new');
+assert.strictEqual(newerDayAndTier.career.tier, 3);
+assert.strictEqual(newerDayAndTier.career.tierCompletions, 1, 'Higher tier keeps its own tierCompletions');
+
+// Row round-trip preserves contracts
+const rowWithContracts = saveStateToRow(resolvedContractsFull);
+const restoredContractsState = rowToSaveState(rowWithContracts);
+assert.deepStrictEqual(restoredContractsState.contracts, resolvedContractsFull.contracts);
+console.log('✓ Date-aware Daily & monotonic Career contracts sync and row serialization verified');
 
 console.log('--- CloudSyncResolver Test Suite PASSED ---\n');

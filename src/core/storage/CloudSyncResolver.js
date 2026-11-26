@@ -5,6 +5,8 @@
  * is non-decreasing across all devices and sessions.
  */
 
+import { deepClone, normalizeContractsState } from './schema.js';
+
 export const DEFAULT_LOADOUT = Object.freeze({
   activeDisc: 'disc_identity_default',
   activeTrail: 'trail_cyan_default',
@@ -205,6 +207,7 @@ export function normalizeSaveState(state = {}) {
     campaign,
     inventory,
     loadout,
+    contracts: normalizeContracts(s.contracts),
     achievements: Array.isArray(s.achievements)
       ? Array.from(new Set(s.achievements.map(a => (typeof a === 'string' ? a : a.id))))
       : [],
@@ -456,6 +459,217 @@ export function resolveLoadout(localLoadout = {}, cloudLoadout = {}, preferCloud
 }
 
 /**
+ * Normalizes contracts state into canonical daily and career branches.
+ * @param {object|null} contracts
+ * @returns {object}
+ */
+export function normalizeContracts(contracts) {
+  return normalizeContractsState(contracts);
+}
+
+function getContractSlotId(slot) {
+  if (!slot || typeof slot !== 'object') return null;
+  return slot.id || slot.templateId || null;
+}
+
+function isContractSlotClaimed(slot) {
+  return Boolean(slot?.claimed || slot?.status === 'claimed');
+}
+
+function isContractSlotClaimable(slot) {
+  if (!slot || isContractSlotClaimed(slot)) return false;
+  if (slot.status === 'claimable') return true;
+  const target = Number(slot.target || 0);
+  const progress = Number(slot.progress || 0);
+  return target > 0 && progress >= target;
+}
+
+function getContractSlotScore(slot) {
+  if (!slot) return 0;
+  if (isContractSlotClaimable(slot)) return 3;
+  if (isContractSlotClaimed(slot)) return 2;
+  const target = Number(slot.target || 0);
+  const progress = Math.max(0, Number(slot.progress || 0));
+  const ratio = target > 0 ? Math.min(0.999, progress / target) : 0;
+  return 1 + ratio;
+}
+
+function mergeMatchingContractSlot(locSlot, cldSlot, preferCloud = false) {
+  const claimed = isContractSlotClaimed(locSlot) || isContractSlotClaimed(cldSlot);
+  const progress = Math.max(Number(locSlot.progress || 0), Number(cldSlot.progress || 0));
+  const target = Math.max(Number(locSlot.target || 0), Number(cldSlot.target || 0));
+  const claimable = !claimed && (
+    isContractSlotClaimable(locSlot) ||
+    isContractSlotClaimable(cldSlot) ||
+    (target > 0 && progress >= target)
+  );
+  const status = claimed ? 'claimed' : (claimable ? 'claimable' : 'active');
+  const base = preferCloud ? cldSlot : locSlot;
+
+  return {
+    ...deepClone(base),
+    progress,
+    target,
+    claimed,
+    status
+  };
+}
+
+function pickPreferredContractSlot(locSlot, cldSlot, preferCloud = false) {
+  const locScore = getContractSlotScore(locSlot);
+  const cldScore = getContractSlotScore(cldSlot);
+  if (locScore !== cldScore) {
+    return deepClone(cldScore > locScore ? cldSlot : locSlot);
+  }
+  return deepClone(preferCloud ? cldSlot : locSlot);
+}
+
+function mergeSeenIds(localSeen = {}, cloudSeen = {}) {
+  const merged = {};
+  const allTiers = new Set([
+    ...Object.keys(localSeen || {}),
+    ...Object.keys(cloudSeen || {})
+  ]);
+
+  for (const tierKey of allTiers) {
+    const locBucket = localSeen?.[tierKey];
+    const cldBucket = cloudSeen?.[tierKey];
+    if (Array.isArray(locBucket) || Array.isArray(cldBucket)) {
+      merged[tierKey] = mergeSetUnion(
+        Array.isArray(locBucket) ? locBucket : [],
+        Array.isArray(cldBucket) ? cldBucket : []
+      );
+      continue;
+    }
+
+    const locObj = locBucket && typeof locBucket === 'object' ? locBucket : {};
+    const cldObj = cldBucket && typeof cldBucket === 'object' ? cldBucket : {};
+    const allFocuses = new Set([...Object.keys(locObj), ...Object.keys(cldObj)]);
+    merged[tierKey] = {};
+    for (const focus of allFocuses) {
+      merged[tierKey][focus] = mergeSetUnion(
+        Array.isArray(locObj[focus]) ? locObj[focus] : [],
+        Array.isArray(cldObj[focus]) ? cldObj[focus] : []
+      );
+    }
+  }
+
+  return merged;
+}
+
+/**
+ * Merges Daily and Career contract state monotonically and date-aware.
+ * @param {object} localContracts
+ * @param {object} cloudContracts
+ * @param {boolean} [preferCloud=false]
+ * @returns {object}
+ */
+export function mergeContracts(localContracts = {}, cloudContracts = {}, preferCloud = false) {
+  const local = normalizeContracts(localContracts);
+  const cloud = normalizeContracts(cloudContracts);
+
+  // 1. Daily Contracts: keep latest UTC dateKey, or merge slots on matching dateKey
+  let mergedDaily;
+  const locDate = local.daily.dateKey || '';
+  const cldDate = cloud.daily.dateKey || '';
+
+  if (cldDate > locDate) {
+    mergedDaily = deepClone(cloud.daily);
+  } else if (locDate > cldDate) {
+    mergedDaily = deepClone(local.daily);
+  } else {
+    const sweepClaimed = Boolean(local.daily.sweepClaimed || cloud.daily.sweepClaimed);
+    let slots = [];
+    if (local.daily.slots.length === 0) {
+      slots = deepClone(cloud.daily.slots);
+    } else if (cloud.daily.slots.length === 0) {
+      slots = deepClone(local.daily.slots);
+    } else {
+      const count = Math.min(3, Math.max(local.daily.slots.length, cloud.daily.slots.length));
+      for (let i = 0; i < count; i++) {
+        const locSlot = local.daily.slots[i];
+        const cldSlot = cloud.daily.slots[i];
+        if (!locSlot && cldSlot) {
+          slots.push(deepClone(cldSlot));
+        } else if (locSlot && !cldSlot) {
+          slots.push(deepClone(locSlot));
+        } else if (locSlot && cldSlot) {
+          const locId = getContractSlotId(locSlot);
+          const cldId = getContractSlotId(cldSlot);
+          if (locId && locId === cldId) {
+            slots.push(mergeMatchingContractSlot(locSlot, cldSlot, preferCloud));
+          } else {
+            slots.push(pickPreferredContractSlot(locSlot, cldSlot, preferCloud));
+          }
+        }
+      }
+    }
+    mergedDaily = {
+      dateKey: locDate,
+      slots,
+      sweepClaimed
+    };
+  }
+
+  // 2. Career Contracts: monotonic unlock & tier, lexicographic tierCompletions, and non-regressive slots
+  const unlocked = Boolean(local.career.unlocked || cloud.career.unlocked);
+  const seenIds = mergeSeenIds(local.career.seenIds, cloud.career.seenIds);
+
+  let tier;
+  let tierCompletions;
+  let careerSlots;
+
+  if (local.career.tier > cloud.career.tier) {
+    tier = local.career.tier;
+    tierCompletions = local.career.tierCompletions;
+    careerSlots = deepClone(local.career.slots);
+  } else if (cloud.career.tier > local.career.tier) {
+    tier = cloud.career.tier;
+    tierCompletions = cloud.career.tierCompletions;
+    careerSlots = deepClone(cloud.career.slots);
+  } else {
+    tier = local.career.tier;
+    tierCompletions = Math.max(local.career.tierCompletions, cloud.career.tierCompletions);
+    careerSlots = [null, null, null];
+
+    for (let i = 0; i < 3; i++) {
+      const locSlot = local.career.slots[i];
+      const cldSlot = cloud.career.slots[i];
+      if (!locSlot && !cldSlot) {
+        careerSlots[i] = null;
+      } else if (!locSlot) {
+        careerSlots[i] = deepClone(cldSlot);
+      } else if (!cldSlot) {
+        careerSlots[i] = deepClone(locSlot);
+      } else {
+        const locId = getContractSlotId(locSlot);
+        const cldId = getContractSlotId(cldSlot);
+        if (locId && locId === cldId) {
+          careerSlots[i] = mergeMatchingContractSlot(locSlot, cldSlot, preferCloud);
+        } else if (local.career.tierCompletions !== cloud.career.tierCompletions) {
+          careerSlots[i] = deepClone(
+            cloud.career.tierCompletions > local.career.tierCompletions ? cldSlot : locSlot
+          );
+        } else {
+          careerSlots[i] = pickPreferredContractSlot(locSlot, cldSlot, preferCloud);
+        }
+      }
+    }
+  }
+
+  return {
+    daily: mergedDaily,
+    career: {
+      unlocked,
+      tier,
+      tierCompletions,
+      seenIds,
+      slots: careerSlots
+    }
+  };
+}
+
+/**
  * Monotonically merges combat telemetry statistics.
  * @param {object} localStats
  * @param {object} cloudStats
@@ -628,6 +842,46 @@ export function evaluateMonotonicInvariants(candidate, baseline, baselineName = 
     violations.push(`Curve eliminations decreased: ${candidate.stats.curveEliminations} < ${baselineName} (${baseline.stats.curveEliminations})`);
   }
 
+  // Contracts monotonic checks
+  if (baseline.contracts?.career) {
+    const baseCareer = baseline.contracts.career;
+    const candCareer = candidate.contracts?.career || {};
+    if (baseCareer.unlocked && !candCareer.unlocked) {
+      violations.push(`Career contracts unlocked flag was revoked from ${baselineName}`);
+    }
+    const baseTier = baseCareer.tier || 1;
+    const candTier = candCareer.tier || 1;
+    if (candTier < baseTier) {
+      violations.push(`Career contract tier decreased: ${candTier} < ${baselineName} (${baseTier})`);
+    } else if (candTier === baseTier && (candCareer.tierCompletions || 0) < (baseCareer.tierCompletions || 0)) {
+      violations.push(`Career tierCompletions decreased: ${candCareer.tierCompletions || 0} < ${baselineName} (${baseCareer.tierCompletions || 0})`);
+    }
+  }
+
+  if (baseline.contracts?.daily && candidate.contracts?.daily) {
+    const baseDaily = baseline.contracts.daily;
+    const candDaily = candidate.contracts.daily;
+    if (baseDaily.dateKey && candDaily.dateKey && candDaily.dateKey < baseDaily.dateKey) {
+      violations.push(`Daily contracts dateKey regressed: ${candDaily.dateKey} < ${baselineName} (${baseDaily.dateKey})`);
+    } else if (baseDaily.dateKey === candDaily.dateKey) {
+      if (baseDaily.sweepClaimed && !candDaily.sweepClaimed) {
+        violations.push(`Daily sweepClaimed was revoked from ${baselineName}`);
+      }
+      const candById = new Map(
+        (candDaily.slots || [])
+          .filter(Boolean)
+          .map((slot) => [getContractSlotId(slot), slot])
+      );
+      for (const baseSlot of (baseDaily.slots || [])) {
+        const id = getContractSlotId(baseSlot);
+        const candSlot = id ? candById.get(id) : null;
+        if (candSlot && Number(candSlot.progress || 0) < Number(baseSlot.progress || 0)) {
+          violations.push(`Daily contract progress decreased for "${id}": ${candSlot.progress} < ${baselineName} (${baseSlot.progress})`);
+        }
+      }
+    }
+  }
+
   return violations;
 }
 
@@ -690,6 +944,9 @@ export class CloudSyncResolver {
 
     const resolvedLoadout = resolveLoadout(local.loadout, cloud.loadout, preferCloudMeta, mergedInventory);
 
+    // Contracts = Date-aware Daily + Monotonic Career merge
+    const mergedContracts = mergeContracts(local.contracts, cloud.contracts, preferCloudMeta);
+
     const resolved = {
       version: Math.max(local.version, cloud.version),
       userId: local.userId || cloud.userId,
@@ -704,6 +961,7 @@ export class CloudSyncResolver {
       campaign: mergedCampaign,
       inventory: mergedInventory,
       loadout: resolvedLoadout,
+      contracts: mergedContracts,
       achievements: mergedAchievements,
       stats: mergedStats,
       settings: resolvedSettings
@@ -745,6 +1003,7 @@ export function saveStateToRow(saveState) {
     settings: normalized.settings,
     campaign: normalized.campaign,
     loadout: normalized.loadout,
+    contracts: normalized.contracts,
     created_at: new Date(normalized.createdAt || Date.now()).toISOString(),
     last_active_at: new Date(normalized.lastActiveAt || Date.now()).toISOString(),
     version: normalized.version
@@ -800,6 +1059,7 @@ export function rowToSaveState(row) {
     inventory,
     campaign,
     loadout,
+    contracts: typeof row.contracts === 'object' && row.contracts !== null ? row.contracts : undefined,
     achievements: Array.isArray(row.achievements) ? row.achievements : [],
     stats: typeof row.stats === 'object' && row.stats !== null ? row.stats : {},
     settings: typeof row.settings === 'object' && row.settings !== null ? row.settings : {},
@@ -866,7 +1126,9 @@ CloudSyncResolver.upsertRemote = upsertRemoteSaveState;
 CloudSyncResolver.normalizeInventory = normalizeInventory;
 CloudSyncResolver.normalizeCampaign = normalizeCampaign;
 CloudSyncResolver.normalizeLoadout = normalizeLoadout;
+CloudSyncResolver.normalizeContracts = normalizeContracts;
 CloudSyncResolver.mergeInventory = mergeInventory;
 CloudSyncResolver.mergeCampaign = mergeCampaign;
+CloudSyncResolver.mergeContracts = mergeContracts;
 CloudSyncResolver.resolveLoadout = resolveLoadout;
 CloudSyncResolver.mergeTelemetry = mergeTelemetry;

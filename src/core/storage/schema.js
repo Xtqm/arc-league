@@ -31,6 +31,134 @@ export function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
 
+function normalizeSeenIdsMap(rawSeenIds) {
+  if (!rawSeenIds || typeof rawSeenIds !== 'object' || Array.isArray(rawSeenIds)) {
+    return {};
+  }
+  const normalized = {};
+  for (const [tierKey, bucket] of Object.entries(rawSeenIds)) {
+    if (Array.isArray(bucket)) {
+      normalized[tierKey] = Array.from(new Set(bucket.map(String)));
+    } else if (bucket && typeof bucket === 'object') {
+      normalized[tierKey] = {};
+      for (const [focus, ids] of Object.entries(bucket)) {
+        normalized[tierKey][focus] = Array.isArray(ids) ? Array.from(new Set(ids.map(String))) : [];
+      }
+    }
+  }
+  return normalized;
+}
+
+function normalizeCareerSlotsArray(rawSlots) {
+  const result = [null, null, null];
+  if (!Array.isArray(rawSlots)) {
+    return result;
+  }
+  for (let i = 0; i < 3; i++) {
+    const slot = rawSlots[i];
+    result[i] = slot && typeof slot === 'object' ? deepClone(slot) : null;
+  }
+  return result;
+}
+
+/**
+ * Creates a fresh default contracts state branch.
+ * @returns {{ daily: { dateKey: string, slots: Array, sweepClaimed: boolean }, career: { unlocked: boolean, tier: number, tierCompletions: number, seenIds: object, slots: Array } }}
+ */
+export function createDefaultContractsState() {
+  return {
+    daily: {
+      dateKey: '',
+      slots: [],
+      sweepClaimed: false
+    },
+    career: {
+      unlocked: false,
+      tier: 1,
+      tierCompletions: 0,
+      seenIds: {},
+      slots: [null, null, null]
+    }
+  };
+}
+
+/**
+ * Normalizes a partial or legacy contracts object into the canonical structure.
+ * @param {any} raw
+ * @returns {{ daily: { dateKey: string, slots: Array, sweepClaimed: boolean }, career: { unlocked: boolean, tier: number, tierCompletions: number, seenIds: object, slots: Array } }}
+ */
+export function normalizeContractsState(raw = {}) {
+  const obj = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const rawDaily = obj.daily && typeof obj.daily === 'object' && !Array.isArray(obj.daily) ? obj.daily : {};
+  const rawCareer = obj.career && typeof obj.career === 'object' && !Array.isArray(obj.career) ? obj.career : {};
+
+  const parsedTier = Number(rawCareer.tier);
+  const tier = Number.isFinite(parsedTier) && parsedTier >= 1 ? Math.floor(parsedTier) : 1;
+
+  const parsedCompletions = Number(rawCareer.tierCompletions);
+  const tierCompletions = Number.isFinite(parsedCompletions) && parsedCompletions >= 0 ? Math.floor(parsedCompletions) : 0;
+
+  return {
+    daily: {
+      dateKey: typeof rawDaily.dateKey === 'string' ? rawDaily.dateKey : '',
+      slots: Array.isArray(rawDaily.slots)
+        ? deepClone(rawDaily.slots.slice(0, 3)).filter((s) => s && typeof s === 'object')
+        : [],
+      sweepClaimed: Boolean(rawDaily.sweepClaimed)
+    },
+    career: {
+      unlocked: Boolean(rawCareer.unlocked),
+      tier,
+      tierCompletions,
+      seenIds: normalizeSeenIdsMap(rawCareer.seenIds),
+      slots: normalizeCareerSlotsArray(rawCareer.slots)
+    }
+  };
+}
+
+/**
+ * Populates missing contracts subfields on a parsed save state without masking invalid types.
+ * @param {any} raw
+ * @returns {any}
+ */
+export function ensureContractsDefaults(raw) {
+  if (raw === undefined) {
+    return createDefaultContractsState();
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return raw;
+  }
+
+  const next = deepClone(raw);
+  const defaults = createDefaultContractsState();
+
+  if (next.daily === undefined) {
+    next.daily = defaults.daily;
+  } else if (next.daily && typeof next.daily === 'object' && !Array.isArray(next.daily)) {
+    if (next.daily.dateKey === undefined) next.daily.dateKey = defaults.daily.dateKey;
+    if (next.daily.slots === undefined) next.daily.slots = defaults.daily.slots;
+    if (next.daily.sweepClaimed === undefined) next.daily.sweepClaimed = defaults.daily.sweepClaimed;
+  }
+
+  if (next.career === undefined) {
+    next.career = defaults.career;
+  } else if (next.career && typeof next.career === 'object' && !Array.isArray(next.career)) {
+    if (next.career.unlocked === undefined) next.career.unlocked = defaults.career.unlocked;
+    if (next.career.tier === undefined) next.career.tier = defaults.career.tier;
+    if (next.career.tierCompletions === undefined) next.career.tierCompletions = defaults.career.tierCompletions;
+    if (next.career.seenIds === undefined) next.career.seenIds = defaults.career.seenIds;
+    if (next.career.slots === undefined) {
+      next.career.slots = defaults.career.slots;
+    } else if (Array.isArray(next.career.slots)) {
+      while (next.career.slots.length < 3) {
+        next.career.slots.push(null);
+      }
+    }
+  }
+
+  return next;
+}
+
 /**
  * Default frozen reference baseline for TronSaveState v1.0.0
  */
@@ -72,6 +200,20 @@ export const DEFAULT_SAVE_STATE = Object.freeze({
     unlockedMaps: Object.freeze(['arena_grid_01'])
   }),
   achievements: Object.freeze([]),
+  contracts: Object.freeze({
+    daily: Object.freeze({
+      dateKey: '',
+      slots: Object.freeze([]),
+      sweepClaimed: false
+    }),
+    career: Object.freeze({
+      unlocked: false,
+      tier: 1,
+      tierCompletions: 0,
+      seenIds: Object.freeze({}),
+      slots: Object.freeze([null, null, null])
+    })
+  }),
   stats: Object.freeze({
     matchesPlayed: 0,
     wins: 0,
@@ -137,6 +279,7 @@ export function createDefaultSaveState(overrides = {}) {
       unlockedMaps: Array.isArray(overrides?.inventory?.unlockedMaps) ? [...overrides.inventory.unlockedMaps] : ['arena_grid_01']
     },
     achievements: Array.isArray(overrides?.achievements) ? deepClone(overrides.achievements) : [],
+    contracts: normalizeContractsState(overrides?.contracts),
     stats: {
       matchesPlayed: overrides?.stats?.matchesPlayed ?? 0,
       wins: overrides?.stats?.wins ?? 0,
@@ -175,6 +318,9 @@ export function isValidSaveState(data) {
   if (!data.campaign || typeof data.campaign !== 'object') return false;
   if (!data.inventory || typeof data.inventory !== 'object') return false;
   if (!Array.isArray(data.achievements)) return false;
+  if (data.contracts !== undefined && (!data.contracts || typeof data.contracts !== 'object' || Array.isArray(data.contracts))) {
+    return false;
+  }
   if (!data.stats || typeof data.stats !== 'object') return false;
   return true;
 }
@@ -210,6 +356,49 @@ export function validateSaveState(data) {
     errors.push('"inventory.unlockedMaps" must be an array');
   }
   if (!Array.isArray(data.achievements)) errors.push('Missing or invalid "achievements" array');
+  if (data.contracts !== undefined) {
+    if (!data.contracts || typeof data.contracts !== 'object' || Array.isArray(data.contracts)) {
+      errors.push('"contracts" must be a non-null object');
+    } else {
+      const { daily, career } = data.contracts;
+      if (daily !== undefined) {
+        if (!daily || typeof daily !== 'object' || Array.isArray(daily)) {
+          errors.push('"contracts.daily" must be an object');
+        } else {
+          if (daily.dateKey !== undefined && typeof daily.dateKey !== 'string') {
+            errors.push('"contracts.daily.dateKey" must be a string');
+          }
+          if (daily.slots !== undefined && !Array.isArray(daily.slots)) {
+            errors.push('"contracts.daily.slots" must be an array');
+          }
+          if (daily.sweepClaimed !== undefined && typeof daily.sweepClaimed !== 'boolean') {
+            errors.push('"contracts.daily.sweepClaimed" must be a boolean');
+          }
+        }
+      }
+      if (career !== undefined) {
+        if (!career || typeof career !== 'object' || Array.isArray(career)) {
+          errors.push('"contracts.career" must be an object');
+        } else {
+          if (career.unlocked !== undefined && typeof career.unlocked !== 'boolean') {
+            errors.push('"contracts.career.unlocked" must be a boolean');
+          }
+          if (career.tier !== undefined && (typeof career.tier !== 'number' || !Number.isFinite(career.tier) || career.tier < 1)) {
+            errors.push('"contracts.career.tier" must be a number >= 1');
+          }
+          if (career.tierCompletions !== undefined && (typeof career.tierCompletions !== 'number' || !Number.isFinite(career.tierCompletions) || career.tierCompletions < 0)) {
+            errors.push('"contracts.career.tierCompletions" must be a number >= 0');
+          }
+          if (career.seenIds !== undefined && (!career.seenIds || typeof career.seenIds !== 'object' || Array.isArray(career.seenIds))) {
+            errors.push('"contracts.career.seenIds" must be an object');
+          }
+          if (career.slots !== undefined && (!Array.isArray(career.slots) || career.slots.length > 3)) {
+            errors.push('"contracts.career.slots" must be an array of at most 3 slots');
+          }
+        }
+      }
+    }
+  }
   if (!data.stats || typeof data.stats !== 'object') {
     errors.push('Missing or invalid "stats" object');
   } else {

@@ -8,7 +8,7 @@ on:
       itch_target:
         description: 'itch.io target game (e.g. username/game-slug)'
         required: true
-        default: 'theqmechanic/arc-league'
+        default: 'xtqm/arc-league'
       build_windows:
         description: 'Build and push Windows desktop binary'
         type: boolean
@@ -33,7 +33,7 @@ jobs:
 
       - name: Set up Butler CLI
         run: |
-          curl -L -o butler.zip https://broth.itch.ovh/butler/linux-amd64/LATEST/archive/default
+          curl -L -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
           unzip -q butler.zip -d /usr/local/bin
           chmod +x /usr/local/bin/butler
           butler -V
@@ -85,7 +85,7 @@ jobs:
       - name: Set up Butler CLI (Windows)
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri "https://broth.itch.ovh/butler/windows-amd64/LATEST/archive/default" -OutFile "butler.zip"
+          Invoke-WebRequest -Uri "https://broth.itch.zone/butler/windows-amd64/LATEST/archive/default" -OutFile "butler.zip"
           Expand-Archive -Path "butler.zip" -DestinationPath "$env:USERPROFILE\butler" -Force
           "$env:USERPROFILE\butler" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 

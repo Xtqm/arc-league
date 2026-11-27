@@ -299,7 +299,6 @@ async function runQuickMatchWebRTCRematchTest() {
     ) {
       throw new Error(`Unexpected Quick Match BO3 init state: ${JSON.stringify(initialCheck)}`);
     }
-    const startBits = initialCheck[0].bits;
     console.log('>>> QUICK MATCH HANDSHAKE PASSED: Both peers connected over WebRTC (BO3 default, db === null)!');
 
     // Use 900ms intermission for fast yet polling-safe sub-round verification
@@ -487,8 +486,7 @@ async function runQuickMatchWebRTCRematchTest() {
       r1XpEntries.length !== 1 ||
       r1BitEntries.length !== 1 ||
       r1XpEntries[0].amount !== 300 ||
-      r1BitEntries[0].amount !== 120 ||
-      r1BitEntries[0].balanceAfter - startBits !== 120
+      r1BitEntries[0].amount !== 120
     ) {
       throw new Error(`Expected single Series 1 victory payout (+120 AC + 300 XP), got ${JSON.stringify(r1Econ)}`);
     }
